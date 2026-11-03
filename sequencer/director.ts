@@ -312,7 +312,7 @@ function waiving(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>): 
 
 function parked(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>, now: Date): boolean {
   if (plan.wait_reason === 'over_cap') {
-    afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
+    if (plan.state === 'blocked_on_ceo' || plan.state === 'halted') afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
     return true
   }
   const on = /\bplan (\d+)\b/.exec(m.why)?.[1]

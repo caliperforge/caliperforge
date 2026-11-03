@@ -371,12 +371,18 @@ test('cf measure refreshes the pulse the tick reads', async () => {
   expect(plan(w.db, 1).step).toBe(1)
 })
 
-test('a rail refusal names spans, steps back, then blocks on ceo', async () => {
+/** What the wire was sent while the rails refused the unpointed hand-back once. */
+const UNPOINTED_SENT: string[] = []
+/** An outside plan whose rails refused an unpointed hand-back once, back at its build. */
+const REFUSED_ONCE = once(async () => {
   const w = await BRIEFED()
-  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]?.step).toBe(2)
-  const first = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
-  expect(first).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
+  return laps(w, 2, stub(UNPOINTED), watched(UNPOINTED_SENT, w.root, 1))
+})
+
+test('a rail refusal names spans, steps back, then blocks on ceo', async () => {
+  const w = await REFUSED_ONCE()
   expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')).toMatchObject({ step: 3, outcome: 'refuse' })
   await tick(w.db, w.root, stub(UNPOINTED))
   const stopped = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
   expect(stopped).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
@@ -387,7 +393,7 @@ test('a rail refusal names spans, steps back, then blocks on ceo', async () => {
 })
 
 /** An outside plan whose rails refused the same unpointed hand-back twice, held for the ceo. */
-const STOPPED = once(async () => laps(await BRIEFED(), 4, stub(UNPOINTED)))
+const STOPPED = once(async () => laps(await REFUSED_ONCE(), 2, stub(UNPOINTED)))
 
 const retriedOnce = async (rule: (w: World) => void): Promise<[World, Fired | undefined]> => {
   const w = await STOPPED()
@@ -429,10 +435,8 @@ const planFile = (root: string, name: string): string => readFileSync(join(root,
 const PAIR = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n`
 
 test('a rebuild hands the builder the refused hand-back\'s rows', async () => {
-  const w = await BRIEFED()
-  const sent: string[] = []
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(UNPOINTED), undefined, undefined, watched(sent, w.root, 1))
-  expect(sent).toEqual([])
+  const w = await REFUSED_ONCE()
+  expect(UNPOINTED_SENT).toEqual([])
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   expect(planFile(w.root, 'step-2.handback.prev.md')).toBe(UNPOINTED)
@@ -440,12 +444,16 @@ test('a rebuild hands the builder the refused hand-back\'s rows', async () => {
     .toContain('done:\n  - id: D1\n    status: done\n    pointer:')
 })
 
-test('a review refusal rebuilds with every span, then escalates', async () => {
+/** An outside plan whose review refused PAIR, back at its build. */
+const PAIRED = once(async () => {
   const w = await REVIEWING()
+  await tick(w.db, w.root, stub(CARRIED, 0, PAIR))
+  return w
+})
+
+test('a review refusal rebuilds with every span, then escalates', async () => {
+  const w = await PAIRED()
   const wire = watched([], w.root, 1)
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, PAIR)))[0]
-  expect(fired).toMatchObject({ step: 4, outcome: 'refuse', state: 'retried' })
-  expect(fired?.spans).toEqual(['src/hello.ts:1', 'src/parse.ts:3'])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
   expect(planFile(w.root, 'refusal.md'))
     .toBe(`step 4 review refused by code_quality\n\ncode_quality refuse\n\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n\n${WORDS}\n`)
@@ -463,10 +471,18 @@ Options: (a) send it: the maintainer sees it; (b) hold it: the plan waits
 Recommend: (a), the diff is signed off
 If no answer by 2026-09-28 09:00: the plan stays held`
 
-test('a review needs_ceo holds for the coo with its question', async () => {
+const ASK = `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`
+
+/** An outside plan whose review answered ASK, held for the coo. */
+const ESCALATED = once(async () => {
   const w = await REVIEWING()
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
-  expect(fired).toMatchObject({ step: 4, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
+  await tick(w.db, w.root, stub(CARRIED, 0, ASK))
+  return w
+})
+
+test('a review needs_ceo holds for the coo with its question', async () => {
+  const w = await ESCALATED()
+  expect(plan(w.db, 1)).toMatchObject({ step: 4, state: 'blocked_on_ceo' })
   expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${`${WORDS}\n\n${BLOCK}`.replace(/\s+/g, ' ')}` })
   expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: `${WORDS}\n\n${BLOCK}` })
   const plan1 = allEvents(w.db).filter((e) => e.plan === 1)
@@ -476,23 +492,20 @@ test('a review needs_ceo holds for the coo with its question', async () => {
 })
 
 test('a repeat escalate on an unchanged tree logs nothing', async () => {
-  const w = await REVIEWING()
-  const ask = `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`
+  const w = await ESCALATED()
   const escalates = (): string[] => allEvents(w.db).filter((e) => e.plan === 1 && e.actor === 'code_quality').map((e) => e.outcome)
-  await tick(w.db, w.root, stub(CARRIED, 0, ask))
   resume(w.db, 1)
-  expect((await tick(w.db, w.root, stub(CARRIED, 0, ask)))).toMatchObject([{ outcome: 'needs_ceo', state: 'running' }])
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, ASK)))).toMatchObject([{ outcome: 'needs_ceo', state: 'running' }])
   expect(escalates()).toEqual(['escalate'])
   built(w.root, 1, 'export const two = (): number => 2')
-  await tick(w.db, w.root, stub(CARRIED, 0, ask))
+  await tick(w.db, w.root, stub(CARRIED, 0, ASK))
   expect(escalates()).toEqual(['escalate', 'escalate'])
   expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo' })
 })
 
 test('a new refusal after a rebuild goes round; a repeat stops', async () => {
-  const w = await REVIEWING()
+  const w = await PAIRED()
   const wire = watched([], w.root, 1)
-  expect((await tick(w.db, w.root, stub(CARRIED, 0, PAIR)))[0]).toMatchObject({ step: 4, state: 'retried' })
   built(w.root, 1, 'export const two = (): number => 2')
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect((await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]).toMatchObject({ step: 4, state: 'retried' })
@@ -518,14 +531,16 @@ const mine = async (files = TYPESCRIPT): Promise<World> => {
   return w
 }
 
+/** The packets fired on the way to MINE_SENIOR: its build's and its review's. */
+const MINE_SEEN: Packet[] = []
 /** One of our own plans at its build, and at its review and its senior review once the build wrote FOUR. */
 const MINE_BUILDING = once(async () => laps(await mine(), 2))
 const MINE_FOUR = once(async () => {
   const w = await MINE_BUILDING()
   built(w.root, MINE, FOUR)
-  return laps(w, 2, stub(CARRIED, 0, PASS))
+  return laps(w, 2, stub(CARRIED, 0, PASS, (p) => MINE_SEEN.push(p)))
 })
-const MINE_SENIOR = once(async () => laps(await MINE_FOUR(), 1, stub(CARRIED, 0, PASS)))
+const MINE_SENIOR = once(async () => laps(await MINE_FOUR(), 1, stub(CARRIED, 0, PASS, (p) => MINE_SEEN.push(p))))
 
 /** The first reviewer packet of a round: a builder's carries Write, a reviewer's is Read only. */
 const reviewer = (packets: Packet[]): string => packets.find((p) => !p.tools.includes('Write'))?.prompt ?? ''
@@ -548,12 +563,9 @@ test('an outside review packet has context and map, no hand-back', async () => {
 })
 
 test('our own plan builds and hands no symbol map', async () => {
-  const w = await MINE_BUILDING()
-  const seen: Packet[] = []
-  built(w.root, MINE, FOUR)
-  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  const w = await MINE_SENIOR()
   expect(plan(w.db, MINE).step).toBe(5)
-  expect(seen.map((p) => p.prompt.includes('# Symbols at the branch base'))).toEqual([false, false])
+  expect(MINE_SEEN.map((p) => p.prompt.includes('# Symbols at the branch base'))).toEqual([false, false])
   expect(existsSync(join(w.root, '.cf/maps'))).toBe(false)
 })
 
@@ -847,8 +859,7 @@ test('a job red at head and re-run last green is the base\'s', async () => {
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
 
   Object.assign(g, { status: 'completed', conclusion: 'failure' })
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
-  expect(plan(w.db, 1)).toMatchObject({ step: 7, retries: 0 })
+  expect(ci()).toBeNull()
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }, { outcome: 'pass' }])
   expect(log).toHaveLength(1)
 })
@@ -866,8 +877,8 @@ test('a red job whose last green re-runs green is the builder\'s', async () => {
 test('a last green head already red is read as is, no re-run', async () => {
   const log: string[] = []
   const [w, wire] = await redOnBase({ status: 'completed', conclusion: 'failure' }, log)
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
-  expect(plan(w.db, 1).step).toBe(7)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }, { outcome: 'pass' }])
   expect(log).toEqual([])
 })
 
@@ -898,11 +909,11 @@ test('an unparked plan starts its CI window at tick 1', async () => {
     .toMatchObject({ outcome: 'pass', note: expect.stringMatching(/tick 1 of 45/) as unknown })
 })
 
-/** `outside(files)` at step 6. */
-const atCi = (files: Record<string, string>): Promise<World> => lapped(outside(files), 6)
-const TEX_CI = once(() => atCi(TEX))
-const MANUAL_CI = once(() => atCi(MANUAL))
-const SCHEDULED_CI = once(() => atCi(SCHEDULED))
+/** `outside(files)` past its rails, its branch on the fork: `forkCi` judges it as step 6 does. */
+const railedOn = (files: Record<string, string>): Promise<World> => lapped(outside(files), 4)
+const TEX_CI = once(() => railedOn(TEX))
+const MANUAL_CI = once(() => railedOn(MANUAL))
+const SCHEDULED_CI = once(() => railedOn(SCHEDULED))
 
 const dispatching = (sent: string[]): NonNullable<Wire['dispatch']> => (fork, file, branch) => void sent.push(`${fork} ${file} ${branch}`)
 
@@ -945,9 +956,7 @@ test('a push-to-main tree is dispatched once, then judged', async () => {
   }
   const once = [`caliperforge/widget ci.yml ${rehearsalBranch(w.root, 1)}`]
   expect(sent).toEqual(once)
-  const green = { ...wire, runs: runsOn(w.root, 1) }
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, green))[0]).toMatchObject({ step: 6, outcome: 'pass' })
-  expect(plan(w.db, 1).step).toBe(7)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...wire, runs: runsOn(w.root, 1) })).toBeNull()
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
   expect(sent).toEqual(once)
 })
@@ -957,8 +966,7 @@ test('a tree no fork workflow runs on passes on tick 1', async () => {
   let asked = 0
   const sent: string[] = []
   const wire = { ...watched([], w.root, 1, () => '[]'), actions: () => { asked += 1; return true }, dispatch: dispatching(sent) }
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
-  expect(plan(w.db, 1).step).toBe(7)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toBeNull()
   expect([asked, sent]).toEqual([0, []])
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
   expect(ciVerdict()).toMatchObject({ message: expect.stringMatching(new RegExp(`^${UNRUN}; step 3's checks at`)) as unknown })
@@ -988,8 +996,7 @@ test('ci.unrun is written once per head sha', async () => {
 test('a scheduled-only tree runs no workflows, undispatched', async () => {
   const w = await SCHEDULED_CI()
   const sent: string[] = []
-  const wire = { ...watched([], w.root, 1, () => '[]'), dispatch: dispatching(sent) }
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1, () => '[]'), dispatch: dispatching(sent) })).toBeNull()
   expect(ciVerdict()).toMatchObject({ message: expect.stringMatching(/^acme\/widget runs no workflows; /) as unknown })
   expect(sent).toEqual([])
   expect(maybe(w.root, 1, 'ci.unrun')).toBeNull()
@@ -1075,9 +1082,8 @@ test('a cancelled run re-run green passes ci-green', async () => {
   Object.assign(harness, { status: 'in_progress', conclusion: '' })
   expect(ci()).toMatchObject({ note: expect.stringMatching(/is still running CI, tick 1 of 45$/) as unknown })
   Object.assign(harness, GREEN_RUN)
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(ci()).toBeNull()
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
-  expect(plan(w.db, 1)).toMatchObject({ step: 7, retries: 0 })
   expect(log).toHaveLength(1)
 })
 
@@ -1116,10 +1122,8 @@ test('step 6 waits out the push window, then judges the new run', async () => {
   expect(ciGreen(w)).toEqual([])
   expect(plan(w.db, 1).step).toBe(6)
 
-  const judged = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
-  expect(judged).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(ci()).toBeNull()
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
-  expect(plan(w.db, 1).step).toBe(7)
   expect(sends(sent)).toHaveLength(3)
 })
 

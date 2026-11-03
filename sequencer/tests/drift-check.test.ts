@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { addFinding } from '../../store/drift.ts'
-import { logged, runAt } from '../../store/events.ts'
-import { addRule } from '../../store/index.ts'
+import { type Event, logged, runAt } from '../../store/events.ts'
+import { addRule, type Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { planById, putPlan } from '../../store/plans.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
@@ -195,4 +195,30 @@ test('D2 a second swallowed before a back is seen', () => {
   expect(drift(d, once, NOW)).toEqual([])
   read('swallowed', '2026-10-02 13:00:00')
   expect(drift(d, once, NOW).map((r) => r.state)).toEqual(['seen'])
+})
+
+test('weakened_ruled sees a director ruling, not a pre-build park', () => {
+  const ruled = REGISTRY.filter((e) => e.name === 'weakened_ruled')
+  const log = (d: Db, kind: string, outcome: Event['outcome'], message: string, at: string): number =>
+    logged(d, { plan: 1, kind, actor: kind === 'rails' ? 'tick' : kind === 'park' ? 'coo' : 'director', outcome, message, pointer: null, run: null }, at)
+  const built = (d: Db): void => {
+    addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
+    runAt(d, 1, 2, 'typescript_specialist', '2026-10-01 12:00:00')
+  }
+  const d = db()
+  log(d, 'park', 'pass', 'm', '2026-10-01 10:00:00')
+  built(d)
+  log(d, 'rails', 'refuse', 'test-weakened: x', '2026-10-02 09:00:00')
+  expect(drift(d, ruled, NOW)).toEqual([])
+  log(d, 'director', 'needs_coo', 'rule did not apply, x', '2026-10-02 09:05:00')
+  log(d, 'rails', 'refuse', 'test-weakened: x', '2026-10-02 09:08:00')
+  expect(drift(d, ruled, NOW)).toEqual([])
+  log(d, 'director', 'pass', 'rule: x', '2026-10-02 09:06:11')
+  log(d, 'rails', 'refuse', 'test-weakened: x', '2026-10-02 09:11:48')
+  expect(drift(d, ruled, NOW)).toMatchObject([{ name: 'weakened_ruled', state: 'seen', newest: '2026-10-02 09:11:48' }])
+  const after = db()
+  built(after)
+  log(after, 'park', 'pass', 'm', '2026-10-01 13:00:00')
+  log(after, 'rails', 'refuse', 'test-weakened: x', '2026-10-02 09:00:00')
+  expect(drift(after, ruled, NOW).map((r) => r.state)).toEqual(['seen'])
 })

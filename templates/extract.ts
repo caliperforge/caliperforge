@@ -5,7 +5,7 @@ import type { Refused } from './handoff.ts'
 
 export interface At { file: string; start: number; end: number }
 
-type Check = 'require' | 'revert' | 'error'
+type Check = 'require' | 'revert' | 'error' | 'modifier' | 'internal'
 
 export interface Extracted {
   sources: Record<string, number>
@@ -20,7 +20,8 @@ export interface Extracted {
 export interface Node {
   nodeType: string; src: string; id: number; name?: string; memberName?: string; kind?: string; visibility?: string; operator?: string
   constant?: boolean; stateVariable?: boolean; implemented?: boolean; referencedDeclaration?: number; absolutePath?: string; nodes?: Node[]
-  typeName?: Node; typeDescriptions?: { typeString?: string }; modifiers?: { modifierName: { name: string } }[]
+  typeName?: Node; typeDescriptions?: { typeString?: string }
+  modifiers?: (Node & { modifierName: { name: string; referencedDeclaration?: number } })[]
   parameters?: { parameters: Node[] }; returnParameters?: { parameters: Node[] }
   leftHandSide?: Node; subExpression?: Node; baseExpression?: Node; expression?: Node
   functionSelector?: string; storageLocation?: string; declarations?: (Node | null)[]; initialValue?: Node
@@ -133,6 +134,18 @@ const checksOf = (m: Member): Extracted['checks'] => below(m.node).flatMap((n) =
   return kind === undefined ? [] : [{ ...m.at(n), name: m.name, kind }]
 })
 
+function guarded(bodies: Member[], functions: Member[]): Extracted['checks'] {
+  const hops = (m: Member): [Node, number, Check][] => [
+    ...(m.node.modifiers ?? []).map((n): [Node, number, Check] => [n, n.modifierName.referencedDeclaration ?? 0, 'modifier']),
+    ...below(m.node).filter((n) => n.nodeType === 'FunctionCall')
+      .flatMap((n) => callees(functions, n.expression?.referencedDeclaration ?? 0, false).map((id): [Node, number, Check] => [n, id, 'internal'])),
+  ]
+  const calls = new Map(bodies.map((m) => [m.node.id, hops(m).map(([, id]) => id)]))
+  const direct = new Set(bodies.filter((m) => checksOf(m).length > 0).map((m) => m.node.id))
+  return bodies.flatMap((m) => hops(m).filter(([, id]) => [...reached(id, calls)].some((r) => direct.has(r)))
+    .map(([n, , kind]) => ({ ...m.at(n), name: m.name, kind })))
+}
+
 const conversionsOf = (f: Member): Extracted['conversions'] => {
   const inner = below(f.node)
   const divisions = inner.filter((n) => (n.nodeType === 'BinaryOperation' && n.operator === '/') || called(n).startsWith('mulDiv')).map((n) => f.at(n).start)
@@ -159,6 +172,7 @@ export function extract(root: string): Extracted {
   const members = sources.flatMap(({ file, unit, source }) => membersOf(file, source, unit))
   const of = (type: string): Member[] => members.filter((m) => m.node.nodeType === type)
   const [functions, modifiers] = [of('FunctionDefinition'), of('ModifierDefinition')]
+  const bodies = [...functions, ...modifiers]
   const vars = of('VariableDeclaration').filter((m) => m.node.stateVariable === true)
   const aliases = aliasesOf(functions)
   const [writers, direct, writes] = [entries(functions, aliases, true), entries(functions, aliases), functions.flatMap((f) => writesOf(f, aliases))]
@@ -166,7 +180,7 @@ export function extract(root: string): Extracted {
     sources: Object.fromEntries(sources.map(({ file, source }) => [file, lineCount(source)])),
     signatures: functions.map(signatureOf),
     modifiers: modifiers.map((m) => ({ ...m.at(m.node), name: m.name })),
-    checks: [...functions, ...modifiers].flatMap(checksOf),
+    checks: [...bodies.flatMap(checksOf), ...guarded(bodies, functions)],
     state: vars.map((v) => ({ ...v.at(v.node), name: v.name, constant: v.node.constant === true,
       writers: writers.filter((e) => e.writes.some((w) => w.id === v.node.id)).map((e) => e.name), writes: writes.filter((w) => w.id === v.node.id).map((w) => w.at) })),
     conversions: functions.flatMap(conversionsOf),

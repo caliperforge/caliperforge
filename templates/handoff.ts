@@ -86,11 +86,13 @@ function cites(root: string, given: Parsed, facts: Extracted): Cited[] {
   }))
 }
 
-const HOLDS: Record<string, (facts: Extracted, name: string) => [At[], string]> = {
+const BARE = /^(?:[A-Z]+\d+[a-z]? )?(\w+(?:\.\w+)?)/
+
+const HOLDS: Record<string, (facts: Extracted, symbol: string, name: string) => [At[], string]> = {
   Guards: (facts) => [facts.checks, 'no require, revert or custom error'],
   Limits: (facts) => [[...facts.state, ...facts.checks], 'no state declaration or check'],
-  Aggregates: (facts, name) => {
-    const state = facts.state.find((v) => v.name === name)
+  Aggregates: (facts, symbol, name) => {
+    const state = facts.state.find((v) => v.name === symbol || v.name.endsWith(`.${symbol}`))
     return [state === undefined ? [] : [state, ...state.writes], `no declaration of or write to ${name}`]
   },
 }
@@ -98,7 +100,7 @@ const HOLDS: Record<string, (facts: Extracted, name: string) => [At[], string]> 
 function uncited(facts: Extracted, { section, name, at }: Cited): string[] {
   const holds = HOLDS[section]
   if (typeof at !== 'object' || holds === undefined || !at.file.startsWith('src/')) return []
-  const [held, none] = holds(facts, name)
+  const [held, none] = holds(facts, BARE.exec(name)?.[1] ?? '', name)
   return held.some((f) => f.file === at.file && f.start >= at.start && f.start <= at.end) ? []
     : [`${CONTEXT}: ${name} under ## ${section} cites ${at.file} L${String(at.start)}-L${String(at.end)}, which hold ${none}`]
 }

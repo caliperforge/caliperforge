@@ -125,6 +125,15 @@ test('1753a D2: a Guards row on L13-L15 is handoff.cited', () => {
     note: 'context: V.deposit under ## Guards cites src/V.sol L13-L15, which hold no require, revert or custom error' }])
 })
 
+test('an Aggregates row is matched on its bare symbol', () => {
+  const cited = (name: string, at: string): string[] => ranged(root, cut('V.totalAssets | parts', `${name} | parts`).replace('L6-L6', at), facts)
+    .filter((r) => r.rule === 'handoff.cited').map((r) => r.note)
+  expect(cited('A2 V.totalAssets write sites in deposit', 'L10-L10')).toEqual([])
+  expect(cited('A2b totalAssets (deposits)', 'L10-L10')).toEqual([])
+  const view = 'A4 V.convertToAssets() (view)'
+  expect(cited(view, 'L17-L19')).toEqual([`context: ${view} under ## Aggregates cites src/V.sol L17-L19, which hold no declaration of or write to ${view}`])
+})
+
 test('1753a D3: an untracked aggregate needs a reason', () => {
   const untracked = [{ rule: 'handoff.untracked', note: 'context: V.totalAssets is an aggregate candidate in neither ## Aggregates nor ## Not tracked with a reason' }]
   const none = cut(CITED.Aggregates, '- none')
@@ -219,6 +228,35 @@ test('2065 D5: a writer inherited from a base contract counts', () => {
   p.push(...p.filter((n) => n.name === 'reallocate').map((n) => ({ ...n, id: 160, name: 'rebalance', functionSelector: '5e6f7a8b' })))
   ast.nodes?.push({ id: 90, name: 'Base', nodeType: 'ContractDefinition', src: '0:0:0', nodes: p.splice(p.findIndex((n) => n.name === 'moves'), 1) })
   expect(extract(project(P, JSON.stringify({ ast }), 'P')).aggregates).toEqual(['Base.moves'])
+})
+
+type Body = Node & { body: { statements: object[] } }
+const REVERT = { id: 170, nodeType: 'RevertStatement', src: '442:9:0' }
+
+function guard(at: string, edit: (of: (name: string) => Body[], p: Body[]) => void): string[] {
+  const { ast } = JSON.parse(P_AST) as { ast: Node }
+  const p = (ast.nodes?.find((n) => n.name === 'P')?.nodes ?? []) as Body[]
+  edit((name) => p.filter((n) => n.name === name), p)
+  const guarded = project(P, JSON.stringify({ ast }), 'P')
+  const map = pMap(MOVERS).replace('## Guards\n\n- none', `## Guards\n\n- P.accept | reverts: v over cap | at: src/P.sol ${at}`)
+  return ranged(guarded, map, extract(guarded)).map((r) => r.note)
+}
+
+test('a guard reached through a modifier or internal call is cited', () => {
+  const refused = (at: string): string[] => [`context: P.accept under ## Guards cites src/P.sol ${at}, which hold no require, revert or custom error`]
+  expect(guard('L18-L18', () => undefined)).toEqual(refused('L18-L18'))
+  expect(guard('L18-L18', (of) => { of('_set').forEach((n) => n.body.statements.push(REVERT)) })).toEqual([])
+  expect(guard('L18-L18', (of, p) => {
+    p.push(...of('_set').map((n) => ({ ...n, id: 180, name: '_guard', body: { ...n.body, statements: [REVERT] } })))
+    of('_set').forEach((n) => n.body.statements.push({ id: 181, nodeType: 'FunctionCall', src: '442:9:0',
+      expression: { id: 182, name: '_guard', nodeType: 'Identifier', referencedDeclaration: 180, src: '442:4:0' } }))
+  })).toEqual([])
+  const modifier = (statements: object[]) => (of: (name: string) => Body[], p: Body[]): void => {
+    p.push(...of('_set').map((n) => ({ ...n, id: 190, name: 'capped', nodeType: 'ModifierDefinition', body: { ...n.body, statements } })))
+    of('reallocate').forEach((n) => n.modifiers?.push({ id: 191, nodeType: 'ModifierInvocation', src: '483:11:0', modifierName: { name: 'capped', referencedDeclaration: 190 } }))
+  }
+  expect(guard('L26-L26', modifier([REVERT]))).toEqual([])
+  expect(guard('L26-L26', modifier([]))).toEqual(refused('L26-L26'))
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('2065: forge on a fresh P.sol gives the D1/D2 writers', () => {

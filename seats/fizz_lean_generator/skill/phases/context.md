@@ -5,6 +5,7 @@
 - You are a fresh agent for the steps below and no others.
 - {SKILL_PATH} in the steps below, and every ./references/, ./agents/, ./scripts/ and ./templates/ link, is ~/.claude/skills/fizz: read it, never write it.
 - Every sub-agent you spawn writes its full output to {PROJECT_ROOT}/{META_DIR}/reports/context-<agent>.md, <agent> being the stem of the agent file it was spawned from, and returns a summary of at most 300 words. Where a step passes one agent's output to another, pass that report's path.
+- x-ray is not used in this seat. In Step 3 do not read anything under x-ray/ even if it exists, and run no attempt of the x-ray Acquisition Protocol and no Protocol Analyzer: read the in-scope source yourself and write {PROJECT_ROOT}/{META_DIR}/protocol-understanding.md, at most 120 lines, with the Step 3 list. Step 4 takes its entry points from that file.
 - Write {PROJECT_ROOT}/{META_DIR}/context.md: PROJECT_ROOT, SUITE_DIR, META_DIR, the resolved {MODE} and {AGENT_MODEL}, the Step 3 summary, and the Step 4 selection summary.
 - Fill the context sections of {META_DIR}/handoff/map.md from the `# Map` block of the file the issue names, each row naming the file and line range you read it at, or - none when there is nothing to carry. The machine writes ## Signatures, ## Selected entry points and ## Modifiers after you end.
 - Every read of a .sol file under src/ or lib/ in a later phase is judged against the `at:` ranges map.md cites, so give every fact a later phase needs the range it holds at.

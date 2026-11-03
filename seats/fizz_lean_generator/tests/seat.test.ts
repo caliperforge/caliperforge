@@ -19,7 +19,7 @@ const root = join(import.meta.dirname, '../../..')
 const schema = join(root, 'schema')
 const AT = '2026-10-28T13:00:00.000Z'
 const TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'Agent', 'Bash(pwd)', 'Bash(forge:*)', 'Bash(FOUNDRY_PROFILE=fuzz forge:*)', 'Bash(medusa:*)',
-  'Bash(echidna:*)', 'Bash(node:*)', 'Bash(bash:*)', 'Bash(rm -f /tmp/x-ray-attempts.md)', 'Bash(mkdir -p x-ray)', 'Bash(python3:*)']
+  'Bash(echidna:*)', 'Bash(node:*)', 'Bash(bash:*)', 'Bash(python3:*)']
 
 function copied(): string {
   const tree = mkdtempSync(join(tmpdir(), 'cf-fizz-lean-generator-'))
@@ -87,8 +87,8 @@ async function generated(generator: string, tokens = 1000, filled = FILLED, spaw
 test('D1: the manifest loads past its digests', () => {
   expect(seat(root, 'fizz_lean_generator').manifest).toEqual({
     seat: 'fizz_lean_generator', model: 'claude-opus-5-5', effort: 'high', tools: TOOLS,
-    reads: ['seats/fizz_lean_generator/skill', '~/.claude/skills/fizz', '~/.claude/skills/x-ray'],
-    write_paths: ['test/fizz', 'x-ray', 'medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'],
+    reads: ['seats/fizz_lean_generator/skill', '~/.claude/skills/fizz'],
+    write_paths: ['test/fizz', 'medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'],
   })
 })
 

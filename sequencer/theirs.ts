@@ -1,6 +1,7 @@
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { cites } from '../cli/cites.ts'
 import { gh, mentions, ours, WINDOW, type Read } from '../cli/gh.ts'
 import { unhoused } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
@@ -21,7 +22,7 @@ const Prs = z.array(z.object({
   files: z.array(z.object({ path: z.string() })),
 }))
 
-const Siblings = z.array(z.object({ url: z.string(), repository: z.object({ nameWithOwner: z.string() }) }))
+const Siblings = z.array(z.object({ url: z.string(), title: z.string(), body: z.string(), repository: z.object({ nameWithOwner: z.string() }) }))
 
 const Patches = z.array(z.object({ filename: z.string(), patch: z.string().optional() }))
 
@@ -93,8 +94,8 @@ function patchesOf(read: Read, repo: string, no: number): Map<string, string> {
 function siblings(read: Read, target: Target): Hit[] {
   const no = String(target.issue_no)
   return Siblings.parse(read(['search', 'prs', `${target.repo}#${no}`, '--owner', ownerOf(target.repo),
-    '--state', 'open', '--json', 'url,repository']))
-    .filter((p) => p.repository.nameWithOwner !== target.repo)
+    '--state', 'open', '--json', 'url,title,body,repository']))
+    .filter((p) => p.repository.nameWithOwner !== target.repo && cites(`${p.title}\n${p.body}`, target.repo, target.issue_no))
     .map((p) => made('pr', p.url, { says: `names #${no}`, files: [] }, false))
 }
 

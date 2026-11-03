@@ -6,7 +6,7 @@ import type { Refused } from './handoff.ts'
 import type { Fire, Sum } from './phases.ts'
 import type { Turn } from './report.ts'
 
-export const FIX = { model: 'claude-sonnet-5', write_paths: ['test/fizz'] }
+export const FIX = { model: 'claude-sonnet-5', write_paths: ['test/fizz'], tools: ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'Bash(forge build)'] }
 
 export interface Check { name: string; rules: string; facts: string; run: () => Refused[] }
 
@@ -14,7 +14,8 @@ export interface Suite { fire: Fire; dir: string; handoffs: string }
 
 export interface Fixed { sum: Sum; turns: Turn[]; not_clean: string | null }
 
-const PROMPT = 'Repair each hit the issue lists, the way its rules say. Write only under test/fizz. Then write the reply the issue names, holding '
+const PROMPT = 'Repair each hit the issue lists, the way its rules say. Write only under test/fizz. '
+  + 'Never run forge build --force or forge clean: the machine builds before it checks. Then write the reply the issue names, holding '
   + '`## Fixed`, one row per hit you repaired: file, line, what changed; and `## Not fixed`, each hit you left and why.'
 
 const NOTE = /^([^:\s]+)(?::(\d+):)?/

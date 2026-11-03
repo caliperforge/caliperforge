@@ -6,8 +6,9 @@ import { expect, test, vi } from 'vitest'
 import { record as railed } from '../../rails/record.ts'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
+import { all } from '../../cli/inbox.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, requeue, resume, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, planRows, requeue, resume, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
@@ -1571,12 +1572,15 @@ test('the tick parks a file wait for a queued plan', async () => {
   expect(get(w.root, HELD, 'parked.md')).toContain(`waits on plan ${String(MINE)}`)
   expect(eventsOf(w.db, HELD, 'park')).toEqual([{ actor: 'tick', outcome: 'pass', message: `waits on plan ${String(MINE)}'s files` }])
   expect(added.slice(3).map((id) => plan(w.db, id).state)).toContain('running')
+  waiting(w.db, [{ plan: HELD, why: 'leased' }])
+  expect(planRows(w.db).find((r) => r.id === HELD)).toMatchObject({ waits_on: MINE })
   end(w.db, MINE, 'done')
   pushedRow(w.db, { plan: MINE, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
     evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(w.db, MINE, 'd'.repeat(64)))
   await tick(w.db, w.root, stub(CARRIED))
   expect(parked(w.db)).toEqual([])
   expect(plan(w.db, HELD).state).not.toBe('blocked_on_ceo')
+  expect(all(w.root)).toContainEqual(expect.objectContaining({ plan: HELD, name: 'fixer', note: `plan ${String(MINE)} landed, so this job is back in its lane` }))
   expect(existsSync(join(w.root, `.cf/work/${String(HELD)}/parked.md`))).toBe(false)
 })
 

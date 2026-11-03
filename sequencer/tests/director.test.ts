@@ -1221,18 +1221,28 @@ async function parks() {
 }
 
 async function overCap() {
-  const { db, home } = seeded('1')
-  db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
-  await run(db, home, REPLY.park ?? '')
-  expect(plan7(db)).toMatchObject({ state: 'queued', held_until: null })
-  expect(maybe(home, 7, 'parked.md')).toBeNull()
-  expect(ofKind(db, 'return')).toHaveLength(1)
-  const queued = queuedOverCap()
-  await run(queued.db, queued.home, REPLY.park ?? '')
-  expect(told(queued.db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'park: not worth a build yet' }])
-  expect(ofKind(queued.db, 'return')).toEqual([])
-  expect(plan7(queued.db)).toMatchObject({ state: 'queued', held_until: null })
-  expect(maybe(queued.home, 7, 'parked.md')).toBeNull()
+  const stopped = seeded('1')
+  stopped.db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
+  for (const { db, home } of [stopped, queuedOverCap()]) {
+    await run(db, home, REPLY.park ?? '')
+    expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_until: '2026-10-01T00:00:00.000Z' })
+    expect(maybe(home, 7, 'parked.md')).toMatch(/^# Held /)
+    expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'park: not worth a build yet' }])
+    expect(ofKind(db, 'return')).toEqual([])
+  }
+}
+
+async function fullPipe() {
+  for (const reply of [RETURN, REPLY.rule ?? '']) {
+    const { db, home } = queuedOverCap()
+    const prompts: string[] = []
+    await cooLite(db, home, row(db), inTurn([reply, reply], prompts), now, () => undefined, wire())
+    const move = /^move: (\w+)$/m.exec(reply)?.[1] ?? ''
+    expect(prompts.map((p) => p.includes(`# Fence\n\n${move} is refused: the job waits on a full pipe, it is not stopped. Choose widen, park or file.`))).toEqual([false, true])
+    expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: `${move}: refused by the fence, the job waits on a full pipe` }])
+    expect(row(db)).toMatchObject({ state: 'queued', step: 4 })
+    expect(ofKind(db, 'return')).toEqual([])
+  }
 }
 
 const ON_8 = '---\nmove: park\nwhy: parts it reads in plan 8 have not landed\nuntil: 2026-10-01T00:00:00.000Z\n---\n'
@@ -1256,7 +1266,8 @@ async function waitsOn8() {
 
 describe('park', () => {
   test('a park holds the job until its time', parks)
-  test('a park on an over_cap job returns it to its lane', overCap)
+  test('a park on an over_cap job holds it until its time', overCap)
+  test('a job waiting on a full pipe takes only widen, park or file', fullPipe)
   test('a park naming plan 8 waits on it only while it is open', waitsOn8)
 })
 
@@ -1708,14 +1719,14 @@ async function looks() {
 }
 
 async function overCapWakes() {
-  for (const { priority, fired } of [{ priority: 1, fired: 1 }, { priority: 2, fired: 0 }]) {
+  for (const { priority, fired } of [{ priority: 1, fired: 2 }, { priority: 2, fired: 0 }]) {
     const { db, home } = wokeSeeded()
     db.exec(`UPDATE plans SET state = 'queued', wait_reason = 'over_cap', priority = ${String(priority)} WHERE id = 7`)
     const fires: string[] = []
     await woke(db, home, wokeStub(ASK_CEO, fires), day, () => undefined)
     expect(fires).toHaveLength(fired)
     expect(fires.every((f) => f.includes(', waiting on over_cap\n\n# Stop'))).toBe(true)
-    expect(wokeTold(db)).toEqual(fired === 1 ? [{ outcome: 'needs_coo', message: SAID }] : [])
+    expect(wokeTold(db)).toEqual(fired === 0 ? [] : [{ outcome: 'needs_coo', message: 'ask_ceo: refused by the fence, the job waits on a full pipe' }])
   }
 }
 

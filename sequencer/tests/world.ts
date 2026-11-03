@@ -227,6 +227,12 @@ export function copied(w: World): World {
   return { ...w, db, root }
 }
 
+/** A world built on first use and never ticked again: each call hands back a copy of it. */
+export const once = (make: () => World | Promise<World>): (() => Promise<World>) => {
+  let made: Promise<World> | undefined
+  return async () => copied(await (made ??= Promise.resolve(make())))
+}
+
 /**
  * The store ships seven lanes on, over a window with a wall clock in it. A sequencer test is one
  * lane wide and runs at whatever hour the suite runs at, so the world opens the pr-path pipe all

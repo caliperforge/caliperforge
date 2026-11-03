@@ -39,7 +39,7 @@ import { REGISTRY } from './drifting.ts'
 import { GREETED, MANUAL, SCHEDULED, TEX } from './bases.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
-import { approve, builds, built, CARRIED, copied, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, TYPESCRIPT, watched, WORDS, world, type World } from './world.ts'
+import { approve, builds, built, CARRIED, copied, dropping, internalPlan, KOTLIN, once, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, TYPESCRIPT, watched, WORDS, world, type World } from './world.ts'
 
 vi.mock(import('../../rails/record.ts'), async (importOriginal) => {
   const real = await importOriginal()
@@ -57,12 +57,6 @@ const pipe = (over: Partial<PipeRow>): PipeRow =>
 const row = (over: Partial<PlanRow>): PlanRow =>
   ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
     head_digest: null, priority: 1, lane: null, seat: null, origin: null, wait_reason: null, ...over })
-
-/** A world built on first use and never ticked again: each call hands back a copy of it. */
-const once = (make: () => World | Promise<World>): (() => Promise<World>) => {
-  let made: Promise<World> | undefined
-  return async () => copied(await (made ??= Promise.resolve(make())))
-}
 
 /** A world as `world()` opens it: warm, cold, or warm on stale account evidence. */
 const FRESH = once(() => world())

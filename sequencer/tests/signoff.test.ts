@@ -20,7 +20,7 @@ import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { TEX } from './bases.ts'
-import { approve, CARRIED, internalPlan, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, once, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
 const quiet = (): Pr => ({
@@ -31,16 +31,23 @@ const quiet = (): Pr => ({
 /** Their tracker with no open pull request and no sibling naming the issue. */
 const none = (): unknown => []
 
-async function atBatch(ci = true, files = TYPESCRIPT): Promise<World> {
-  const w = world('warm', undefined, files, ci)
-  approve(w.db, w.target)
-  for (let at = 0; at < 7; at += 1) {
-    if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  }
-  expect(plan(w.db, 1).step).toBe(7)
-  return w
+/** An approved outside plan on `files` ticked to step 7, its card ready, built once. */
+function atBatch(ci: boolean, files: Record<string, string>): () => Promise<World> {
+  return once(async () => {
+    const w = world('warm', undefined, files, ci)
+    approve(w.db, w.target)
+    for (let at = 0; at < 7; at += 1) {
+      if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+      await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+    }
+    expect(plan(w.db, 1).step).toBe(7)
+    return w
+  })
 }
+
+const AT_BATCH = atBatch(true, TYPESCRIPT)
+const NO_CI = atBatch(false, TYPESCRIPT)
+const TEX_NO_CI = atBatch(false, TEX)
 
 interface Held { title: string; body: string; open: boolean; answer: Answer | null; words: string | null; closing: string | null }
 
@@ -72,8 +79,8 @@ function fake(pr: number | null = null, lines: string[] = [], assignees = [OPERA
   }
 }
 
-test('D1 the card opens with the fact sheet and its verdict', async () => {
-  const w = await atBatch()
+test('the card opens with the fact sheet and its verdict', async () => {
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
@@ -94,8 +101,8 @@ function theirBranch(w: World, name: string, file: string, message: string): voi
   git(tree, ['push', '-q', 'upstream', `HEAD:refs/heads/${name}`])
 }
 
-test('D2 a maintainer branch on our code leads the card', async () => {
-  const w = await atBatch()
+test('a maintainer branch on our code leads the card', async () => {
+  const w = await AT_BATCH()
   theirBranch(w, 'fix-hello', 'src/hello.ts', 'yo')
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
@@ -107,8 +114,8 @@ test('D2 a maintainer branch on our code leads the card', async () => {
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
-test('D4 a named branch on generated code is listed, not first', async () => {
-  const w = await atBatch()
+test('a named branch on generated code is listed, not first', async () => {
+  const w = await AT_BATCH()
   theirBranch(w, 'table', 'generated/table.ts', 'regenerate for #12')
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
@@ -119,7 +126,7 @@ test('D4 a named branch on generated code is listed, not first', async () => {
 })
 
 test('a sibling PR with the issue number only bare is not named', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake()
   const sibling = { url: 'https://github.com/acme/gadget/pull/3', title: 't', body: '<img width="12">',
     repository: { nameWithOwner: 'acme/gadget' } }
@@ -129,16 +136,16 @@ test('a sibling PR with the issue number only bare is not named', async () => {
   expect(body).not.toContain('named:')
 })
 
-test('D2 the verdict is taste only when every fact is ok', () => {
+test('the verdict is taste only when every fact is ok', () => {
   const clean = [{ name: 'files', ok: true, says: '1 files' }, { name: 'assigned', ok: true, says: 'assigned to us' }]
   expect(verdict(clean)).toBe('All checks clean; your call is taste only')
   expect(verdict([...clean, { name: 'rails', ok: false, says: 'no verdict' }])).toBe('Open: rails: `no verdict`')
 })
 
-test('D3 an open fact is named and its line ends open', async () => {
+test('an open fact is named and its line ends open', async () => {
   const open = { name: 'assigned', ok: false, says: 'assigned to nobody' }
   expect(verdict([{ name: 'files', ok: true, says: '1 files' }, open])).toBe('Open: assigned: `assigned to nobody`')
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake(null, [], [])
   signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
@@ -147,7 +154,7 @@ test('D3 an open fact is named and its line ends open', async () => {
 })
 
 test('one card per outside plan, linking nothing on their thread', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake()
   expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'opened' }])
   expect(signoffs(w.db, w.root, desk, none)).toEqual([])
@@ -163,7 +170,7 @@ test('one card per outside plan, linking nothing on their thread', async () => {
 })
 
 test('a rehearsal PR card links its files view, not their thread', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake(5)
   signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
@@ -174,7 +181,7 @@ test('a rehearsal PR card links its files view, not their thread', async () => {
 })
 
 test('go signs the head shown, closes the card, next tick sends it', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
@@ -194,7 +201,7 @@ test('go signs the head shown, closes the card, next tick sends it', async () =>
 })
 
 test('go on a card whose lane is full leaves the plan queued', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   width(w.db, 1, 1)
   amend(w.db, 1, { state: 'blocked_on_ceo' })
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'running', queued_at: '2000-01-01T00:00:00.000Z', step: 2, retries: 0 })
@@ -207,7 +214,7 @@ test('go on a card whose lane is full leaves the plan queued', async () => {
 })
 
 test('no with words sends it back to the builder with them', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
@@ -223,8 +230,8 @@ test('no with words sends it back to the builder with them', async () => {
   expect(eventsOf(w.db, 1, 'signoff')).toEqual([{ actor: 'ceo', outcome: 'refuse', message: 'signoff.no' }])
 })
 
-test('D1 no with only a line comment carries it to the builder', async () => {
-  const w = await atBatch()
+test('no with only a line comment carries it to the builder', async () => {
+  const w = await AT_BATCH()
   const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
   signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
@@ -235,7 +242,7 @@ test('D1 no with only a line comment carries it to the builder', async () => {
   expect(approvalsOf(w.db, 'plan')[0]?.reason).toBe('signoff.no')
 })
 
-test('D2 only the owner\'s comments return, at their original line', () => {
+test('only the owner\'s comments return, at their original line', () => {
   const read = (args: string[]): unknown => args[1]?.startsWith('repos/') === true && args[1].includes('/pulls/')
     ? [
       { id: 1, commit_id: 'c1', original_commit_id: 'c1', path: 'src/hello.ts', line: 3, original_line: 3, body: 'ship it', user: { login: 'stranger' } },
@@ -245,8 +252,8 @@ test('D2 only the owner\'s comments return, at their original line', () => {
   expect(ghDesk(SIGNOFF, read, () => 'michael-moffett\n').lines('caliperforge/widget', 5)).toEqual(['src/hello.ts:1 Name it greet.'])
 })
 
-test('D3 no with words and a line comment sends both, words first', async () => {
-  const w = await atBatch()
+test('no with words and a line comment sends both, words first', async () => {
+  const w = await AT_BATCH()
   const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
   signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
@@ -256,8 +263,8 @@ test('D3 no with words and a line comment sends both, words first', async () => 
   expect(readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')).toContain('Call it expiry. src/hello.ts:1 Name it greet.')
 })
 
-test('D4 the card says a line comment plus no reaches the builder', async () => {
-  const w = await atBatch()
+test('the card says a line comment plus no reaches the builder', async () => {
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   expect(desk.cards.get(100)?.body)
@@ -265,7 +272,7 @@ test('D4 the card says a line comment plus no reaches the builder', async () => 
 })
 
 test('no alone waits for the coo', async () => {
-  const bare = await atBatch()
+  const bare = await AT_BATCH()
   const quiet = fake()
   signoffs(bare.db, bare.root, quiet, none)
   const other = quiet.cards.get(100)
@@ -277,7 +284,7 @@ test('no alone waits for the coo', async () => {
 })
 
 test('talk hands it to the coo and leaves the card open', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
@@ -290,7 +297,7 @@ test('talk hands it to the coo and leaves the card open', async () => {
 })
 
 test('a new head swaps the card; a job sent back closes its card', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   put(w.root, 1, 'signoff', `100 ${'f'.repeat(64)} https://github.com/${SIGNOFF}/issues/100\n`)
@@ -301,8 +308,8 @@ test('a new head swaps the card; a job sent back closes its card', async () => {
   expect(desk.cards.get(101)?.closing).toMatch(/^Withdrawn/)
 })
 
-test('D4 a card signed at the terminal closes as signed', async () => {
-  const w = await atBatch()
+test('a card signed at the terminal closes as signed', async () => {
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   approveBatch(w.db, w.root, 'plan', 1, 'ceo')
@@ -324,7 +331,7 @@ test('only a label the gh credential owner set is an answer', () => {
 })
 
 test('the card names every workflow and says green only of what is', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   put(w.root, 1, 'ci.json', JSON.stringify([
     { workflow: 'Ruby', status: 'completed', conclusion: 'success', gates: true },
     { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false },
@@ -337,7 +344,7 @@ test('the card names every workflow and says green only of what is', async () =>
 })
 
 test('a workflow also red on base says so, with its job and step', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   put(w.root, 1, 'ci.json', JSON.stringify([
     { workflow: 'Validate', status: 'completed', conclusion: 'failure', gates: true, base: ['validate: Install'] },
   ]))
@@ -346,8 +353,8 @@ test('a workflow also red on base says so, with its job and step', async () => {
   expect(desk.cards.get(100)?.body).toContain('- Their CI on our fork: Validate red on the base too (validate: Install)')
 })
 
-test('D3 a repo with no CI says what checked it instead', async () => {
-  const w = await atBatch(false)
+test('a repo with no CI says what checked it instead', async () => {
+  const w = await NO_CI()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
@@ -356,8 +363,8 @@ test('D3 a repo with no CI says what checked it instead', async () => {
   expect(body).toContain('\nWaiting on you. The four gates passed.\n')
 })
 
-test('D4 a branch no fork workflow runs says local checks stand', async () => {
-  const w = await atBatch(false, TEX)
+test('a branch no fork workflow runs says local checks stand', async () => {
+  const w = await TEX_NO_CI()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
@@ -376,7 +383,7 @@ test('a ruling adds a D row and Must not break line, or a section', () => {
 /** Hand-written PR text can leave out files the build changed. */
 test('the card names a changed file the prewritten PR text omits', async () => {
   const bodyWith = async (pr: string): Promise<string> => {
-    const w = await atBatch()
+    const w = await AT_BATCH()
     put(w.root, 1, 'pr.md', pr)
     const desk = fake()
     signoffs(w.db, w.root, desk, none)
@@ -386,8 +393,8 @@ test('the card names a changed file the prewritten PR text omits', async () => {
   expect(await bodyWith('`hello.ts` says hey.\n')).not.toContain('Not in the PR text')
 })
 
-test('D6 the card names each rework round\'s review mode, else none', async () => {
-  const w = await atBatch()
+test('the card names each rework round\'s review mode, else none', async () => {
+  const w = await AT_BATCH()
   const plain = fake()
   signoffs(w.db, w.root, plain, none)
   expect(plain.cards.get(100)?.body).not.toContain('Review mode:')
@@ -408,8 +415,8 @@ function senior(w: World, id: number): void {
     defect_class: null, message: `passes\n- ${KEPT} | kept\n- ${CHANGED} | changed: the issue asks for it` }, 0, 0, null)
 }
 
-test('D1 D4 the card counts precedents and codes the changed url', async () => {
-  const w = await atBatch()
+test('the card counts precedents and codes the changed url', async () => {
+  const w = await AT_BATCH()
   senior(w, 1)
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
@@ -420,15 +427,15 @@ test('D1 D4 the card counts precedents and codes the changed url', async () => {
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
-test('D2 a senior verdict with no answer line adds no precedents', async () => {
-  const w = await atBatch()
+test('a senior verdict with no answer line adds no precedents', async () => {
+  const w = await AT_BATCH()
   const desk = fake()
   signoffs(w.db, w.root, desk, none)
   expect((desk.cards.get(100)?.body ?? '').split('\n').some((l) => l.startsWith('- precedents:'))).toBe(false)
 })
 
-test('D3 an internal plan gets no card, so no precedents line', async () => {
-  const w = await atBatch()
+test('an internal plan gets no card, so no precedents line', async () => {
+  const w = await AT_BATCH()
   internalPlan(w.db, w.root, 2)
   senior(w, 2)
   const desk = fake()
@@ -436,8 +443,8 @@ test('D3 an internal plan gets no card, so no precedents line', async () => {
   expect([...desk.cards.values()].filter((c) => c.title.includes('internal plan') || c.body.includes('<sub>plan 2,'))).toEqual([])
 })
 
-test('D4 the card shows Greptile\'s score, a skip, or none', async () => {
-  const w = await atBatch()
+test('the card shows Greptile\'s score, a skip, or none', async () => {
+  const w = await AT_BATCH()
   dropSignals(w.db)
   const unscored = fake()
   signoffs(w.db, w.root, unscored, none)
@@ -462,7 +469,7 @@ Recommend: (a), the diff is signed off
 If no answer by 2026-09-28 09:00: the plan stays held`
 
 async function bodyAfter(...asks: [Event['outcome'], string][]): Promise<string> {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   for (const [outcome, block] of asks) {
     logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome, message: `ask_ceo: why\n\n${block}`, pointer: null, run: null })
   }
@@ -471,19 +478,19 @@ async function bodyAfter(...asks: [Event['outcome'], string][]): Promise<string>
   return desk.cards.get(100)?.body ?? ''
 }
 
-test('D1 the card shows the decision block as written', async () => {
+test('the card shows the decision block as written', async () => {
   const body = await bodyAfter(['needs_coo', BLOCK])
   expect(body).toContain(`**The decision asked of you**\n\n\`\`\`\n${BLOCK}\n\`\`\`\n\n**Answer with one label.**`)
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
-test('D2 a plan with no director event shows no decision', async () => {
+test('a plan with no director event shows no decision', async () => {
   const body = await bodyAfter()
   expect(body).not.toContain('Decide:')
   expect(body).not.toContain('The decision asked of you')
 })
 
-test('D3 an invalid or superseded block stays off the card', async () => {
+test('an invalid or superseded block stays off the card', async () => {
   expect(await bodyAfter(['needs_coo', BLOCK.replace('upstream?', 'upstream')])).not.toContain('Decide:')
   expect(await bodyAfter(['needs_coo', BLOCK], ['pass', BLOCK])).not.toContain('Decide:')
 })
@@ -504,8 +511,8 @@ function cardWith(w: World, handback: string): string {
   return desk.cards.get(100)?.body ?? ''
 }
 
-test('D1 the card lists each reviewer ask with its pointer', async () => {
-  const w = await atBatch()
+test('the card lists each reviewer ask with its pointer', async () => {
+  const w = await AT_BATCH()
   const [a, b] = [ask(w, 'review', 'Name it greet.'), ask(w, 'comment', 'Add a test\nfor it.')]
   const body = cardWith(w, answered([[a, 'src/hello.ts:1'], [b, 'src/hello.test.ts:4']]))
   expect(body).toContain(`**Reviewer asks since the last push**\n\n- \`R${String(a)}\` maintainer: \`Name it greet.\` — done at \`src/hello.ts:1\`\n`
@@ -513,8 +520,8 @@ test('D1 the card lists each reviewer ask with its pointer', async () => {
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
-test('D2 an ask with no row or no pointer ends open', async () => {
-  const w = await atBatch()
+test('an ask with no row or no pointer ends open', async () => {
+  const w = await AT_BATCH()
   const [a, b] = [ask(w, 'review', 'Name it greet.'), ask(w, 'comment', 'Add a test.')]
   const body = cardWith(w, answered([[a, 'src/hello.ts:1']]))
   expect(body).toContain(`- \`R${String(a)}\` maintainer: \`Name it greet.\` — done at \`src/hello.ts:1\`\n`)
@@ -525,8 +532,8 @@ test('D2 an ask with no row or no pointer ends open', async () => {
   expect(broken.split('\n').filter((l) => l.startsWith('- `R')).map((l) => l.endsWith('— open'))).toEqual([true, true])
 })
 
-test('D3 only asks on their PR since the last push show', async () => {
-  const w = await atBatch()
+test('only asks on their PR since the last push show', async () => {
+  const w = await AT_BATCH()
   const now = Date.now()
   ask(w, 'review', 'Before the push.', new Date(now - 120_000).toISOString())
   logged(w.db, { plan: 1, kind: 'push', actor: 'push', outcome: 'pass', message: 'pushed', pointer: null, run: null }, new Date(now - 60_000).toISOString())
@@ -546,8 +553,8 @@ function askedAt(w: World, tips?: string): string {
   return head
 }
 
-test('D1 a tip holding .greptile/rules.md says mirrored', async () => {
-  const w = await atBatch()
+test('a tip holding .greptile/rules.md says mirrored', async () => {
+  const w = await AT_BATCH()
   const tree = join(mkdtempSync(join(tmpdir(), 'cf-mirror-')), 'tip')
   git(srcDir(w.root, 1), ['worktree', 'add', '-q', '--detach', tree, 'HEAD'])
   mkdirSync(join(tree, '.greptile'))
@@ -560,16 +567,16 @@ test('D1 a tip holding .greptile/rules.md says mirrored', async () => {
   expect(body).not.toContain('- Greptile rules:')
 })
 
-test('D2 a tip carrying greptile.json says generic', async () => {
-  const w = await atBatch()
+test('a tip carrying greptile.json says generic', async () => {
+  const w = await AT_BATCH()
   askedAt(w)
   const body = cardWith(w, CARRIED)
   expect(body).toContain('\n- Greptile config: generic\n')
   expect(body).not.toContain('P2s carried')
 })
 
-test('D3 no ask and a quota skip says skipped: quota', async () => {
-  const w = await atBatch()
+test('no ask and a quota skip says skipped: quota', async () => {
+  const w = await AT_BATCH()
   dropSignals(w.db)
   drop(w.root, 1, 'greptile.asked')
   put(w.root, 1, 'greptile.skipped', `${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
@@ -578,8 +585,8 @@ test('D3 no ask and a quota skip says skipped: quota', async () => {
   expect(body).not.toContain('- Greptile rules:')
 })
 
-test('D4 a generic tip shows its rule counts by source', async () => {
-  const w = await atBatch()
+test('a generic tip shows its rule counts by source', async () => {
+  const w = await AT_BATCH()
   const url = 'https://github.com/acme/widget/pull/3#discussion_r1'
   flag(w.db, 'acme/widget', 3, ['f', 'g'].map((finding) => ({ finding, area: 'src/hello.ts:1', acted_on: 'fixed' as const, source: url })))
   keepEscapes(w.db, 'acme/widget', 3, 1, [{ area: 'src/hello.ts', line: 1, author: 'm', role: 'maintainer', text: 'too wide', url }])
@@ -590,15 +597,15 @@ test('D4 a generic tip shows its rule counts by source', async () => {
     .toContain('- Greptile config: generic\n- Greptile rules: escapes 1, their reviewer 2, maintainer decisions 0, ours 0\n')
 })
 
-test('D5 a tip with no recorded counts shows no rules line', async () => {
-  const w = await atBatch()
+test('a tip with no recorded counts shows no rules line', async () => {
+  const w = await AT_BATCH()
   drop(w.root, 1, 'next.rules')
   askedAt(w)
   expect(cardWith(w, CARRIED)).not.toContain('- Greptile rules:')
 })
 
-test('D4 D5 only open and accepted P2s are carried', async () => {
-  const w = await atBatch()
+test('only open and accepted P2s are carried', async () => {
+  const w = await AT_BATCH()
   const head = askedAt(w)
   const p = (n: number): string => `<img alt="P${String(n)}" src="https://greptile.com/p${String(n)}.svg">`
   put(w.root, 1, `findings-${head}.md`, `- G1 src/hello.ts:1 ${p(2)} open\n- G2 src/hello.ts:2 ${p(2)} accepted\n`

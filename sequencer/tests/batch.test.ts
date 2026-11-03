@@ -25,7 +25,7 @@ import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
 import { fetchMain, get, maybe, mergeMain, put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
-import { approve, CARRIED, internalPlan, plan, PR as URL, runsOn, SEEDED, stub, tip, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, once, plan, PR as URL, runsOn, SEEDED, stub, tip, watched, world, type World } from './world.ts'
 
 afterEach(() => { vi.unstubAllEnvs() })
 
@@ -48,7 +48,12 @@ const pr = (over: Partial<Pr> = {}): Pr => ({
   comments: [], reviews: [], statusCheckRollup: [], ...over,
 })
 
-async function atBatch(): Promise<World> {
+const gitOf = (w: World) => (args: string[]): string => execFileSync('git', args, { cwd: srcDir(w.root, 1), encoding: 'utf8' }).trim()
+
+/** The world as `world()` opens it. */
+const FRESH = once(() => world())
+/** An approved outside plan ticked to step 7, its card ready. */
+const AT_BATCH = once(async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 7; at += 1) {
@@ -57,10 +62,43 @@ async function atBatch(): Promise<World> {
   }
   expect(plan(w.db, 1).step).toBe(7)
   return w
-}
+})
+/** AT_BATCH signed and pushed, its pull request open. */
+const PUSHED = once(async () => {
+  const w = await AT_BATCH()
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
+  published(w, watched([], w.root, 1))
+  return w
+})
+/** PUSHED rewound to review and lapped back to step 7 with its pull request open. */
+const REROUND = once(async () => {
+  const w = await PUSHED()
+  rewind(w.db, 1, 4)
+  expect(plan(w.db, 1).head_digest).toBeNull()
+  for (let at = 0; at < 3; at += 1) await lap(w)
+  return w
+})
+/** An approved outside plan ticked to step 7 through a wire that sends to the fork. */
+const ROUNDED = once(async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const sent: string[] = []
+  await round(w, pushing(w, sent), 'hey', 7)
+  expect(plan(w.db, 1).step).toBe(7)
+  sentEach(sent, tipsOf(w))
+  return w
+})
+/** ROUNDED rewound to review on a carried hand-back and ticked back to step 7. */
+const REFOLLOWED = once(async () => {
+  const w = await ROUNDED()
+  put(w.root, 1, 'step-2.handback.md', CARRIED)
+  rewind(w.db, 1, 4)
+  await round(w, pushing(w), 'hello', 3)
+  return w
+})
 
 test('a card per ready plan and open proposal, with checks', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const card = batch(w.db, w.root)[0]
   expect(card).toMatchObject({ kind: 'plan', id: 1, title: 'acme/widget#12 widget-12-a1' })
   expect(card?.digest).toBe(headDigest(headOf(w.root, 1).sha))
@@ -72,14 +110,14 @@ test('a card per ready plan and open proposal, with checks', async () => {
   ])
 })
 
-test('D1 newest is the plan\'s highest-id row, or null', async () => {
-  const w = await atBatch()
+test('newest is the plan\'s highest-id row, or null', async () => {
+  const w = await AT_BATCH()
   expect(newest(w.db, 99)).toBeNull()
   expect(newest(w.db, 1)).toMatchObject({ plan_id: 1, state: 'ready' })
 })
 
 test('push needs an approval row, then pushes and opens the pr', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'refuse' })
@@ -91,7 +129,7 @@ test('push needs an approval row, then pushes and opens the pr', async () => {
 })
 
 test('outside branch: one commit, brief title, no upstream number', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const log = execFileSync('git', ['log', '--format=%B%x00', 'refs/remotes/upstream/main..HEAD'],
     { cwd: srcDir(w.root, 1), encoding: 'utf8' }).split('\0').map((m) => m.trim()).filter((m) => m !== '')
   expect(log).toEqual(['hello\n\nadd `hello()`.\n\nthe ask asks for it.'])
@@ -99,7 +137,7 @@ test('outside branch: one commit, brief title, no upstream number', async () => 
 })
 
 test('a body the card set is the one the pull request opens with', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   put(w.root, 1, 'pr.md', 'Addresses the defaults-table item in #12.\n')
   const bodies: string[] = []
   const wire = { ...watched([], w.root, 1), open: (...args: [string, string, string, string]) => {
@@ -112,7 +150,7 @@ test('a body the card set is the one the pull request opens with', async () => {
 })
 
 test('pre-push hook checks ceo sign-off on main, not the fork', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const sha = headOf(w.root, 1).sha
   const onto = (ref: string): string[] => refusedPush(w.db, `refs/heads/x ${sha} ${ref} ${'0'.repeat(40)}\n`)
   expect(headApproved(w.db, sha)).toBe(false)
@@ -125,7 +163,7 @@ test('pre-push hook checks ceo sign-off on main, not the fork', async () => {
 })
 
 test('each comment, review, bot review and merge on our pr, once', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const view = pr({
     comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'please split this', createdAt: '2026-09-17T10:00:00Z' }],
     reviews: [{ id: 'r1', author: { login: 'greptile-apps[bot]' }, body: `score 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
@@ -142,7 +180,7 @@ test('each comment, review, bot review and merge on our pr, once', async () => {
 
 /** A review bot's 5/5 summary comment does not rewind a finished job or ask a person. */
 test('a review bot\'s summary is its score, not a person asking', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files\n\n${REVIEWED}`
   const view = pr({ comments: [
     { id: 'g1', author: { login: 'greptile-apps' }, body: summary(5), createdAt: new Date(Date.now() + 1000).toISOString() },
@@ -156,7 +194,7 @@ test('a review bot\'s summary is its score, not a person asking', async () => {
 })
 
 test('Greptile summary is kept with its head; old format is not', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const at = new Date(Date.now() + 1000).toISOString()
   const view = pr({ comments: [
     { id: 'g1', author: { login: 'greptile-apps' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, createdAt: at },
@@ -167,7 +205,7 @@ test('Greptile summary is kept with its head; old format is not', async () => {
 })
 
 test('our words are no signal; theirs and review state are kept', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const view = pr({
     author: { login: 'michael-moffett' },
     comments: [
@@ -183,7 +221,7 @@ test('our words are no signal; theirs and review state are kept', async () => {
 })
 
 test('changes requested and a comment both go to the brief', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const said = (id: string, state: string | undefined, body: string): SignalRow[] => capture(w.db, () => pr({
     reviews: [{ id, author: { login: 'maintainer' }, body, submittedAt: new Date(Date.now() + 60_000).toISOString(),
       ...(state === undefined ? {} : { state }) }],
@@ -203,7 +241,7 @@ test('changes requested and a comment both go to the brief', async () => {
 })
 
 test('a round on an open pr pushes its branch, opening no other', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
   rewind(w.db, 1, 4)
@@ -215,13 +253,11 @@ test('a round on an open pr pushes its branch, opening no other', async () => {
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
-test.each([{ is: 'a changed', md: 'Also covers the defaults table.\n' }, { is: 'an unchanged', md: null }])('D1 $is pr.md describes the open pr', { timeout: 90_000 }, async ({ md }) => {
-  const w = await pushed()
+test.each([{ is: 'a changed', md: 'Also covers the defaults table.\n' }, { is: 'an unchanged', md: null }])('$is pr.md describes the open pr', { timeout: 90_000 }, async ({ md }) => {
+  const w = await REROUND()
   const before = get(w.root, 1, 'pr.md')
   const described: [string, number, string][] = []
   const wire: Wire = { ...watched([], w.root, 1), describe: (...args) => void described.push(args) }
-  rewind(w.db, 1, 4)
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
   if (md !== null) put(w.root, 1, 'pr.md', md)
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
@@ -229,8 +265,8 @@ test.each([{ is: 'a changed', md: 'Also covers the defaults table.\n' }, { is: '
   expect(described).toEqual([['acme/widget', 7, md ?? before]])
 })
 
-test('D1 D2 an open pr round conflicting with main goes back', { timeout: 90_000 }, async () => {
-  const w = await pushed()
+test('an open pr round conflicting with main goes back', { timeout: 90_000 }, async () => {
+  const w = await PUSHED()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
   const upstream = join(w.root, 'remotes/acme/widget')
@@ -247,18 +283,14 @@ test('D1 D2 an open pr round conflicting with main goes back', { timeout: 90_000
 })
 
 test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }, async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   git(['push', '-q', 'origin', 'widget-12-a1'])
   const stale = git(['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge', 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'stale'])
   git(['push', '-q', 'origin', `${stale}:refs/heads/widget-12-a1-next`])
   const sent: string[] = []
-  const log = watched(sent, w.root, 1)
-  const wire = { ...log, send: (dir: string, ref: string) => {
-    log.send(dir, ref)
-    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
-  } }
+  const wire = pushing(w, sent)
   rewind(w.db, 1, 4)
   writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hi"\n')
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
@@ -283,20 +315,29 @@ async function round(w: World, wire: Wire, said: string, ticks: number): Promise
   }
 }
 
-test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  const src = srcDir(w.root, 1)
-  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
-  const sent: string[] = []
+/** The watched wire on `w`, each send also pushed to the fork. */
+function pushing(w: World, sent: string[] = []): Wire {
   const log = watched(sent, w.root, 1)
-  const wire = { ...log, send: (dir: string, ref: string) => {
+  return { ...log, send: (dir: string, ref: string) => {
     log.send(dir, ref)
     execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
   } }
-  await round(w, wire, 'hey', 7)
-  expect(plan(w.db, 1).step).toBe(7)
+}
+
+const tipsOf = (w: World): string[] => get(w.root, 1, 'next.tips').trim().split('\n').map((l) => l.slice(0, 40))
+
+/** Each send in `sent` is one of `tips` onto -next, and each of `tips` was sent. */
+function sentEach(sent: string[], tips: string[]): void {
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips.map((t) => `send src ${t}:refs/heads/widget-12-a1-next`)))
+}
+
+test('pre-pr rounds move -next; push sends the branch', async () => {
+  const w = await ROUNDED()
+  const git = gitOf(w)
+  const sent: string[] = []
+  const wire = pushing(w, sent)
   const first = git(['rev-parse', 'HEAD'])
+  const shipped = tipsOf(w).length
   rewind(w.db, 1, 4)
   await round(w, wire, 'ho', 3)
   expect(plan(w.db, 1).step).toBe(7)
@@ -304,8 +345,8 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
-  const tips = get(w.root, 1, 'next.tips').trim().split('\n').map((l) => l.slice(0, 40))
-  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips.map((t) => `send src ${t}:refs/heads/widget-12-a1-next`)))
+  const tips = tipsOf(w)
+  sentEach(sent, tips.slice(shipped))
   expect(tips.map((t) => JSON.parse(git(['show', `${t}:greptile.json`])) as unknown)).toEqual(tips.map(() => QUIET))
   tips.reduce((older, newer) => { git(['merge-base', '--is-ancestor', older, newer]); return newer })
   expect(git(['ls-tree', '-r', 'widget-12-a1', 'greptile.json'])).toBe('')
@@ -338,8 +379,8 @@ function signer(w: World, gpg: string): (args: string[]) => string {
   return git
 }
 
-test('D1 a -next tip is signed where the checkout signs', async () => {
-  const w = await atBatch()
+test('a -next tip is signed where the checkout signs', async () => {
+  const w = await AT_BATCH()
   const git = signer(w, SIGNS)
   const { tip: signed } = next(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
   expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
@@ -348,8 +389,8 @@ test('D1 a -next tip is signed where the checkout signs', async () => {
   expect(JSON.parse(git(['show', `${signed}:greptile.json`])) as unknown).toEqual(QUIET)
 })
 
-test('D8 a target running Greptile gets its .greptile tip', async () => {
-  const w = await atBatch()
+test('a target running Greptile gets its .greptile tip', async () => {
+  const w = await AT_BATCH()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "mirrored"\n')
@@ -362,8 +403,8 @@ test('D8 a target running Greptile gets its .greptile tip', async () => {
   expect(get(w.root, 1, 'next.rules')).not.toContain(made)
 })
 
-test('D4 a signature that fails sends no unsigned tip', async () => {
-  const w = await atBatch()
+test('a signature that fails sends no unsigned tip', async () => {
+  const w = await AT_BATCH()
   signer(w, 'exit 1')
   const tips = get(w.root, 1, 'next.tips')
   const sent: string[] = []
@@ -371,26 +412,11 @@ test('D4 a signature that fails sends no unsigned tip', async () => {
   expect([sent, get(w.root, 1, 'next.tips')]).toEqual([[], tips])
 })
 
-async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git: (args: string[]) => string; again: () => void }> {
-  const w = world()
-  approve(w.db, w.target)
-  const src = srcDir(w.root, 1)
-  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
-  const log = watched([], w.root, 1)
-  const wire = { ...log, send: (dir: string, ref: string) => {
-    log.send(dir, ref)
-    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
-  } }
-  await round(w, wire, 'hey', 7)
-  put(w.root, 1, 'step-2.handback.md', handback)
-  rewind(w.db, 1, 4)
-  await round(w, wire, 'hello', 3)
-  return { w, wire, git, again: () => { next(w.db, w.root, plan(w.db, 1), 'acme/widget', wire) } }
-}
-
 /** Two rounds signed at step 8, then a first push whose `open` throws once, after the fold went out. */
 async function folded(): Promise<{ w: World; wire: Wire; git: (args: string[]) => string; approval: number | null }> {
-  const { w, wire, git } = await refollowed(CARRIED)
+  const w = await REFOLLOWED()
+  const wire = pushing(w)
+  const git = gitOf(w)
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   const approval = signedHead(w.db, 1, headDigest(git(['rev-parse', 'HEAD'])))
@@ -404,12 +430,13 @@ async function folded(): Promise<{ w: World; wire: Wire; git: (args: string[]) =
   return { w, wire: flaky, git, approval }
 }
 
-test('D1 the first push sends one commit titled as the pr', async () => {
-  const { w, wire, git } = await refollowed(CARRIED)
+test('the first push sends one commit titled as the pr', async () => {
+  const w = await REFOLLOWED()
+  const git = gitOf(w)
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   const tree = git(['rev-parse', 'HEAD^{tree}'])
-  expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
+  expect(published(w, pushing(w))).toMatchObject({ outcome: 'pass' })
   const sent = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0] ?? ''
   git(['merge-base', '--is-ancestor', 'refs/remotes/upstream/main', sent])
   const log = git(['log', '--format=%B%x00', `refs/remotes/upstream/main..${sent}`]).split('\0').map((m) => m.trim()).filter((m) => m !== '')
@@ -417,7 +444,7 @@ test('D1 the first push sends one commit titled as the pr', async () => {
   expect(git(['rev-parse', `${sent}^{tree}`])).toBe(tree)
 })
 
-test('D2 a push resumed after open threw opens on the fold', async () => {
+test('a push resumed after open threw opens on the fold', async () => {
   const { w, wire, git, approval } = await folded()
   const head = git(['rev-parse', 'HEAD'])
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 as ${URL}` })
@@ -426,7 +453,7 @@ test('D2 a push resumed after open threw opens on the fold', async () => {
   expect(newest(w.db, 1)).toMatchObject({ state: 'pushed', approval_id: approval, evidence: URL })
 })
 
-test('D3 a head committed after the fold is refused', async () => {
+test('a head committed after the fold is refused', async () => {
   const { w, wire, git } = await folded()
   const before = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])
   writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "later"\n')
@@ -438,20 +465,25 @@ test('D3 a head committed after the fold is refused', async () => {
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe(before)
 })
 
-test('D1 D2 a second round is one commit with the brief message', async () => {
-  const { w, git, again } = await refollowed('Renamed.\n\n---\nsummary: rename hello\ndone:\n  - id: D1\n---\n')
+test('a second round is one commit with the brief message', async () => {
+  const w = await ROUNDED()
+  const git = gitOf(w)
+  const wire = pushing(w)
+  put(w.root, 1, 'step-2.handback.md', 'Renamed.\n\n---\nsummary: rename hello\ndone:\n  - id: D1\n---\n')
+  rewind(w.db, 1, 4)
+  await round(w, wire, 'hello', 3)
   expect(plan(w.db, 1).step).toBe(7)
   expect(git(['rev-parse', 'HEAD^'])).toBe(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main']))
   const message = git(['log', '-1', '--format=%B'])
   expect(message).toBe(messageOf(w.root, 1, profile(w.root, 'acme/widget')))
   expect(message).not.toContain('rename hello')
   const head = git(['rev-parse', 'HEAD'])
-  again()
+  next(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
   expect(git(['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('D3 a follow-up with the handback summary is refused', async () => {
-  const w = await pushed()
+test('a follow-up with the handback summary is refused', async () => {
+  const w = await PUSHED()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   git(['push', '-q', 'origin', 'widget-12-a1'])
@@ -465,8 +497,8 @@ test('D3 a follow-up with the handback summary is refused', async () => {
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toMatchObject({ outcome: 'refuse', spans: ['fold'], to: 2 })
 })
 
-test('D1 a moved main is the parent of a one-commit head', { timeout: 90_000 }, async () => {
-  const w = world()
+test('a moved main is the parent of a one-commit head', { timeout: 90_000 }, async () => {
+  const w = await FRESH()
   approve(w.db, w.target)
   const src = srcDir(w.root, 1)
   const upstream = join(w.root, 'remotes/acme/widget')
@@ -502,8 +534,8 @@ test('D1 a moved main is the parent of a one-commit head', { timeout: 90_000 }, 
   expect(refs.filter((r) => r.startsWith('+') || r.includes('--force'))).toEqual([])
 })
 
-test('D1 D2 D3 held ticks at one tree keep the head and send once', { timeout: 90_000 }, async () => {
-  const w = await pushed()
+test('held ticks at one tree keep the head and send once', { timeout: 90_000 }, async () => {
+  const w = await PUSHED()
   const src = srcDir(w.root, 1)
   const upstream = join(w.root, 'remotes/acme/widget')
   const git = (args: string[], cwd = src): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -535,8 +567,8 @@ test('D1 D2 D3 held ticks at one tree keep the head and send once', { timeout: 9
   expect(git(['rev-parse', 'HEAD^'])).toBe(wire.at(src, 'refs/heads/widget-12-a1'))
 })
 
-test('D1 D2 the fold onto upstream main signs as the checkout does', async () => {
-  const w = await pushed()
+test('the fold onto upstream main signs as the checkout does', async () => {
+  const w = await PUSHED()
   const src = srcDir(w.root, 1)
   const upstream = join(w.root, 'remotes/acme/widget')
   const git = (args: string[], cwd = src): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -563,7 +595,7 @@ test('D1 D2 the fold onto upstream main signs as the checkout does', async () =>
 })
 
 test('merged-code finding is an escape on the step that owns it', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
     reviews: [{ id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }],
@@ -575,7 +607,7 @@ test('merged-code finding is an escape on the step that owns it', async () => {
 })
 
 test('a pr read that throws leaves a swallowed event, no signal', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   expect(capture(w.db, () => { throw new Error('HTTP 502\nbody') })).toEqual([])
   expect(ofKind(w.db, 'swallowed'))
     .toEqual([{ plan: 1, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: 'HTTP 502' }])
@@ -586,8 +618,8 @@ const counted = (view: () => Pr): { read: () => Pr; reads: () => number } => {
   return { read: () => { reads += 1; return view() }, reads: () => reads }
 }
 
-test('D1 a closed pr is read once across two captures', async () => {
-  const w = await pushed()
+test('a closed pr is read once across two captures', async () => {
+  const w = await PUSHED()
   const { read, reads } = counted(() => pr({ state: 'CLOSED' }))
   capture(w.db, read)
   capture(w.db, read)
@@ -595,8 +627,8 @@ test('D1 a closed pr is read once across two captures', async () => {
   expect(pointers(w.db, 'gone')).toEqual([URL])
 })
 
-test('D2 a not-found pr is gone, not swallowed, and read once', async () => {
-  const w = await pushed()
+test('a not-found pr is gone, not swallowed, and read once', async () => {
+  const w = await PUSHED()
   const { read, reads } = counted(() => { throw new Error('GraphQL: Could not resolve to a PullRequest with the number of 7.\nbody') })
   capture(w.db, read)
   capture(w.db, read)
@@ -604,8 +636,8 @@ test('D2 a not-found pr is gone, not swallowed, and read once', async () => {
   expect(ofKind(w.db, 'gone', 'swallowed').map((e) => e.kind)).toEqual(['gone'])
 })
 
-test('D3 a merged pr gives its merge once, then is not read', async () => {
-  const w = await pushed()
+test('a merged pr gives its merge once, then is not read', async () => {
+  const w = await PUSHED()
   const { read, reads } = counted(() => pr({ state: 'MERGED', mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   expect(capture(w.db, read).map((s) => s.kind)).toEqual(['merge'])
   expect(capture(w.db, read)).toEqual([])
@@ -637,7 +669,7 @@ const listing = (heads: string[]) => (args: string[]): unknown => {
 }
 
 test('only the rehearsal bot review is kept; it takes no escape', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   expect(capture(w.db, forked, w.root, listing([]))).toEqual([])
   expect(others(w.db, SEEDED).map((s) => ({ repo: s.repo, pr: s.pr, kind: s.kind, score: s.score, head: s.head, plan: s.plan })))
     .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
@@ -645,8 +677,8 @@ test('only the rehearsal bot review is kept; it takes no escape', async () => {
   expect(dispositionsOf(w.db)).toEqual([])
 })
 
-test('D5 a rehearsal review at -next is stored at its plan HEAD', async () => {
-  const w = await pushed()
+test('a rehearsal review at -next is stored at its plan HEAD', async () => {
+  const w = await PUSHED()
   const head = headOf(w.root, 1).sha
   put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
   capture(w.db, forked, w.root, listing([]))
@@ -654,8 +686,8 @@ test('D5 a rehearsal review at -next is stored at its plan HEAD', async () => {
   expect(graded(w.db, 1, head)).toMatchObject({ external_id: `g3@${SHA}`, score: 4 })
 })
 
-test('D3 one summary comment at two reviewed heads is two rows', async () => {
-  const w = await pushed()
+test('one summary comment at two reviewed heads is two rows', async () => {
+  const w = await PUSHED()
   const later = 'c'.repeat(40)
   const moved = pr({ ...FORKED, reviews: FORKED.reviews.map((r) => ({ ...r, body: r.body.replace(SHA, later) })) })
   capture(w.db, forked, w.root, listing([]))
@@ -664,8 +696,8 @@ test('D3 one summary comment at two reviewed heads is two rows', async () => {
   expect(others(w.db, SEEDED).map((s) => s.external_id)).toEqual([`g3@${SHA}`, `g3@${later}`])
 })
 
-test('D1 rehearsal inline findings land under the plan HEAD', async () => {
-  const w = await pushed()
+test('rehearsal inline findings land under the plan HEAD', async () => {
+  const w = await PUSHED()
   const head = headOf(w.root, 1).sha
   put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
   capture(w.db, forked, w.root, listing([]))
@@ -673,28 +705,28 @@ test('D1 rehearsal inline findings land under the plan HEAD', async () => {
 })
 
 test('a plan with no checkout is asked about no rehearsal', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   putPlan(w.db, SECOND)
   const heads: string[] = []
   capture(w.db, forked, w.root, listing(heads))
   expect(heads).toEqual(['widget-12-a1-next'])
 })
 
-test('D5 a rehearsal list that throws is logged on its plan', async () => {
-  const w = await pushed()
+test('a rehearsal list that throws is logged on its plan', async () => {
+  const w = await PUSHED()
   capture(w.db, forked, w.root, () => { throw new Error('HTTP 502\nbody') })
   expect(ofKind(w.db, 'swallowed')).toEqual([{ plan: 1, kind: 'swallowed', actor: 'rehearsal', outcome: 'pass', message: 'HTTP 502' }])
 })
 
 test('an unreadable pr does not stop the pipes behind it', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   expect(capture(w.db, () => { throw new Error('gh: could not resolve host') })).toEqual([])
   expect(capture(w.db, () => pr({ comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'hi', createdAt: '2026-09-17T10:00:00Z' }] })))
     .toHaveLength(1)
 })
 
 test('a vague bot finding does not take a named one\'s slot', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
     reviews: [
@@ -707,7 +739,7 @@ test('a vague bot finding does not take a named one\'s slot', async () => {
 })
 
 test('an approval that cannot settle its row records nothing', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const path = `${w.root}/one.md`
   writeFileSync(path, 'RULING batch.card = change_text_and_marks\n')
   close(w.db, path, () => null)
@@ -717,8 +749,8 @@ test('an approval that cannot settle its row records nothing', async () => {
   expect(openProposals(w.db)).toHaveLength(1)
 })
 
-test('D3 signing a plan logs one signoff event with who signed', async () => {
-  const w = await atBatch()
+test('signing a plan logs one signoff event with who signed', async () => {
+  const w = await AT_BATCH()
   refuseCard(w.db, w.root, 'plan', 1, 'not_yet', 'ceo')
   approveCard(w.db, w.root, 'plan', 1, 'coo')
   expect(eventsOf(w.db, 1, 'signoff')).toEqual([
@@ -729,7 +761,7 @@ test('D3 signing a plan logs one signoff event with who signed', async () => {
 })
 
 test('a ready plan with no checkout stays listed, unsignable', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   putPlan(w.db, SECOND)
   const blind = batch(w.db, w.root).find((c) => c.id === 2)
   expect(blind).toMatchObject({ kind: 'plan', digest: '', marks: [{ name: 'bytes on the branch', ok: false }] })
@@ -740,7 +772,7 @@ test('a ready plan with no checkout stays listed, unsignable', async () => {
 })
 
 test('a signal starts the plan the map says it starts', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const bot = (score: number): SignalRow => signal(w.db, 'bot_review', 'greptile[bot]', score)
   expect(started(w.db, bot(5))).toBeNull()
   expect(started(w.db, bot(4))).toMatchObject({ template: 'pr_path', plan: 1, step: 4 })
@@ -756,7 +788,7 @@ test('a signal starts the plan the map says it starts', async () => {
 })
 
 test('an outside merge signal replayed files one ship-post plan', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const merge = signal(w.db, 'merge', 'maintainer', null)
   expect(started(w.db, merge)).toMatchObject({ template: 'comms' })
   expect(started(w.db, merge)).toBeNull()
@@ -764,8 +796,8 @@ test('an outside merge signal replayed files one ship-post plan', async () => {
   expect(ofKind(w.db, 'filed').map((e) => e.message)).toEqual(['acme/widget#7'])
 })
 
-test('a merge signal on an internal plan files nothing', () => {
-  const w = world()
+test('a merge signal on an internal plan files nothing', async () => {
+  const w = await FRESH()
   internalPlan(w.db, w.root, 2)
   const merge = record(w.db, { repo: 'acme/widget', pr: 7, kind: 'merge', author: 'maintainer', at: new Date().toISOString(),
     external_id: 'merge-7', score: null, plan: 2 })
@@ -774,7 +806,7 @@ test('a merge signal on an internal plan files nothing', () => {
 })
 
 test('answered bot score stops holding', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const build = (at: string): void => void runAt(w.db, 1, 2, 'typescript_specialist', at)
   build('2000-01-01 00:00:00')
   signal(w.db, 'bot_review', 'greptile[bot]', 1)
@@ -783,8 +815,8 @@ test('answered bot score stops holding', async () => {
   expect(unanswered(w.db, 1)).toBeUndefined()
 })
 
-test('D5 a fork score leaves unanswered; below 5 upstream holds', async () => {
-  const w = await pushed()
+test('a fork score leaves unanswered; below 5 upstream holds', async () => {
+  const w = await PUSHED()
   const bot = (repo: string, score: number): void => void record(w.db, {
     repo, pr: 7, kind: 'bot_review', author: 'greptile', at: new Date(Date.now() + 1000).toISOString(), external_id: repo, score, plan: 1,
   })
@@ -794,8 +826,8 @@ test('D5 a fork score leaves unanswered; below 5 upstream holds', async () => {
   expect(unanswered(w.db, 1)).toBeDefined()
 })
 
-test('D3 D4 a low upstream score holds only at its own head', async () => {
-  const w = await pushed()
+test('a low upstream score holds only at its own head', async () => {
+  const w = await PUSHED()
   const bot = (head: string | null): void => void record(w.db, {
     repo: 'acme/widget', pr: 7, kind: 'bot_review', author: 'greptile', at: new Date(Date.now() + 1000).toISOString(),
     external_id: String(head), score: 3, plan: 1, head,
@@ -809,7 +841,7 @@ test('D3 D4 a low upstream score holds only at its own head', async () => {
 })
 
 test('session close writes only proposals; approval makes a row', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const path = `${w.root}/session.md`
   writeFileSync(path, TRANSCRIPT)
   expect(settled(readFileSync(path, 'utf8')).map((s) => s.class)).toEqual(['ruling', 'work', 'ordering', 'world_fact', 'measurement'])
@@ -830,7 +862,7 @@ test('session close writes only proposals; approval makes a row', async () => {
 })
 
 test('a ruled item proposes nothing; pr body under twenty lines', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const path = `${w.root}/again.md`
   writeFileSync(path, 'RULING push.digest = approval_matches_branch_head_digest\n')
   expect(close(w.db, path, () => 42)).toEqual([])
@@ -844,10 +876,7 @@ test('a ruled item proposes nothing; pr body under twenty lines', async () => {
 const lap = (w: World) => tick(w.db, w.root, stub(CARRIED), new Date(), () => pr(), watched([], w.root, 1))
 
 test('a rewound lap needs a fresh card, not the first approval', async () => {
-  const w = await pushed()
-  rewind(w.db, 1, 4)
-  expect(plan(w.db, 1).head_digest).toBeNull()
-  for (let at = 0; at < 3; at += 1) await lap(w)
+  const w = await REROUND()
   expect(plan(w.db, 1).step).toBe(7)
   expect(deliverablesOf(w.db, 1).map((d) => d.state)).toEqual(['built', 'pushed', 'ready'])
   expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
@@ -864,7 +893,7 @@ test('a rewound lap needs a fresh card, not the first approval', async () => {
 })
 
 test('an approved item said again later changes nothing', async () => {
-  const w = await atBatch()
+  const w = await AT_BATCH()
   const first = `${w.root}/first.md`
   writeFileSync(first, 'WORK batch.card = show_the_change_and_the_marks\n')
   const made = close(w.db, first, () => 42)
@@ -877,7 +906,7 @@ test('an approved item said again later changes nothing', async () => {
 })
 
 test('review then merge on a later tick is still one escape', async () => {
-  const w = await pushed()
+  const w = await PUSHED()
   const review = { id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }
   capture(w.db, () => pr({ reviews: [review] }))
   expect(dispositionsOf(w.db)).toEqual([])
@@ -885,13 +914,6 @@ test('review then merge on a later tick is still one escape', async () => {
   expect(dispositionsOf(w.db).map(({ kind, defect_class, owner }) => ({ kind, defect_class, owner })))
     .toEqual([{ kind: 'escaped', defect_class: 'scope', owner: 'review' }])
 })
-
-async function pushed(): Promise<World> {
-  const w = await atBatch()
-  approveCard(w.db, w.root, 'plan', 1, 'ceo')
-  published(w, watched([], w.root, 1))
-  return w
-}
 
 function published(w: World, wire: Wire): Outcome {
   push(w.db, w.root, plan(w.db, 1), wire)

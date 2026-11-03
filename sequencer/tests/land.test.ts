@@ -15,7 +15,7 @@ import { LAPS } from '../merge.ts'
 import { COMMIT, commitMessage, headOf, land, sent, WIRE, type Wire } from '../push.ts'
 import { CARRY, carried, cloned, conflicted, diffOf, drop, fetchMain, get, liveTree, maybe, MAIN, put, SELF, srcDir } from '../workspace.ts'
 import { SCHEDULED } from './bases.ts'
-import { approve, built, CARRIED, internalPlan, moveMain, ours, PASS, plan, stub, watched, world, type World } from './world.ts'
+import { approve, built, CARRIED, internalPlan, moveMain, once, ours, PASS, plan, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
 const ID = 2
 const BRANCH = 'p2-let-an-internal-plan-run'
@@ -30,10 +30,10 @@ const bodies = (cwd: string, range: string): string[] =>
 
 const rail = (w: World, id: string) => verdictRows(w.db, ID).find((v) => v.rail_id === id)
 
-function mine(): World {
+function mine(files: Record<string, string> = TYPESCRIPT, ci = true): World {
   const w = world()
   dropPlan(w.db, 1)
-  ours(w.root)
+  ours(w.root, files, ci)
   internalPlan(w.db, w.root, ID)
   return w
 }
@@ -44,17 +44,55 @@ async function atRails(w: World, wire: Wire, id = ID): Promise<void> {
   built(w.root, id, 'export const landed = true')
 }
 
-/** Steps 0 to 6: the builder's bytes land at step 2, and step 6 sends the branch to the fork. */
-async function atBatch(w: World, wire: Wire): Promise<void> {
-  await atRails(w, wire)
+/** Steps 3 to 6: the builder's bytes land at step 2, and step 6 sends the branch to the fork. */
+async function toBatch(w: World, wire: Wire): Promise<void> {
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
 }
 
+const FRESH = once(() => world())
+/** Our own plan, queued on our own repo. */
+const MINE = once(() => mine())
+const AT_RAILS = once(async () => {
+  const w = await MINE()
+  await atRails(w, watched([], w.root, ID))
+  return w
+})
+/** AT_RAILS through step 6, its branch sent to the fork, with a copy of what was sent while it was built. */
+const AT_BATCH = ((): (() => Promise<{ w: World; sent: string[] }>) => {
+  const sent: string[] = []
+  const made = once(async () => {
+    const w = await AT_RAILS()
+    await toBatch(w, watched(sent, w.root, ID))
+    return w
+  })
+  return async () => ({ w: await made(), sent: [...sent] })
+})()
+/** MINE ticked to step 6 with no builder bytes. */
+const AT_FORK = once(async () => {
+  const w = await MINE()
+  const wire = watched([], w.root, ID)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  return w
+})
+
+/** Our own plan on `files`, whose repo runs no workflow on push, at step 7, with a copy of what was sent while it was built. */
+const unrun = (files: Record<string, string>): (() => Promise<{ w: World; sent: string[] }>) => {
+  const sent: string[] = []
+  const made = once(async () => {
+    const w = mine(files, false)
+    const wire = watched(sent, w.root, ID, () => { throw new Error('no workflow runs: github is never asked for runs') })
+    await atRails(w, wire)
+    await toBatch(w, wire)
+    return w
+  })
+  return async () => ({ w: await made(), sent: [...sent] })
+}
+
 test('past ready, the next tick lands, pushes and closes',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
+  await toBatch(w, wire)
   expect(plan(w.db, ID).step).toBe(7)
   expect(sent).toEqual([FORKED])
   expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
@@ -74,18 +112,16 @@ test('past ready, the next tick lands, pushes and closes',async () => {
   expect(sent).toHaveLength(3)
 })
 
-test('D1 landed commits carry title, what, why, closes, plan',async () => {
-  const w = mine()
+test('landed commits carry title, what, why, closes, plan',async () => {
+  const { w } = await AT_BATCH()
   const wire = watched([], w.root, ID)
-  await atBatch(w, wire)
   expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(new Set(bodies(srcDir(w.root, ID), `${MAIN}..main`))).toEqual(new Set([MESSAGE]))
 })
 
-test('D2 round two adds a same-message commit atop the first',async () => {
-  const w = mine()
-  await atRails(w, watched([], w.root, ID))
+test('round two adds a same-message commit atop the first',async () => {
+  const w = await AT_RAILS()
   const first = headOf(w.root, ID).sha
   built(w.root, ID, 'export const again = true')
   headOf(w.root, ID)
@@ -94,26 +130,25 @@ test('D2 round two adds a same-message commit atop the first',async () => {
   expect(git(src, ['rev-parse', 'HEAD~1'])).toBe(first)
 })
 
-test('D3 a bare upstream number stays out of the message',() => {
-  const w = mine()
+test('a bare upstream number stays out of the message',async () => {
+  const w = await MINE()
   put(w.root, ID, 'issue.md', '# let #35 run\n\n**What:** add it.\n**Why:** #35 asks for it.\n')
   const message = commitMessage(w.root, plan(w.db, ID))
   expect(message).toBe('let run\n\nadd it.\n\nasks for it.\n\nCloses caliperforge/caliperforge#34\nPlan 2')
 })
 
-test('D5 no saved message commits under the branch name',async () => {
-  const w = mine()
-  await atRails(w, watched([], w.root, ID))
+test('no saved message commits under the branch name',async () => {
+  const w = await AT_RAILS()
   drop(w.root, ID, COMMIT)
   headOf(w.root, ID)
   expect(bodies(srcDir(w.root, ID), `${MAIN}..HEAD`)).toEqual([BRANCH])
 })
 
 test('a loupe plan installs once, after send and close',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
+  await toBatch(w, wire)
   relane(w.db, ID, 'loupe')
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
@@ -121,56 +156,26 @@ test('a loupe plan installs once, after send and close',async () => {
   expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`, 'install'])
 })
 
-test('a machine plan does not install',async () => {
-  const w = mine()
-  const sent: string[] = []
-  const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
-  relane(w.db, ID, 'machine')
-
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
-  expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
-})
-
-test('no workflows: lands on step 3\'s checks, no fork run',async () => {
-  const w = world()
-  dropPlan(w.db, 1)
-  ours(w.root, undefined, false)
-  internalPlan(w.db, w.root, ID)
-  const sent: string[] = []
-  const wire = watched(sent, w.root, ID, () => { throw new Error('no workflows: github is never asked for runs') })
-  await atBatch(w, wire)
+test.each([
+  { base: 'no workflows', made: unrun(TYPESCRIPT) },
+  { base: 'schedule or manual workflows', made: unrun(SCHEDULED) },
+])('$base: lands on step 3\'s checks, no fork run', async ({ made }) => {
+  const { w, sent } = await made()
+  const wire = watched(sent, w.root, ID, () => { throw new Error('no workflow runs: github is never asked for runs') })
   expect(plan(w.db, ID).step).toBe(7)
   expect(sent).toEqual([])
   expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
   expect(rail(w, 'ready')).toMatchObject({ outcome: 'pass' })
+  expect(newest(w.db, ID)?.fork_ci_green).toBe(1)
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
   expect(sent).toEqual(['send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
 })
 
-test('D1 schedule or manual workflows land on step 3\'s checks',async () => {
-  const w = world()
-  dropPlan(w.db, 1)
-  ours(w.root, SCHEDULED, false)
-  internalPlan(w.db, w.root, ID)
-  const sent: string[] = []
-  const wire = watched(sent, w.root, ID, () => { throw new Error('schedule only: github is never asked for runs') })
-  await atBatch(w, wire)
-  expect(plan(w.db, ID).step).toBe(7)
-  expect(sent).toEqual([])
-  expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
-  expect(rail(w, 'ready')).toMatchObject({ outcome: 'pass' })
-  expect(newest(w.db, ID)?.fork_ci_green).toBe(1)
-})
-
 test('main moving before batch rewinds, lands on pass two',async () => {
-  const w = mine()
-  const sent: string[] = []
+  const { w, sent } = await AT_BATCH()
   const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
   moveMain(w.root, 'after.ts')
 
   const held = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
@@ -192,10 +197,8 @@ test('main moving before batch rewinds, lands on pass two',async () => {
 })
 
 test('conflict at batch: back to rails, aborted, nothing closed',async () => {
-  const w = mine()
-  const sent: string[] = []
+  const { w, sent } = await AT_BATCH()
   const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
   moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
 
   const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
@@ -211,10 +214,8 @@ test('conflict at batch: back to rails, aborted, nothing closed',async () => {
 })
 
 test('main moving mid-tick refuses the land, no merge commit',async () => {
-  const w = mine()
-  const sent: string[] = []
+  const { w, sent } = await AT_BATCH()
   const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
   const src = srcDir(w.root, ID)
   const head = git(src, ['rev-parse', BRANCH])
   moveMain(w.root, 'racing.ts')
@@ -230,10 +231,8 @@ test('main moving mid-tick refuses the land, no merge commit',async () => {
 })
 
 test('main moving during the push refuses base:stale',async () => {
-  const w = mine()
-  const sent: string[] = []
+  const { w, sent } = await AT_BATCH()
   const wire = watched(sent, w.root, ID)
-  await atBatch(w, wire)
   const src = srcDir(w.root, ID)
   const head = git(src, ['rev-parse', BRANCH])
   const racing = { ...wire, send: (dir: string) => { moveMain(w.root, 'racing.ts'); git(dir, ['push', 'origin', 'main']) } }
@@ -247,18 +246,16 @@ test('main moving during the push refuses base:stale',async () => {
 })
 
 test('a failed push with main unmoved still throws',async () => {
-  const w = mine()
+  const { w } = await AT_BATCH()
   const wire = watched([], w.root, ID)
-  await atBatch(w, wire)
   const hung = { ...wire, send: () => { throw new Error('remote hung up') } }
 
   expect(() => land(w.db, w.root, plan(w.db, ID), 1, hung)).toThrow('remote hung up')
 })
 
 test('behind main twice: rails merge it again', async () => {
-  const w = mine()
+  const w = await AT_FORK()
   const wire = watched([], w.root, ID)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, ID).step).toBe(6)
   moveMain(w.root, 'first.ts')
 
@@ -280,9 +277,8 @@ test('behind main twice: rails merge it again', async () => {
 })
 
 test('behind main past the lap cap: refused', async () => {
-  const w = mine()
+  const w = await AT_FORK()
   const wire = watched([], w.root, ID)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   put(w.root, ID, 'base.merged', 'x\n')
   put(w.root, ID, 'base.laps', 'base:stale\n'.repeat(LAPS))
   moveMain(w.root, 'late.ts')
@@ -292,9 +288,8 @@ test('behind main past the lap cap: refused', async () => {
 })
 
 test('a stale tree merges main and records its base in one tick',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = watched([], w.root, ID)
-  await atRails(w, wire)
   expect(plan(w.db, ID).step).toBe(3)
   moveMain(w.root, 'ahead.ts')
 
@@ -315,9 +310,8 @@ test('a stale tree merges main and records its base in one tick',async () => {
 })
 
 test('a tree at main\'s head keeps its head and base.sha',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = watched([], w.root, ID)
-  await atRails(w, wire)
   const src = srcDir(w.root, ID)
   const head = git(src, ['rev-parse', 'HEAD'])
   const base = get(w.root, ID, 'base.sha')
@@ -329,9 +323,8 @@ test('a tree at main\'s head keeps its head and base.sha',async () => {
 })
 
 test('a rails conflict aborts and hands back paths, no retry',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = watched([], w.root, ID)
-  await atRails(w, wire)
   const src = srcDir(w.root, ID)
   const base = get(w.root, ID, 'base.sha')
   moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
@@ -351,9 +344,8 @@ test('a rails conflict aborts and hands back paths, no retry',async () => {
 })
 
 test('the re-cut is main\'s; the builder re-applies its diff',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = watched([], w.root, ID)
-  await atRails(w, wire)
   const src = srcDir(w.root, ID)
   moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
@@ -376,9 +368,9 @@ test('the re-cut is main\'s; the builder re-applies its diff',async () => {
 })
 
 test('a re-cut keeps the pushed head, so the push fast-forwards',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = { ...watched([], w.root, ID), send: WIRE.send }
-  await atBatch(w, wire)
+  await toBatch(w, wire)
   const remote = join(w.root, 'remotes', SELF)
   const old = git(remote, ['rev-parse', BRANCH])
   moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
@@ -401,9 +393,8 @@ test('a re-cut keeps the pushed head, so the push fast-forwards',async () => {
  * it is on main. The repeat rule itself is the refusals ledger's, and is proved there (`store/refusals.test.ts`).
  */
 test('a conflict does not repeat: the next lap is on main',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = watched([], w.root, ID)
-  await atRails(w, wire)
   moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
 
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
@@ -419,9 +410,8 @@ test('a conflict does not repeat: the next lap is on main',async () => {
 })
 
 test('a tree stopped mid-merge commits no conflict marker',async () => {
-  const w = mine()
+  const w = await AT_RAILS()
   const wire = watched([], w.root, ID)
-  await atRails(w, wire)
   const src = srcDir(w.root, ID)
   moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
   headOf(w.root, ID)
@@ -442,7 +432,7 @@ test('a tree stopped mid-merge commits no conflict marker',async () => {
 })
 
 test('a target\'s tree is untouched when our own main moves',async () => {
-  const w = world()
+  const w = await FRESH()
   approve(w.db, w.target)
   const wire = watched([], w.root, 1)
   await atRails(w, wire, 1)

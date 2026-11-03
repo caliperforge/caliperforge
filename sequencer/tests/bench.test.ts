@@ -21,7 +21,7 @@ import { counted, powered } from '../../templates/powered.ts'
 import { KINDS } from '../../templates/report.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { evict } from '../evict.ts'
-import { unhold } from '../hold.ts'
+import { hold, unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
 import { kernel, mapOf } from '../steps.ts'
@@ -1659,4 +1659,62 @@ test('score D5 a comms plan still reaches the comms scorer', () => {
   const db = fresh(schema)
   queued(db, 'comms', mapOf('comms').steps.length - 1)
   expect(kernel(db, mkdtempSync(join(tmpdir(), 'cf-bench-')), planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'not a scorecard plan' })
+})
+
+const LEAN_HANDOFFS = 'test/fizz/fizz_data/handoff'
+const listed = (...names: string[]) => names.map((name) => `\n## ${name}\n\n- none\n`).join('')
+const LEAN_READS = '\n## Reads\n\n- x-ray/x-ray.md, Vault.deposit and Vault.redeem — the entry points to call\n'
+const LEAN_FACTS = `${LEAN_READS}${listed('Signatures', 'Guards', 'Roles', 'Limits')}`
+const LEAN: Record<string, string> = {
+  context: `phase: context\nnext: scaffold\nmode: automatic\nagent_model: opus\n${LEAN_FACTS}${listed('Conversion points', 'Aggregates', 'Not tracked')}`,
+  scaffold: `phase: scaffold\nnext: coverage\n${LEAN_FACTS}\n## Stand-ins\n\n- MockStrategy | limits: max interest 1e15 per call, only vault mints\n`,
+  coverage: `phase: coverage\nnext: invariants\nfuzz_build_cmd: forge build\n${LEAN_FACTS}`,
+  invariants: `phase: invariants\nnext: campaigns\n${LEAN_FACTS}\n## Converted values\n\n- property_redeemConserves | tolerance: 2 wei × 3\n`,
+}
+const CRITIC = "## Share-Converted Comparisons\n\n```sh\ngrep -rn 'assertEq(.*convertToAssets' {SUITE_DIR}\n```\n\n## Unbounded Stand-ins\n\n```sh\ngrep -rln 'contract Mock' {SUITE_DIR}\n```\n"
+const leanPhase = (packet: Packet) => /^# Fizz lean: (\w+)/m.exec(packet.prompt)?.[1] ?? ''
+
+/** `stub`'s generator writing each lean phase's handoff, and Properties.sol at invariants. */
+function lean(): ReturnType<typeof stub> {
+  const fired = stub(1000, 'completed', false)
+  return { ...fired, provider: { ...fired.provider, fire: (packet) => {
+    const phase = leanPhase(packet)
+    mkdirSync(join(packet.cwd, LEAN_HANDOFFS), { recursive: true })
+    writeFileSync(join(packet.cwd, LEAN_HANDOFFS, `${phase}.md`), LEAN[phase] ?? '')
+    if (phase === 'invariants') writeFileSync(join(packet.cwd, 'test/fizz/Properties.sol'), BODY)
+    return fired.provider.fire(packet)
+  } } }
+}
+
+/** A clone with Vault.sol at its root, so the context check skips forge. */
+function bare(root: string): void {
+  const dir = srcDir(root, 1)
+  git(dir, ['init', '-q'])
+  put(root, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(dir, 'Vault.sol', 'contract Vault {}\n', 'vault') }))
+}
+
+test('2084 D1 D2 a stop waits for a ceo or coo return', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'cf-fizz-home-'))
+  mkdirSync(join(home, '.claude/skills/fizz/references'), { recursive: true })
+  writeFileSync(join(home, '.claude/skills/fizz/references/critic-pass.md'), CRITIC)
+  vi.stubEnv('HOME', home)
+  try {
+    const { root, db, outcome } = await generated(lean(), { generator: 'fizz_lean', stop_after: 'context' }, bare)
+    expect(outcome).toMatchObject({ held: true, note: 'stopped after context for a look' })
+    putPlan(db, { id: 2, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'queued', queued_at: AT, step: 0, retries: 0 })
+    hold(db, root, 1, 'waits on plan 2', OPENS, 2)
+    unhold(db, root, 1, 'fixer')
+    const parked = lean()
+    expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), parked.provider))
+      .toEqual({ outcome: 'pass', held: true, spans: ['bench.stop_after'], note: 'still stopped for a look: cf unpark --by ceo or coo resumes it' })
+    expect(parked.packets).toEqual([])
+    expect(planById(db, 1).state).toBe('blocked_on_ceo')
+    expect(existsSync(join(planDir(root, 1), 'src.stopped'))).toBe(true)
+    unhold(db, root, 1, 'ceo')
+    const rest = lean()
+    expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), rest.provider)).toMatchObject({ outcome: 'pass' })
+    expect(rest.packets.map(leanPhase)).toEqual(['scaffold', 'coverage', 'invariants'])
+  } finally {
+    vi.unstubAllEnvs()
+  }
 })

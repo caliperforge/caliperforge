@@ -24,6 +24,7 @@ import { buildError, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { report } from './report.ts'
 import { placed, recloned, rooted, scrapped } from './rooted.ts'
+import { unstopped } from './stopped.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
@@ -117,11 +118,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const name = staffed(root, 'bench', step.step, generator)?.seat
   if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
   const src = join(planDir(root, plan.id), 'src')
-  const aside = `${src}.stopped`
-  if (existsSync(aside)) {
-    rmSync(src, { recursive: true, force: true })
-    renameSync(aside, src)
-  }
+  const stopped = unstopped(db, plan, src)
+  if (stopped !== null) return stopped
   const dir = real(scrapped(root, plan.id, step.step))
   const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
@@ -139,8 +137,9 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue, stop)
     : await firing(bench, manifest, hash)(prompt, issue, START)
   if ('outcome' in sum && sum.held === true) {
-    renameSync(src, aside)
+    renameSync(src, `${src}.stopped`)
     needsCeo(db, plan, sum.note)
+    logged(db, { plan: plan.id, kind: 'stop_after', actor: 'generate', outcome: 'needs_ceo', message: sum.note, pointer: null, run: null })
   }
   if ('outcome' in sum) return sum
   const { tokens, seconds, transcripts, wall } = sum

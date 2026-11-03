@@ -189,6 +189,16 @@ test('D4: stop_after context parks, unhold fires the rest', async () => {
   expect(existsSync(join(planDir(tree, 1), 'src.stopped'))).toBe(false)
 })
 
+test('D3: a resume whose handoff no longer passes fires nothing', async () => {
+  const { tree, db } = await generated('fizz_lean', 1000, FILLED, {}, '\nstop_after: context')
+  writeFileSync(join(planDir(tree, 1), 'src.stopped', HANDOFFS, 'context.md'), (FILLED.context ?? '').replace(`## Reads\n\n${READ}\n`, ''))
+  unhold(db, tree, 1, 'ceo')
+  const rest = stub(1000, FILLED, {})
+  expect(await generate(db, tree, planById(db, 1), mapOf('bench').at(1), rest.provider))
+    .toMatchObject({ outcome: 'refuse', note: expect.stringMatching(/^context handoff refused on resume: /) as string })
+  expect(rest.packets).toEqual([])
+})
+
 test('D6: a drifted fizz_lean_generator prompt is refused', () => {
   const tree = copied()
   appendFileSync(join(tree, 'seats/fizz_lean_generator/prompt.md'), '\n')

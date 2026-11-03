@@ -75,7 +75,7 @@ interface Phase { phase: string; skill: string; root: string; path: string; prom
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
-function facts({ phase, root, path, map }: Phase): Refused[] {
+function facts({ phase, root, path, map }: Pick<Phase, 'phase' | 'root' | 'path' | 'map'>): Refused[] {
   const at = join(dirname(path), MAP)
   if (map !== undefined) return layered(phase, map, read(at))
   if (phase !== 'context' || !existsSync(join(root, 'src'))) return []
@@ -208,6 +208,14 @@ async function invariant(bench: Bench, manifest: Seat, hash: string, skill: stri
   return again
 }
 
+function rechecked(skill: string, root: string, handoffs: string, phase: string): Outcome | null {
+  const path = join(handoffs, `${phase}.md`)
+  const map = phase !== 'context' && existsSync(join(handoffs, EXCERPTS)) ? { map: read(join(handoffs, MAP)) } : {}
+  const refused = [...handoff(skill, phase, read(path)), ...facts({ phase, root, path, ...map })]
+  if (refused.length === 0) return null
+  return { outcome: 'refuse', spans: [...new Set(refused.map((r) => r.rule))], note: `${phase} handoff refused on resume: ${refused.map((r) => r.note).join('; ')}` }
+}
+
 export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
@@ -218,6 +226,8 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
   const stopped = join(handoffs, 'stopped.json')
   const [map, cut] = [join(handoffs, MAP), join(handoffs, EXCERPTS)]
   const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum; smoked: string } : null
+  const refused = resumed === null ? null : rechecked(skill, root, handoffs, resumed.phase)
+  if (refused !== null) return refused
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
   let [sum, smoked] = [resumed?.sum ?? START, resumed?.smoked ?? '']
   for (const [at, phase] of phases.entries()) {

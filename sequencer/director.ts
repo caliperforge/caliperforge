@@ -55,11 +55,15 @@ const Said = z.object({
   .refine((m) => m.move !== 'ask_ceo' || m.class !== undefined, { path: ['class'] })
   .refine((m) => m.move !== 'park' || m.until !== undefined, { path: ['until'] })
 
-const CAPPED = ['rule', 'waive', 'split', 'park']
 const DESIGN = /^step 4 review refused by \S+\n\ndesign[: ]/
 const QUOTA = /^Greptile was asked .* is the COO's call$/
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
+
+interface Only { moves: Move['move'][]; why: string; choose: string }
+
+const CAPPED: Only = { moves: ['rule', 'waive', 'split', 'park'], why: 'the plan stopped at its build cap', choose: '. Choose rule, waive, split or park.' }
+const FULL: Only = { moves: ['widen', 'park', 'file'], why: 'the job waits on a full pipe', choose: ', it is not stopped. Choose widen, park or file.' }
 
 interface Told { outcome: 'pass' | 'needs_coo'; message: string; note?: string; pointer?: string | null }
 
@@ -76,15 +80,15 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (filed !== null) return told(db, root, plan, now, { outcome: 'pass', message: `file: ${filed.why}`, pointer: filed.url })
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
-  const cap = capStop(db, plan.id)
+  const only = plan.state !== 'blocked_on_ceo' && plan.state !== 'halted' ? FULL : capStop(db, plan.id) ? CAPPED : null
   const bar = barred(db, root, plan.id)
-  const first = refused(m, said, n, root, plan.id, cap, bar)
+  const first = refused(m, said, n, root, plan.id, only, bar)
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
-    const again = refused(m, said, n, root, plan.id, cap, bar)
-    if (again !== null) return m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
+    const again = refused(m, said, n, root, plan.id, only, bar)
+    if (again !== null) return only !== FULL && m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
-      : cap ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
+      : only !== null ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
         : handUp(db, root, plan, { outcome: 'needs_coo', message: again.message }, said, provider, now, post, wire)
   }
   if (m === null) return handUp(db, root, plan, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, said, provider, now, post, wire)
@@ -126,11 +130,10 @@ function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): stri
   return told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: ${why}` }, post)
 }
 
-function refused(m: Move | null, said: string, n: number, root: string, plan: number, cap: boolean,
+function refused(m: Move | null, said: string, n: number, root: string, plan: number, only: Only | null,
   bar: string | null): { fence: string; message: string } | null {
-  if (cap && m !== null && !CAPPED.includes(m.move)) {
-    return { fence: `${m.move} is refused: the plan stopped at its build cap. Choose rule, waive, split or park.`,
-      message: `${m.move}: refused by the fence, the plan stopped at its build cap` }
+  if (only !== null && m !== null && !only.moves.includes(m.move)) {
+    return { fence: `${m.move} is refused: ${only.why}${only.choose}`, message: `${m.move}: refused by the fence, ${only.why}` }
   }
   if (m?.move === 'return' && bar !== null) {
     return { fence: `return is refused: ${bar}. Choose file, park or split.`, message: `return: refused by the fence, ${bar}` }
@@ -311,10 +314,6 @@ function waiving(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>): 
 }
 
 function parked(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>, now: Date): boolean {
-  if (plan.wait_reason === 'over_cap') {
-    if (plan.state === 'blocked_on_ceo' || plan.state === 'halted') afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
-    return true
-  }
   const on = /\bplan (\d+)\b/.exec(m.why)?.[1]
   if (on !== undefined && waitable(db, Number(on), plan.id)) hold(db, root, plan.id, m.why, now, Number(on), null)
   else hold(db, root, plan.id, m.why, now, null, new Date(m.until ?? ''))

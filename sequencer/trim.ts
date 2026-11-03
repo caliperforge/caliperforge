@@ -1,8 +1,9 @@
 import { CEILING, ROW, section, shape, type Refused } from './brief.ts'
+import { counted } from './verbatim.ts'
 
-/** The line count of a brief whose one fault is its length; null when it is short enough or wrong some other way. */
+/** The {@link counted} lines of a brief whose one fault is its length; null when it is short enough or wrong some other way. */
 export function overlong(brief: string, ask: string, src: string, outside: boolean): number | null {
-  const lines = brief.trimEnd().split('\n').length
+  const lines = counted(brief, ask)
   return lines > CEILING && shape(brief, ask, src, outside, Infinity) === null ? lines : null
 }
 

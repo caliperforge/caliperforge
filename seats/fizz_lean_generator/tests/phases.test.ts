@@ -316,7 +316,7 @@ test("a broken build is the scaffold fix turn's hit", async () => {
   expect(fires[2]?.issue).toContain('suite found:\n- scaffold: forge build --ast failed: boom')
 })
 
-const UNMET: Item ={ key: 'Guards V.deposit', met: false, cells: ['passing: no', 'reverting: yes'], note: 'Guards V.deposit: passing never seen', reverts: [] }
+const UNMET: Item = { key: 'Guards V.deposit', met: false, cells: ['passing: no', 'reverting: yes'], note: 'Guards V.deposit: passing never seen', reverts: [] }
 const UNREACHABLE = (reason: string): string => `\n## Unreachable\n\n- Guards V.deposit | reason: ${reason}\n`
 const LEAN = ['context', 'scaffold', 'coverage']
 

@@ -429,13 +429,13 @@ const planFile = (root: string, name: string): string => readFileSync(join(root,
 
 const PAIR = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n`
 
-test('a rebuild hands the builder the refused hand-back\'s rows', async () => {
+test('a hand-back repair gets the refused hand-back\'s rows', async () => {
   const w = await REFUSED_ONCE()
   expect(UNPOINTED_SENT).toEqual([])
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   expect(planFile(w.root, 'step-2.handback.prev.md')).toBe(UNPOINTED)
-  expect(packets.find((p) => p.tools.includes('Write'))?.prompt)
+  expect(packets.find((p) => p.tools.length === 0 && p.prompt.includes('# Hand-back repair'))?.prompt)
     .toContain('done:\n  - id: D1\n    status: done\n    pointer:')
 })
 

@@ -12,6 +12,7 @@ import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type 
 import { refusalRows } from '../store/refusals.ts'
 import { generated, lastTranscript } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
+import { dried } from '../templates/dry.ts'
 import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
 import type { Cli } from './cf-lanes.ts'
@@ -150,4 +151,8 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
     .action((plan: string) => { out(profile(db(), root, Number(plan))) })
   bench.command('tokens').argument('<plan>')
     .action((plan: string) => { out(tokens(db(), root, Number(plan), join(homedir(), '.claude/projects'))) })
+  bench.command('dry').argument('<plan>').option('--suite <plan>', 'a done bench plan whose suite replaces test/fizz')
+    .action((plan: string, options: { suite?: string }) => {
+      out(dried(db(), root, Number(plan), join(homedir(), '.claude/skills/fizz'), options.suite === undefined ? undefined : Number(options.suite)))
+    })
 }

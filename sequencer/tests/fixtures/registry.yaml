@@ -541,3 +541,7 @@
   where: "kind = 'park' AND plan IN (SELECT id FROM plans WHERE state = 'blocked_on_ceo' AND held_why LIKE 'waits on plan %''s files' AND waits_on IS NULL)"
   gap: 7d
   expected: 0
+- name: bench_dry
+  table: events
+  column: at
+  where: "kind = 'bench.dry'"

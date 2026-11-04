@@ -62,12 +62,38 @@ it('setUntested sets the one plan row', () => {
   expect(scores(d).map((s) => s.untested)).toEqual([4, null])
 })
 
-it('D1 D4 migrates once to 136 with one bench_scorecard table', () => {
+it('D1 D4 migrates once to 137 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0136_openings_mismatch.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0137_bench_phase_missed.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(136)
+  expect(d.pragma('user_version', { simple: true })).toBe(137)
+})
+
+it('accepts the three phase misses, refuses short', () => {
+  const d = db()
+  const misses = ['context_missed', 'scaffold_missed', 'coverage_missed'] as const
+  for (const why of misses) record(d, { plan: planRow(d), ...fizz, not_powered: why })
+  expect(scores(d).map((s) => s.not_powered)).toEqual(misses)
+  expect(() => record(d, { plan: planRow(d), ...fizz, not_powered: 'short' as 'wall' })).toThrow(/CHECK/)
+})
+
+it('0137 keeps every 0136 row, live or superseded', () => {
+  const d = before('0137')
+  const [one, two] = [planRow(d), planRow(d)]
+  const reasons = [null, 'wall', 'reduced_generate', 'few_properties', 'pre_fix_calls', 'fix_calls', 'compile_failed']
+  const old: Score[] = reasons.map((why) => ({ plan: one, ...fizz, not_powered: why as Score['not_powered'] }))
+  for (const score of old) {
+    record(d, score)
+    supersede(d, one)
+  }
+  const live: Score = { plan: two, ...fizz, not_powered: 'compile_failed' }
+  record(d, live)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0137_bench_phase_missed.sql'])
+  expect(scores(d)).toEqual([...old, live])
+  expect(underpowered(d)).toEqual([live])
+  expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
+  expect(supersede(d, two)).toBe(old.length + 1)
 })
 
 it('1645b D4 accepts compile_failed, refuses short', () => {
@@ -89,7 +115,7 @@ it('1645b D5 0120 keeps every 0119 row, live or superseded', () => {
   }
   const live: Score = { plan: two, ...fizz, not_powered: 'few_properties' }
   record(d, live)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql'])
   expect(scores(d)).toEqual([...old, live])
   expect(underpowered(d)).toEqual([live])
   expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
@@ -113,7 +139,7 @@ it('D5 0119 keeps every 0118 row, live or superseded', () => {
   }
   const live: Score = { plan: two, ...fizz, not_powered: 'fix_calls' }
   record(d, live)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql'])
   expect(scores(d)).toEqual([...old, live])
   expect(underpowered(d)).toEqual([live])
   expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
@@ -125,7 +151,7 @@ it('D2 0118 reads an 0117 row by its calls a side', () => {
   const insert = d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray,
     pre_fix_calls, fix_calls) VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1, ?, ?)`)
   for (const [pre, fix] of [[69467, 69467], [505660, 505660], [505660, 1000]]) insert.run(planRow(d), pre, fix)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql'])
   expect(scores(d).map((s) => s.not_powered)).toEqual(['pre_fix_calls', null, 'fix_calls'])
 })
 
@@ -135,7 +161,7 @@ it('D1 0117 reads an 0116 row as NULL calls, refuses -1', () => {
   d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1)`).run(plan)
   expect(migrate(d, join(root, 'schema'))).toEqual(['0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql',
-    '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql'])
+    '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql'])
   expect(scores(d)).toMatchObject([{ plan, pre_fix_calls: null, fix_calls: null }])
   for (const bad of [{ pre_fix_calls: -1 }, { fix_calls: -1 }]) {
     expect(() => record(d, { plan: planRow(d), ...fizz, ...bad })).toThrow(/CHECK/)

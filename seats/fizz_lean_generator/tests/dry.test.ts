@@ -37,11 +37,13 @@ const SRC = {
 const PASS = "## Share-Converted Comparisons\n\n```sh\ngrep -rn 'assertEq(.*convertToAssets' {SUITE_DIR}\n```\n\n## Unbounded Stand-ins\n\n```sh\ngrep -rl 'contract Mock' {SUITE_DIR}\n```\n"
 const NEEDS = (path: string): string => `cannot run: needs ${path}`
 const ROWS = [
-  ['context', 'handoff', 'pass'], ['context', 'ast', 'pass'], ['context', 'map', NEEDS(`${META}/entry-point-selection.json`)],
+  ['context', 'handoff', 'pass'], ['context', 'ast', 'pass'], ['context', 'grade', 'cannot run: target.yml has no fix'],
+  ['context', 'map', NEEDS(`${META}/entry-point-selection.json`)],
   ['scaffold', 'handoff', 'pass'], ['scaffold', 'ast', 'pass'], ['scaffold', 'layer', 'cannot run: needs the map as the phase found it'],
-  ['scaffold', 'suite', 'pass'], ['scaffold', 'smoke', 'pass'], ['scaffold', 'critic.stand_in', 'pass'],
+  ['scaffold', 'suite', 'pass'], ['scaffold', 'grade', NEEDS('test/fizz/handlers')], ['scaffold', 'smoke', 'pass'], ['scaffold', 'critic.stand_in', 'pass'],
   ['coverage', 'handoff', NEEDS(`${META}/handoff/coverage.md`)], ['coverage', 'probe readings', NEEDS(`${META}/corpus_medusa/call_sequences`)],
   ['coverage', 'reach', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)], ['coverage', 'boundary', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)],
+  ['coverage', 'grade', NEEDS(`${META}/handoff/coverage.md`)],
   ['invariants', 'handoff', NEEDS(`${META}/handoff/invariants.md`)], ['invariants', 'plan', NEEDS(`${META}/handoff/plan.md`)],
   ['invariants', 'duplicate', NEEDS(`${META}/reports/invariants-global-property-implementer.md`)], ['invariants', 'critic.share_converted', 'pass'],
   ['end', 'count', 'pass'],

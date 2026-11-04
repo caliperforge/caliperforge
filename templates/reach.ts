@@ -39,7 +39,7 @@ function span(row: Row | undefined, name: string): [string, number, number] {
   return [file, Number(start), Number(end)]
 }
 
-const covered = (lcov: string) => (file: string): Map<number, number> => {
+export const covered = (lcov: string) => (file: string): Map<number, number> => {
   const hits = new Map<number, number>()
   for (const lines of lcov.split('end_of_record').map((r) => r.split('\n').map((l) => l.trim()))) {
     if (!lines.some((l) => l.startsWith('SF:') && l.endsWith(`/${file}`))) continue

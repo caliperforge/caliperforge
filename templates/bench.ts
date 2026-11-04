@@ -56,7 +56,7 @@ function ask(skill: string | undefined, xray: string | undefined, tmp: string): 
   return xray === undefined ? skilled : `${skilled}\nx-ray is installed at ${xray}: at Attempt 2, skip the git clone and run ${xray}/SKILL.md inline against PROJECT_ROOT. Run x-ray's scripts as bash <script> and python3 <script> from PROJECT_ROOT, with no pipe, redirection or $.`
 }
 
-function fields(text: string): Record<string, string | undefined> {
+export function fields(text: string): Record<string, string | undefined> {
   return Object.fromEntries(text.split('\n')
     .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
 }

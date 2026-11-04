@@ -9,6 +9,7 @@ import type { Db } from '../store/index.ts'
 import { unproven } from './bench.ts'
 import { critic } from './critic.ts'
 import { compiled, extract } from './extract.ts'
+import { fixed, graded, type Phase, type Touched } from './graded.ts'
 import { handoff, ranged, type Refused } from './handoff.ts'
 import { drawn, suited } from './map.ts'
 import { duplicated, planned } from './plan.ts'
@@ -26,21 +27,30 @@ const ENTRY = 'Selected entry points '
 
 type Row = [phase: string, check: string, result: () => string]
 
-interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string }
+interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string; fix: () => Touched | string }
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
-const checked = ({ db, plan, dir }: Copy, needs: string[], run: () => Refused[]) => (): string => {
+const guarded = ({ db, plan, dir }: Copy, needs: string[], run: () => string) => (): string => {
   const missing = needs.find((path) => !existsSync(path))
   if (missing !== undefined) return `cannot run: needs ${relative(dir, missing)}`
   try {
-    const refused = run()
-    return refused.length === 0 ? 'pass' : `refuse ${[...new Set(refused.map((r) => r.rule))].join(', ')} | ${[...new Set(refused.map((r) => r.note))].join('; ')}`
+    return run()
   } catch (error) {
     logged(db, { plan, kind: 'swallowed', actor: 'bench', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return `refuse throw | ${firstLine(error)}`
   }
 }
+
+const checked = (at: Copy, needs: string[], run: () => Refused[]): (() => string) => guarded(at, needs, () => {
+  const refused = run()
+  return refused.length === 0 ? 'pass' : `refuse ${[...new Set(refused.map((r) => r.rule))].join(', ')} | ${[...new Set(refused.map((r) => r.note))].join('; ')}`
+})
+
+const grade = (at: Copy, phase: string, kind: Phase, needs: string[]): Row => [phase, 'grade', guarded(at, needs, () => {
+  const t = at.fix()
+  return typeof t === 'string' ? t : graded(kind, at.dir, t)
+})]
 
 const handed = (at: Copy, phase: string): Row => {
   const path = join(at.handoffs, `${phase}.md`)
@@ -50,7 +60,7 @@ const handed = (at: Copy, phase: string): Row => {
 function context(at: Copy): Row[] {
   const { dir, handoffs, map } = at
   const selection = join(handoffs, '../entry-point-selection.json')
-  return [handed(at, 'context'), ['context', 'ast', checked(at, [], () => compiled(dir))], ['context', 'map', checked(at, [selection], () => {
+  return [handed(at, 'context'), ['context', 'ast', checked(at, [], () => compiled(dir))], grade(at, 'context', 'context', []), ['context', 'map', checked(at, [selection], () => {
     const extracted = extract(dir)
     const text = drawn(extracted, readFileSync(selection, 'utf8'), read(map))
     writeFileSync(map, text)
@@ -67,6 +77,7 @@ function scaffold(at: Copy): Row[] {
       writeFileSync(map, suited(found, read(map)))
       return [...harnessed(found, read(map)), ...probed(found, read(map))]
     })],
+    grade(at, 'scaffold', 'suite', [join(dir, 'test/fizz/handlers'), join(dir, 'test/fizz/Properties.sol')]),
     ['scaffold', 'smoke', checked(at, [], () => unrun(read(map), smoke(dir, fizz, META, read(map))))],
     ['scaffold', 'critic.stand_in', checked(at, [], () => critic(join(fizz, 'references/critic-pass.md'), dir, 'critic.stand_in'))]]
 }
@@ -83,7 +94,8 @@ function coverage(at: Copy): Row[] {
       writeFileSync(map, written(read(map), reached()))
       return unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))
     })],
-    ['coverage', 'boundary', checked(at, [lcov, report, sequences], () => met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note })))]]
+    ['coverage', 'boundary', checked(at, [lcov, report, sequences], () => met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note })))],
+    grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), lcov])]
 }
 
 function invariants(at: Copy): Row[] {
@@ -124,7 +136,8 @@ export function dried(db: Db, root: string, plan: number, fizz: string, scored?:
     cpSync(src, dir, { recursive: true })
     if (suites !== null) laid(src, dir, suites)
     const handoffs = join(dir, META, 'handoff')
-    const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md') }
+    let t: Touched | string | undefined
+    const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), fix: () => t ??= fixed(root, plan, dir) }
     const table = [...context(at), ...scaffold(at), ...coverage(at), ...invariants(at), ['end', 'count', checked(at, [], () => counted(dir))] satisfies Row]
       .map(([phase, check, result]) => [phase, check, result()] as const)
     const heading = scored === undefined ? `plan ${String(plan)}` : `plan ${String(plan)} with plan ${String(scored)}'s suite`

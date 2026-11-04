@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProbeReadings } from './reach.ts'
 import { type Suite, suite } from './suite.ts'
@@ -17,6 +17,8 @@ const TRACKED = /^t_(?:uint\d+|bool)$/
 const LOGGED = /^\s*(\w+\.\w+)= (\d+|true|false)$/gm
 const TAIL = 2000
 const WALL = 10 * 60 * 1000
+const CAP = 50
+const REPLAYED = /^replayed: .*$/m
 
 const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1)
 
@@ -97,11 +99,29 @@ ${reads}    }
 }
 `
 
+const handler = (sequence: Sequence): string => sequence.at(-1)?.call.data.slice(0, 10) ?? ''
+
+function kept(sequences: Sequence[]): Sequence[] {
+  const sorted = [...sequences].sort((a, b) => a.length - b.length)
+  const firsts = new Map<string, Sequence>()
+  for (const s of sorted) if (!firsts.has(handler(s))) firsts.set(handler(s), s)
+  const first = new Set(firsts.values())
+  return [...first, ...sorted.filter((s) => !first.has(s))].slice(0, CAP)
+}
+
+function handed(corpus: string, count: number, total: number): void {
+  const file = join(corpus, '../handoff/coverage.md')
+  if (!existsSync(file)) return
+  const [was, line] = [readFileSync(file, 'utf8'), `replayed: ${String(count)} kept, ${String(total - count)} dropped`]
+  writeFileSync(file, REPLAYED.test(was) ? was.replace(REPLAYED, line) : `${was}${/[^\n]$/.test(was) ? '\n' : ''}${line}\n`)
+}
+
 export function trackers(root: string, corpus: string): Map<string, Value> {
   const contract = entry(root)
   const dir = join(corpus, 'call_sequences')
   const sequences = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.json'))
     .map((p) => JSON.parse(readFileSync(join(dir, p), 'utf8')) as Sequence)
+  const replays = kept(sequences)
   const probes = suite(root).probes.map((p) => ({ ...p, layout: layout(root, p.name) }))
   const entered = layout(root, contract.name)
   const reads = probes.flatMap((p) => entered.storage.filter((e) => e.type.startsWith(`t_contract(${p.name})`)).flatMap((held) => [
@@ -111,11 +131,12 @@ export function trackers(root: string, corpus: string): Map<string, Value> {
       return `        log("${p.name}.${e.label}=", ${e.type === 't_bool' ? `${value} != 0` : value});\n`
     }),
   ]))
+  handed(corpus, replays.length, sequences.length)
   let out: string
   try {
-    const text = source(sequences.map(replayed).join(''), reads.join(''), contract)
+    const text = source(replays.map(replayed).join(''), reads.join(''), contract)
     writeFileSync(join(root, TEST), text)
-    out = forge(root, ['test', '-vv', '--match-path', TEST], ` on ${TEST}: ${String(Buffer.byteLength(text))} bytes, ${String(sequences.length)} sequences`)
+    out = forge(root, ['test', '-vv', '--match-path', TEST], ` on ${TEST}: ${String(Buffer.byteLength(text))} bytes, ${String(replays.length)} of ${String(sequences.length)} sequences`)
   } finally {
     rmSync(join(root, TEST), { force: true })
     rmSync(join(root, 'out/ProbeReadings.t.sol'), { recursive: true, force: true })

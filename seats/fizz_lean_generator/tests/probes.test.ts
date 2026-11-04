@@ -78,12 +78,16 @@ test('targetContracts not naming one is refused before forge', () => {
   expect(spawnSync).not.toHaveBeenCalled()
 })
 
-test('500 sequences write 500 test functions under fuzz and wall', () => {
-  const { root, corpus } = sequenced(500)
+test('460 sequences replay 50, each handler, under fuzz and wall', () => {
+  const { root, corpus } = sequenced(400)
+  const selectors = [1, 2, 3, 4, 5].map((n) => String(n).repeat(8))
+  const call = (data: string): object => ({ call: { from: '0x10000', data: `0x${data}` } })
+  for (let i = 0; i < 60; i++) writeFileSync(join(corpus, `call_sequences/immutable/long${String(i)}.json`), JSON.stringify([call('12345678'), call('12345678'), call(selectors[i % 5] ?? '')]))
   let text = ''
   faked((cwd) => { text = readFileSync(join(cwd, TEST), 'utf8'); return { status: 0, stdout: '', stderr: '' } })
   expect(trackers(root, corpus)).toEqual(new Map())
-  expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('testReadings')]).toEqual([500, false])
+  expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('testReadings')]).toEqual([50, false])
+  expect(selectors.filter((s) => text.includes(`hex"${s}"`))).toEqual(selectors)
   expect(vi.mocked(spawnSync).mock.calls.map(([, , o]) => [o?.env?.FOUNDRY_PROFILE, o?.timeout])).toEqual([['fuzz', 600_000], ['fuzz', 600_000]])
 })
 
@@ -97,8 +101,22 @@ test('a forge test past the wall clock names size and count', () => {
   })
   const run = vi.fn(() => trackers(root, corpus))
   expect(run).toThrow()
-  expect(run.mock.results).toEqual([{ type: 'throw', value: new Error(`forge test -vv --match-path ${TEST} passed the 600000 ms wall clock on ${TEST}: ${String(bytes)} bytes, 500 sequences`) }])
+  expect(run.mock.results).toEqual([{ type: 'throw', value: new Error(`forge test -vv --match-path ${TEST} passed the 600000 ms wall clock on ${TEST}: ${String(bytes)} bytes, 50 of 500 sequences`) }])
   expect([bytes > 0, existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([true, false, false])
+})
+
+test('the coverage handoff names kept and dropped counts', () => {
+  faked(() => ({ status: 0, stdout: '', stderr: '' }))
+  const handoff = (count: number, text: string): string => {
+    const { root, corpus } = sequenced(count)
+    const file = join(corpus, '../handoff/coverage.md')
+    mkdirSync(join(corpus, '../handoff'))
+    writeFileSync(file, text)
+    trackers(root, corpus)
+    return readFileSync(file, 'utf8')
+  }
+  expect(handoff(460, 'phase: coverage\nreplayed: 1 kept, 0 dropped\n')).toBe('phase: coverage\nreplayed: 50 kept, 410 dropped\n')
+  expect(handoff(3, 'phase: coverage\n')).toBe('phase: coverage\nreplayed: 3 kept, 0 dropped\n')
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('D5: a failing forge test throws stderr and leaves no file', () => {

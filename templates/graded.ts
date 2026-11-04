@@ -18,7 +18,6 @@ const HANDOFF = 'test/fizz/fizz_data/handoff'
 const LCOV = 'test/fizz/fizz_data/corpus_medusa/coverage/lcov.info'
 const HUNK = /^@@ -(\d+)(?:,(\d+))? /
 const GETTER = /\bfunction\s+(\w+)([\s\S]*?)(?=\bfunction\b|$)/g
-const FLOW = /^files:[ \t]*\[([^\]]*)\]/m
 const BLOCK = /^files:[ \t]*\n((?:[ \t]+-[ \t]*\S.*(?:\n|$))+)/m
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
@@ -51,9 +50,9 @@ export function touched(diff: string, extracted: Extracted): Touched {
   }
 }
 
-function listed(yml: string): string[] {
-  const flow = FLOW.exec(yml)?.[1]
-  const items = flow === undefined ? (BLOCK.exec(yml)?.[1] ?? '').split('\n').map((line) => line.replace(/^\s*-/, '')) : flow.split(',')
+export function listed(yml: string): string[] {
+  const block = BLOCK.exec(yml)?.[1]
+  const items = block === undefined ? (fields(yml).files ?? '').replace(/^\[(.*)\]$/, '$1').split(',') : block.split('\n').map((line) => line.replace(/^\s*-/, ''))
   return items.map((item) => item.trim()).filter((item) => item !== '')
 }
 

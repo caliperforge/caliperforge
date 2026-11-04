@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { put } from '../../../sequencer/workspace.ts'
 import type { Extracted } from '../../../templates/extract.ts'
-import { fixed, graded, type Touched, touched } from '../../../templates/graded.ts'
+import { fixed, graded, listed, type Touched, touched } from '../../../templates/graded.ts'
 
 const META = 'test/fizz/fizz_data'
 const VAULT = 'src/Vault.sol'
@@ -56,4 +56,13 @@ test('a target.yml with no fix cannot run', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-graded-'))
   put(root, 1, 'target.yml', 'repo: o/r\npre_fix: abc\nfiles: [src/Vault.sol]\n')
   expect(fixed(root, 1, root)).toBe('cannot run: target.yml has no fix')
+})
+
+test('listed reads scalar, comma, flow and block lists alike', () => {
+  const both = ['src/A.sol', 'src/B.sol']
+  expect(listed('files: src/A.sol\n')).toEqual(['src/A.sol'])
+  expect(listed('files: src/A.sol, src/B.sol\n')).toEqual(both)
+  expect(listed('files: [src/A.sol, src/B.sol]\n')).toEqual(both)
+  expect(listed('files:\n  - src/A.sol\n  - src/B.sol\nrepo: o/r\n')).toEqual(both)
+  for (const empty of ['repo: o/r\n', 'files: []\n', 'files:\nrepo: o/r\n']) expect(listed(empty)).toEqual([])
 })

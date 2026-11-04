@@ -1,7 +1,7 @@
 import type { Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { held as leased } from '../store/leases.ts'
-import { allPlans, inWindow, pipeNamed, type PlanRow } from '../store/plans.ts'
+import { allPlans, inWindow, pipeNamed, type PipeRow, type PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
 
 /** The bench steps that run Medusa. */
@@ -19,6 +19,12 @@ function scoring(db: Db, plan: PlanRow): boolean {
   const leases = new Set(leased(db).map((l) => l.plan))
   return allPlans(db).some((p) => p.id !== plan.id && p.template === 'bench' && p.step === plan.step
     && (p.state === 'queued' || p.state === 'running') && leases.has(p.id))
+}
+
+/** A closed lane opens to its fuzzing plans while the refuzz pipe is open, at the refuzz pipe's width: one fuzz on the host. */
+export function fuzzLane(db: Db, pipe: PipeRow, when: string): PipeRow | null {
+  const refuzz = pipeNamed(db, 'refuzz')
+  return refuzz !== null && refuzz.enabled === 1 && inWindow(refuzz, when) ? { ...pipe, max_concurrent: refuzz.max_concurrent } : null
 }
 
 function night(db: Db, now: Date): boolean {

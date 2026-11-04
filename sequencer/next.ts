@@ -1,10 +1,11 @@
 import type { Db } from '../store/index.ts'
 import { held, type Lease } from '../store/leases.ts'
-import { cap, hhmm } from '../store/lanes.ts'
+import { cap, hhmm, pipes } from '../store/lanes.ts'
 import { PARKED } from '../store/parked.ts'
-import { live, openPipes, planById, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
+import { inWindow, live, planById, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
 import { overBudget } from '../store/refusals.ts'
 import type { Step } from '../templates/pr-path.ts'
+import { fuzzes, fuzzLane } from './night.ts'
 import { blocked, heldOn, mapOf, overlapping } from './steps.ts'
 
 export type Route = { fire: Step } | { wait: Wait; on: number | null }
@@ -44,15 +45,26 @@ function others(db: Db, now: Date, mine: Lease | null): Lease[] {
 /** Every open lane and what it would step, asked once: one reading of the queues serves the whole tick. */
 export function offered(db: Db, now: Date, mine: Lease | null = null): Offer[] {
   const leased = new Set(others(db, now, mine).map((l) => l.plan))
-  return openPipes(db, hhmm(db, now)).map((pipe) => ({
-    pipe, plans: picks(db, pipe, now, mine), busy: live(db, pipe).some((p) => leased.has(p.id)),
+  return lanes(db, now).map(({ pipe, plans }) => ({
+    pipe, plans: picks(db, pipe, now, mine, plans), busy: plans.some((p) => leased.has(p.id)),
   }))
+}
+
+/** Every enabled lane in its window with its plans, and a closed lane with its fuzzing bench plans while `fuzzLane` opens it. */
+export function lanes(db: Db, now: Date): { pipe: PipeRow; plans: PlanRow[] }[] {
+  const when = hhmm(db, now)
+  return pipes(db).filter((p) => p.enabled === 1).flatMap((pipe) => {
+    if (inWindow(pipe, when)) return [{ pipe, plans: live(db, pipe) }]
+    const fuzz = fuzzLane(db, pipe, when)
+    const plans = live(db, pipe).filter((p) => fuzzes(p, mapOf(p.template).at(p.step)))
+    return fuzz === null || plans.length === 0 ? [] : [{ pipe: fuzz, plans }]
+  })
 }
 
 /**
  * The cap is spent on lanes that can use it. A lane with nothing to step takes no slot, so at
  * cap 1 an idle lane does not hold the only slot against a lane with a plan it could step; among
- * lanes that can step, the lower id wins, which is the order `openPipes` returns. A lane with a
+ * lanes that can step, the lower id wins, which is the order `lanes` returns. A lane with a
  * job in flight in another process holds its slot.
  */
 export function working(offers: Offer[], wide: number): Offer[] {
@@ -65,9 +77,10 @@ export function working(offers: Offer[], wide: number): Offer[] {
  * one another tick has leased, which this tick offers to nobody; a running one that
  * waits on a person or the outside world, or is held at the rails on a plan in its own pipe, and is not leased gives its slot up.
  */
-export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null): PlanRow[] {
+export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null,
+  among: PlanRow[] = live(db, pipe)): PlanRow[] {
   const leases = new Set(others(db, now, mine).map((l) => l.plan))
-  const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
+  const mapped = among.filter((p) => MAPPED.has(p.template))
   const free = mapped.filter((p) => {
     const stop = blocked(db, p, now)
     const on = p.state === 'running' ? heldOn(db, p) : null

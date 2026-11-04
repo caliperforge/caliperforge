@@ -10,6 +10,8 @@ interface Layout { storage: { label: string; slot: string; offset: number; type:
 
 type Sequence = { call: { from: string; data: string } }[]
 
+interface Entry { name: string; file: string }
+
 const TEST = 'test/fizz/ProbeReadings.t.sol'
 const TRACKED = /^t_(?:uint\d+|bool)$/
 const LOGGED = /^\s*(\w+\.\w+)= (\d+|true|false)$/gm
@@ -42,13 +44,24 @@ function forge(root: string, args: string[]): string {
 
 const layout = (root: string, contract: string): Layout => JSON.parse(forge(root, ['inspect', contract, 'storageLayout', '--json'])) as Layout
 
+function entry(root: string): Entry {
+  const { fuzzing: { targetContracts = [] } = {} } = JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8')) as { fuzzing?: { targetContracts?: string[] } }
+  if (targetContracts.length !== 1) throw new Error(`medusa.json fuzzing.targetContracts names ${String(targetContracts.length)} contracts; probe readings need exactly one`)
+  const [name = ''] = targetContracts
+  const dir = join(root, 'test/fizz')
+  const declares = new RegExp(`\\bcontract ${name}\\b`)
+  const file = readdirSync(dir, { recursive: true, encoding: 'utf8' }).find((p) => p.endsWith('.sol') && declares.test(readFileSync(join(dir, p), 'utf8')))
+  if (file === undefined) throw new Error(`no .sol under test/fizz/ declares contract ${name}`)
+  return { name, file }
+}
+
 const replayed = (sequence: Sequence): string => `        vm.revertToState(snap);\n${sequence.map(({ call }) => `        vm.prank(address(uint160(${BigInt(call.from).toString()})));\n`
   + `        address(harness).call(hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n`
 
-const source = (replays: string, reads: string): string => `// SPDX-License-Identifier: MIT
+const source = (replays: string, reads: string, { name, file }: Entry): string => `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Harness} from "./Harness.sol";
+import {${name}} from "./${file}";
 
 interface Vm {
     function load(address target, bytes32 slot) external view returns (bytes32);
@@ -62,8 +75,7 @@ contract Readings {
     address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
 
     function testReadings() public {
-        Harness harness = new Harness();
-        harness.setup();
+        ${name} harness = new ${name}();
         uint256 snap = vm.snapshotState();
 ${replays}    }
 
@@ -87,12 +99,13 @@ ${reads}    }
 `
 
 export function trackers(root: string, corpus: string): Map<string, Value> {
+  const contract = entry(root)
   const dir = join(corpus, 'call_sequences')
   const sequences = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.json'))
     .map((p) => JSON.parse(readFileSync(join(dir, p), 'utf8')) as Sequence)
   const probes = suite(root).probes.map((p) => ({ ...p, layout: layout(root, p.name) }))
-  const harness = layout(root, 'Harness')
-  const reads = probes.flatMap((p) => harness.storage.filter((e) => e.type.startsWith(`t_contract(${p.name})`)).flatMap((held) => [
+  const entered = layout(root, contract.name)
+  const reads = probes.flatMap((p) => entered.storage.filter((e) => e.type.startsWith(`t_contract(${p.name})`)).flatMap((held) => [
     `        p = address(uint160(word(h, ${held.slot}, ${String(held.offset)}, 20)));\n`,
     ...p.layout.storage.filter((e) => p.trackers.includes(`${p.name}.${e.label}`) && TRACKED.test(e.type)).map((e) => {
       const value = `word(p, ${e.slot}, ${String(e.offset)}, ${p.layout.types[e.type]?.numberOfBytes ?? ''})`
@@ -101,7 +114,7 @@ export function trackers(root: string, corpus: string): Map<string, Value> {
   ]))
   let out: string
   try {
-    writeFileSync(join(root, TEST), source(sequences.map(replayed).join(''), reads.join('')))
+    writeFileSync(join(root, TEST), source(sequences.map(replayed).join(''), reads.join(''), contract))
     out = forge(root, ['test', '-vv', '--match-path', TEST])
   } finally {
     rmSync(join(root, TEST), { force: true })

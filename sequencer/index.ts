@@ -6,7 +6,7 @@ import { type Db, lapping } from '../store/index.ts'
 import { clear as unlease, handOver, held, holding, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
-import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
+import { type PlanRow, live, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { unleased } from '../store/unleased.ts'
 import { capture, intake, refill } from './capture.ts'
 import { woke } from './director.ts'
@@ -19,7 +19,7 @@ import { accounts } from './accounts.ts'
 import { type Wire } from './push.ts'
 import { due, type Entry, stuck } from './drift.ts'
 import { sunday } from '../cli/science.ts'
-import { offered, route, working, type Route } from './next.ts'
+import { lanes as opened, offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
 import { ended, hold, pending } from './hold.ts'
 import { logged } from '../store/events.ts'
@@ -53,7 +53,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   rescored(db, root)
   const out: Fired[] = []
   unleased(db, held(db, now).map((l) => l.plan))
-  const lanes = openPipes(db, hhmm(db, now)).map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
+  const lanes = opened(db, now).map(({ pipe, plans }) => ({ pipe, routed: plans.map((plan) => ({ plan, route: route(db, plan, now) })) }))
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
   park(db, root, lanes.flatMap((l) => l.routed), now)
@@ -141,7 +141,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
   if (stole !== null) evict(db, root, plan, stole)
   const taken = { ...lease, stole }
   const row = planById(db, plan)
-  const pipe = openPipes(db, hhmm(db, new Date())).find((p) => p.id === row.pipe_id)
+  const pipe = opened(db, new Date()).find((l) => l.pipe.id === row.pipe_id)?.pipe
   if (pipe === undefined) {
     unlease(db, plan)
     return []

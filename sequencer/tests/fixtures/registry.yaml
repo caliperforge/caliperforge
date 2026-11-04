@@ -545,3 +545,9 @@
   table: events
   column: at
   where: "kind = 'bench.dry'"
+- name: phase_refused_twice
+  table: events
+  column: at
+  where: "kind = 'generate' AND outcome = 'needs_coo' AND message GLOB '* handoff refused twice on the same span'"
+  gap: 14d
+  expected: 0

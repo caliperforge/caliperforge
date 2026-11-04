@@ -102,6 +102,7 @@ VALUES
   ('rules/registry/87-weakened_ruled.yaml', 'card', 'rules/registry/87-weakened_ruled.yaml', '8a1449f8e6effa5b686138c9225727c4f9e7b95a561a37c23db16350ae193acc', '2026-11-01'),
   ('rules/registry/88-park_lost_wait.yaml', 'card', 'rules/registry/88-park_lost_wait.yaml', '11706f8a9dc1395eb1f90c0cef37a137f4d0aefcd7c6cc6e1040e0edd6e037ce', '2026-11-03'),
   ('rules/registry/89-bench_dry.yaml', 'card', 'rules/registry/89-bench_dry.yaml', '663d3b4ffae260533c82f87a64423f291f1c7ab5391aad51be187ae85bef5465', '2026-11-04'),
+  ('rules/registry/89-phase_refused_twice.yaml', 'card', 'rules/registry/89-phase_refused_twice.yaml', 'a7cbf1f9dd45f8c4ddcc96c3f7de76f0aa58d7cfeed8ba0ff4c66ebad016f7b9', '2026-11-04'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5cf1dac1e7d334a6cd3bfcab8b322a44e93f57b721297d72c6d4ed31865bfc2e', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

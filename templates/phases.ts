@@ -91,14 +91,17 @@ function facts({ phase, root, path, map }: Pick<Phase, 'phase' | 'root' | 'path'
   return refused
 }
 
+const listed = (refused: Refused[]): string => refused.map((r) => `- ${r.rule}: ${r.note}`).join('\n')
+
 async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = []): Promise<Sum | Outcome> {
-  const issue = refused.length === 0 ? at.issue : `${at.issue}\nYour handoff was refused:\n${refused.map((r) => `- ${r.rule}: ${r.note}`).join('\n')}`
+  const issue = refused.length === 0 ? at.issue : `${at.issue}\nYour handoff was refused:\n${listed(refused)}`
   const ran = await fire(at.prompt, issue, sum, at.phase)
   if ('outcome' in ran || ran.wall !== null) return ran
   const handed = [...handoff(at.skill, at.phase, read(at.path)), ...facts(at)]
-  if (handed.length > 0 && refused.length === 0) return checked(fire, at, ran, handed)
-  if (handed.length > 0) return { outcome: 'refuse', spans: [...new Set(handed.map((r) => r.rule))], note: `${at.phase} handoff refused twice: ${handed.map((r) => r.note).join('; ')}` }
-  return ran
+  if (handed.length === 0) return ran
+  if (listed(handed) !== listed(refused)) return checked(fire, at, ran, handed)
+  return { outcome: 'needs_coo', spans: [...new Set(handed.map((r) => r.rule))], note: `${at.phase} handoff refused twice on the same span`,
+    message: `Refused:\n${listed(refused)}\n\nRefused again:\n${listed(handed)}` }
 }
 
 const FACTS = ['Limits', 'Outside dependencies', 'Conversion points']

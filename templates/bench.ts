@@ -6,6 +6,7 @@ import type { Provider } from '../providers/kind.ts'
 import { real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
+import { refusalText } from '../sequencer/refusal.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
 import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
@@ -136,6 +137,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }
   const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue, stop)
     : await firing(bench, manifest, hash)(prompt, issue, START)
+  if ('outcome' in sum && sum.outcome === 'needs_coo') put(root, plan.id, 'refusal.md', refusalText(step, sum))
   if ('outcome' in sum && sum.held === true) {
     renameSync(src, `${src}.stopped`)
     needsCeo(db, plan, sum.note)

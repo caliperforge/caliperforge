@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { admitted, type Miss, type Packet } from '../../../providers/kind.ts'
-import { get } from '../../../sequencer/workspace.ts'
+import { get, put } from '../../../sequencer/workspace.ts'
+import { scores, underpowered } from '../../../store/bench.ts'
 import { eventsAfter } from '../../../store/events.ts'
 import type { Db } from '../../../store/index.ts'
 import { critic, criticCheck } from '../../../templates/critic.ts'
 import { compiled } from '../../../templates/extract.ts'
+import type { fixed } from '../../../templates/graded.ts'
 import { packets } from '../../../templates/plan.ts'
 import { type Item, reach } from '../../../templates/reach.ts'
 import { report } from '../../../templates/report.ts'
@@ -30,6 +32,13 @@ vi.mock('../../../templates/extract.ts', async (importOriginal) => ({ ...await i
 vi.mock('../../../templates/critic.ts', async (importOriginal) => {
   const original = await importOriginal<{ criticCheck: typeof criticCheck }>()
   return { ...original, criticCheck: vi.fn(original.criticCheck) }
+})
+
+const FIXED = vi.hoisted(() => vi.fn<typeof fixed>())
+
+vi.mock('../../../templates/graded.ts', async (importOriginal) => {
+  const original = await importOriginal<{ fixed: typeof fixed }>()
+  return { ...original, fixed: FIXED.mockImplementation(original.fixed) }
 })
 
 const root = join(import.meta.dirname, '../../..')
@@ -167,7 +176,7 @@ function legs(stop?: string, mapped = false, suite: Record<string, string> = {},
     return { usage: { input: 0, cache: 0, output: 10 }, seconds: 2 }
   }, [fizzed()])
   suited(bench, suite)
-  return { db, handoffs, fires, run: () => run(skill, handoffs, stop) }
+  return { db, bench, handoffs, fires, run: () => run(skill, handoffs, stop) }
 }
 
 const critics = (db: Db): string[][] => eventsAfter(db, 0).filter((e) => e.kind === 'critic').map((e) => [e.outcome, e.message])
@@ -404,6 +413,38 @@ test('stop D6: no stop fires all four, writes no stopped.json', async () => {
   expect(await run()).toMatchObject({ tokens: 40, wall: null })
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants'])
   expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
+})
+
+const touched = (name: string, state: string) => ({ functions: [{ file: 'src/V.sol', start: 9, end: 9, name }], state: [state] })
+
+test('a context grade that misses stops before scaffold', async () => {
+  FIXED.mockReturnValueOnce(touched('V.setFee', 'V.fee')).mockReturnValueOnce(touched('V.setFee', 'V.fee'))
+  const { db, bench, handoffs, fires, run } = legs()
+  put(bench, 1, 'target.yml', 'target: v\ngenerator: fizz_lean_generator\n')
+  expect(await run()).toEqual({ outcome: 'needs_coo', spans: ['bench.grade'], note: 'miss: context names none of V.setFee' })
+  await run()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'context'])
+  expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
+  expect(scores(db).map((s) => [s.not_powered, s.tokens, s.seconds])).toEqual([['context_missed', 10, 2], ['context_missed', 10, 2]])
+  expect(underpowered(db)).toHaveLength(1)
+})
+
+test('grades that all hit fire every phase', async () => {
+  FIXED.mockClear().mockReturnValueOnce(touched('V.deposit', 'V.cap'))
+  const { db, handoffs, fires, run } = legs()
+  const [dir, coverage] = [join(handoffs, '../../../..'), join(handoffs, '../corpus_medusa/coverage')]
+  mkdirSync(join(dir, 'test/fizz/handlers'), { recursive: true })
+  mkdirSync(coverage, { recursive: true })
+  writeFileSync(join(handoffs, 'map.md'), '## Limits\n\n- V.cap\n')
+  writeFileSync(join(dir, 'test/fizz/handlers/H.sol'), 'v.deposit(1);\n')
+  writeFileSync(join(dir, 'test/fizz/Properties.sol'), 'assert(v.cap() > 0);\n')
+  writeFileSync(join(coverage, 'lcov.info'), `SF:${dir}/src/V.sol\nDA:9,1\nend_of_record\n`)
+  expect(await run()).toMatchObject({ tokens: 40, wall: null })
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants'])
+  expect(FIXED).toHaveBeenCalledOnce()
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'bench.grade').map((e) => [e.outcome, e.message])).toEqual([
+    ['pass', 'context: hit V.deposit, V.cap'], ['pass', 'scaffold: hit V.deposit, V.cap'], ['pass', 'coverage: hit V.deposit'],
+  ])
 })
 
 test.each(CHECKS.map(([heading]) => heading))('D6: a critic pass with no sh block under %s throws', (heading) => {

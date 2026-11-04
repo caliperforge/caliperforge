@@ -16,6 +16,7 @@ import { type Check, FIX, fixed, type Fixed } from './fixturn.ts'
 import { costWalled } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
+import { grader } from './missed.ts'
 import { duplicated, packets, planned } from './plan.ts'
 import type { Step } from './pr-path.ts'
 import { readings, trackers } from './probes.ts'
@@ -219,6 +220,12 @@ function rechecked(skill: string, root: string, handoffs: string, phase: string)
   return { outcome: 'refuse', spans: [...new Set(refused.map((r) => r.rule))], note: `${phase} handoff refused on resume: ${refused.map((r) => r.note).join('; ')}` }
 }
 
+async function ended(bench: Bench, manifest: Seat, hash: string, handoffs: string, stopped: string, sum: Sum): Promise<Sum | Outcome> {
+  const got = await criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
+  if (!('outcome' in got)) rmSync(stopped, { force: true })
+  return got
+}
+
 export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
@@ -233,6 +240,7 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
   if (refused !== null) return refused
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
   let [sum, smoked] = [resumed?.sum ?? START, resumed?.smoked ?? '']
+  const grade = grader(bench, root)
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
@@ -255,10 +263,10 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
       if ('outcome' in got || got.wall !== null) return got
       sum = got
     }
-    writeFileSync(stopped, JSON.stringify({ phase, sum, smoked }))
+    const miss = grade(phase, sum)
+    if (miss !== null) return miss
+    writeFileSync(stopped,JSON.stringify({ phase, sum, smoked }))
     if (phase === stop) return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
   }
-  const ended = await criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
-  if (!('outcome' in ended)) rmSync(stopped, { force: true })
-  return ended
+  return ended(bench, manifest, hash, handoffs, stopped, sum)
 }

@@ -3,12 +3,10 @@
     "lines": 60
   },
   "base.ts": {
-    "lines": 64,
-    "silent-catch": 1
+    "lines": 64
   },
   "brief.ts": {
-    "lines": 437,
-    "silent-catch": 1
+    "lines": 437
   },
   "capture.ts": {
     "lines": 267
@@ -50,8 +48,7 @@
     "lines": 19
   },
   "gates.ts": {
-    "lines": 278,
-    "silent-catch": 1
+    "lines": 278
   },
   "greptile-mirror.ts": {
     "lines": 87

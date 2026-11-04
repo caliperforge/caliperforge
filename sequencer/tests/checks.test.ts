@@ -1294,6 +1294,10 @@ test('#221 a diff step with no generator or a shell adds no gate', () => {
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core -- --test-threads=4 @${src}`])
+  const broken = surfpool(`${BINDINGS}  a: [\n`)
+  const unparsed = heard()
+  expect(checks(broken, {}, unparsed.run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
+  expect(unparsed.calls).toEqual([`cargo +nightly fmt --all -- --check @${broken}`, `cargo test -p surfpool-core -- --test-threads=4 @${broken}`])
 })
 
 const PAY = { 'rust/Cargo.toml': '[workspace]\n', 'rust/crates/core/Cargo.toml': '[package]\nname = "pay-core"\n' }

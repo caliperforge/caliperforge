@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
+import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
 import { CONVENTIONAL } from './conventions.ts'
@@ -451,11 +451,8 @@ export function yamlOf(text: string): unknown {
   const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|evidence|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
     (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
   for (const each of [quoted, text]) {
-    try {
-      return parse(each)
-    } catch {
-      continue
-    }
+    const doc = parseDocument(each)
+    if (doc.errors.length === 0) return doc.toJS()
   }
   return null
 }

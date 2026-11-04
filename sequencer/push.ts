@@ -147,7 +147,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
     freed(db, plan.id)
     return { outcome: 'needs_ceo', spans: verdict.spans, note: `${at} ${again}: still cancelled after ${String(APPEARS)} ticks` }
   }
-  const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
+  const base = waiting === null && verdict.outcome === 'refuse' ? onBase(db, root, plan.id, on, verdict.spans, board, wire.runs) : null
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
   if (rerun !== null) return onCi(db, plan.id, rerun)
   if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)

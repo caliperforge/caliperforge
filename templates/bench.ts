@@ -219,7 +219,7 @@ export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Out
   return { outcome: 'pass', spans: [], note: `null_check.py ${ended}: ${String(untested)} untested in ${String(counted.length)} rows` }
 }
 
-function unproven(suite: string, name: string): Outcome | number {
+export function unproven(suite: string, name: string): Outcome | number {
   const sols = existsSync(suite) ? readdirSync(suite, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`)) : []
   if (sols.length === 0) return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
   const counted = sols.includes(PROPERTIES) ? [PROPERTIES] : sols

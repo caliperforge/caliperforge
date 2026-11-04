@@ -12,6 +12,7 @@ import type { Db } from '../../store/index.ts'
 import { dial, lanes } from '../../store/lanes.ts'
 import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan, type PlanRow } from '../../store/plans.ts'
 import { fingerprint, refused as refuse } from '../../store/refusals.ts'
+import { dried } from '../../templates/dry.ts'
 import { fileBench, refuzz, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
@@ -192,6 +193,13 @@ test('rescore D3 no scored suite is refused untouched', () => {
   const { dir, d } = rescorable()
   rmSync(join(planDir(dir, 1), SCORED), { recursive: true })
   refused(dir, d, 'plan 1 has no fuzz-bench/suites/fizz/euler-earn-m01')
+})
+
+test('dry refuses a queued --suite or no checkout, logs nothing', () => {
+  const { dir, d } = rescorable('queued')
+  expect(() => dried(d, dir, 1, dir, 1)).toThrow('plan 1 is not a done bench plan')
+  expect(() => dried(d, dir, 1, dir)).toThrow('plan 1 has no checkout')
+  expect(ofKind(d, 'bench.dry')).toEqual([])
 })
 
 test('rescore D3 --by takes ceo or coo only', () => {

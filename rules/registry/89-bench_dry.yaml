@@ -1,0 +1,4 @@
+- name: bench_dry
+  table: events
+  column: at
+  where: "kind = 'bench.dry'"

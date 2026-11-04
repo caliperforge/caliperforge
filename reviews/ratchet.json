@@ -12,7 +12,6 @@
     "test-name": 2
   },
   "verdict.ts": {
-    "lines": 114,
-    "silent-catch": 1
+    "lines": 141
   }
 }

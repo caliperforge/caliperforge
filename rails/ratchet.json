@@ -33,8 +33,7 @@
     "lines": 141
   },
   "tight/index.ts": {
-    "lines": 120,
-    "silent-catch": 1
+    "lines": 116
   },
   "tight/prose.ts": {
     "lines": 38

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -108,12 +108,7 @@ export function self(dir: string): Verdict {
 }
 
 function resolves(dir: string, ref: string): boolean {
-  try {
-    git(dir, ['rev-parse', '--verify', '--quiet', ref])
-    return true
-  } catch {
-    return false
-  }
+  return spawnSync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd: dir, stdio: 'ignore' }).status === 0
 }
 
 function git(cwd: string, args: string[]): string {

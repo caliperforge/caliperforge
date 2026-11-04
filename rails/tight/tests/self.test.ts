@@ -40,3 +40,9 @@ test('a short one passes', () => {
   writeFileSync(join(dir, 'src/short.ts'), fn(3))
   expect(self(dir).outcome).toBe('pass')
 })
+
+test('a clone with no main to diff against throws', () => {
+  const dir = checkout()
+  git(dir, ['update-ref', '-d', 'refs/remotes/origin/main'])
+  expect(() => self(dir)).toThrow('no main to diff against')
+})

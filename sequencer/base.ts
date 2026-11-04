@@ -1,6 +1,9 @@
 import { list, type Board, type Gh, type Head } from '../rails/ci-green/index.ts'
+import { logged } from '../store/events.ts'
+import type { Db } from '../store/index.ts'
 import type { Green } from '../store/refusals.ts'
 import { failing, type Failed } from './failures.ts'
+import { firstLine } from './unpolled.ts'
 import { maybe, put } from './workspace.ts'
 
 /** `<branch> <sha>`: the plan's last head at which every judged run was green. */
@@ -17,12 +20,13 @@ type Run = NonNullable<ReturnType<typeof list>>[number]
  * A job red at the head that fails again at the last green head, re-run, is the base's, not the
  * build's. The board returned carries those jobs; a string is what the head waits on; null refuses as before.
  */
-export function onBase(root: string, plan: number, head: Head, spans: string[], board: Board[], gh: Gh): Board[] | string | null {
+export function onBase(db: Db, root: string, plan: number, head: Head, spans: string[], board: Board[], gh: Gh): Board[] | string | null {
   const [branch, sha] = maybe(root, plan, GREEN)?.trim().split(' ') ?? []
   if (branch === undefined || sha === undefined || sha === head.sha || !spans.every((s) => s.endsWith(' ci.red'))) return null
   try {
     return compared(root, plan, head, { fork: head.fork, branch, sha }, spans, board, gh)
-  } catch {
+  } catch (error) {
+    logged(db, { plan, kind: 'swallowed', actor: 'onBase', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return null
   }
 }

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { parse } from 'yaml'
+import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
@@ -229,13 +229,8 @@ export const SHELL = /&&|[|;$`<>]/
 /** Each workflow step that runs a generator then `git diff --exit-code`, at the root. */
 function regenerated(src: string): Gate[] {
   return workflows(src).flatMap((text) => {
-    let doc: unknown
-    try {
-      doc = parse(text)
-    } catch {
-      return []
-    }
-    const found = Workflow.safeParse(doc)
+    const doc = parseDocument(text)
+    const found = Workflow.safeParse(doc.errors.length === 0 ? doc.toJS() : null)
     return found.success ? Object.values(found.data.jobs).flatMap((job) => job.steps.flatMap((step) => regenerate(step.run ?? ''))) : []
   })
 }

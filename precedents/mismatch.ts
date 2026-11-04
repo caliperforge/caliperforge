@@ -20,10 +20,10 @@ type Send = (c: Pick<Case, 'method' | 'params'>) => Promise<Reply>
 
 const body = ({ method, params }: Pick<Case, 'method' | 'params'>): string => JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
 
-const sender = (url: string): Send => async (c) =>
+export const sender = (url: string): Send => async (c) =>
   (await (await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(c) })).json()) as Reply
 
-function paced(send: Send, gap: number): Send {
+export function paced(send: Send, gap: number): Send {
   let last = -Infinity
   return async (c) => {
     for (let wait = last + gap - Date.now(); wait > 0; wait = last + gap - Date.now()) await sleep(wait)

@@ -89,6 +89,7 @@ function clone(root: string, id: number, url: string, sha: string): string {
   git(dir, ['init', '-q'])
   git(dir, ['fetch', '-q', '--depth', '1', url, sha])
   git(dir, ['checkout', '-q', 'FETCH_HEAD'])
+  git(dir, ['submodule', 'update', '--init', '--recursive'])
   return dir
 }
 

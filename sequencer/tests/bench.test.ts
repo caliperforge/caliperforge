@@ -3,7 +3,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/index.ts'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
@@ -36,6 +36,8 @@ const OPENS = new Date('2026-09-18T13:00:00.000Z')
 const NIGHT = new Date('2026-09-19T05:00:00.000Z')
 
 const AT = '2026-09-18T13:00:00.000Z'
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 function queued(db: Db, template: PlanRow['template'], step = 0): void {
   putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template, state: 'queued', queued_at: AT, step, retries: 0 })
@@ -88,6 +90,20 @@ function fixture(body = 'export const vault = 1\n', message = 'vault'): { root: 
   return { root, c1, c2 }
 }
 
+/** Adds `lib/dep`, a submodule of `remotes/org/dep` whose `.gitmodules` url is `url`, to `remotes/org/fixture`; the commit adding it. */
+function submoduled(root: string, url = join(root, 'remotes/org/dep')): string {
+  vi.stubEnv('GIT_CONFIG_COUNT', '1')
+  vi.stubEnv('GIT_CONFIG_KEY_0', 'protocol.file.allow')
+  vi.stubEnv('GIT_CONFIG_VALUE_0', 'always')
+  const dep = join(root, 'remotes/org/dep')
+  mkdirSync(dep, { recursive: true })
+  git(dep, ['init', '-q'])
+  commit(dep, 'Dep.sol', 'contract Dep {}\n', 'dep')
+  const dir = join(root, 'remotes/org/fixture')
+  git(dir, ['submodule', 'add', '-q', dep, 'lib/dep'])
+  return commit(dir, '.gitmodules', `[submodule "lib/dep"]\n\tpath = lib/dep\n\turl = ${url}\n`, 'dep')
+}
+
 function target(root: string, keys: Record<string, string>): void {
   put(root, 1, 'target.yml', Object.entries(keys).map(([k, v]) => `${k}: ${v}`).join('\n'))
 }
@@ -110,6 +126,21 @@ test('kernel checks out the pre-fix sha and writes checkout.json', () => {
   expect(spawnSync('git', ['cat-file', '-e', `${c2}^{commit}`], { cwd: dir }).status).not.toBe(0)
   expect(JSON.parse(get(root, 1, 'checkout.json'))).toEqual({ repo: 'org/fixture', fix, pre_fix: c1 })
   expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
+})
+
+test('a pre-fix with submodules is checked out with them', () => {
+  const { root, c2 } = fixture()
+  const c3 = submoduled(root)
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: c3 })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${c3.slice(0, 12)}` })
+  expect(readFileSync(join(srcDir(root, 1), 'lib/dep/Dep.sol'), 'utf8')).toBe('contract Dep {}\n')
+})
+
+test('a submodule origin does not hold throws', () => {
+  const { root, c2 } = fixture()
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: submoduled(root, join(root, 'remotes/org/gone')) })
+  expect(() => scratch(root, benched())).toThrow()
+  expect(maybe(root, 1, 'checkout.json')).toBeNull()
 })
 
 test('a fix the scratch tree holds is refused', () => {
@@ -359,11 +390,13 @@ test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
 })
 
 test('D1 generate clones an emptied src/ again at pre_fix', async () => {
-  const { root, c1, c2 } = fixture()
+  const { root, c2 } = fixture()
+  const c3 = submoduled(root)
   const fired = stub(1000, 'completed', true)
-  expect((await generated(fired, undefined, reaped(c1, c2), root)).outcome).toMatchObject({ outcome: 'pass' })
+  expect((await generated(fired, undefined, reaped(c3, c2), root)).outcome).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)) }])
-  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c3)
+  expect(existsSync(join(srcDir(root, 1), 'lib/dep/Dep.sol'))).toBe(true)
 })
 
 const HALF = 'contract FizzTest {\n'

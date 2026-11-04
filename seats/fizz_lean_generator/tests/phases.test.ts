@@ -205,7 +205,7 @@ test('D5: a clean suite fires no fix, logs two critic passes', async () => {
 
 test('D6: a twice-refused invariants handoff skips the critic', async () => {
   const { handoffs, fires, run } = legs(undefined, false, { 'Mock.sol': MOCK }, { ...FILLED, invariants: '' })
-  expect(await run()).toMatchObject({ outcome: 'refuse', note: expect.stringContaining('invariants handoff refused twice') as string })
+  expect(await run()).toMatchObject({ outcome: 'needs_coo', note: 'invariants handoff refused twice on the same span' })
   expect(fires.filter((f) => f.phase.includes('-fix-critic-'))).toEqual([])
   expect(existsSync(join(handoffs, 'critic.md'))).toBe(false)
 })
@@ -232,7 +232,7 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
 test('a retry resumes at the first phase not yet passed', async () => {
   const filled = { ...FILLED, coverage: '' }
   const { handoffs, fires, run } = legs(undefined, false, {}, filled)
-  expect(await run()).toMatchObject({ outcome: 'refuse' })
+  expect(await run()).toMatchObject({ outcome: 'needs_coo' })
   filled.coverage = FILLED.coverage ?? ''
   const before = fires.length
   expect(await run()).toMatchObject({ tokens: 40, seconds: 8, wall: null })

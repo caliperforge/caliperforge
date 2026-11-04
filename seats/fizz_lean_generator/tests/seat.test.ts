@@ -148,11 +148,13 @@ test('D2: the scaffold issue names the context handoff', async () => {
   expect(packets[1]?.prompt).toContain(`Start from ${join(packets[1]?.cwd ?? '', HANDOFFS, 'context.md')}.`)
 })
 
-test('D3: a refused handoff re-fires once, then is refused', async () => {
-  const { outcome, packets } = await generated('fizz_lean', 1000, { ...FILLED, scaffold: (FILLED.scaffold ?? '').replace(STAND_INS, '') })
+test('a handoff refused twice alike goes to the director', async () => {
+  const { tree, outcome, packets } = await generated('fizz_lean', 1000, { ...FILLED, scaffold: (FILLED.scaffold ?? '').replace(STAND_INS, '') })
+  const line = '- handoff.field: scaffold: ## Stand-ins is missing or has no row'
   expect(packets.map(phaseOf)).toEqual(['context', 'scaffold', 'scaffold'])
-  expect(packets[2]?.prompt).toContain('Your handoff was refused:\n- handoff.field: scaffold: ## Stand-ins is missing or has no row')
-  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['handoff.field'], note: expect.stringContaining('scaffold handoff refused twice') as string })
+  expect(packets[2]?.prompt).toContain(`Your handoff was refused:\n${line}`)
+  expect(outcome).toMatchObject({ outcome: 'needs_coo', spans: ['handoff.field'], note: 'scaffold handoff refused twice on the same span' })
+  expect(maybe(tree, 1, 'refusal.md')).toContain(`scaffold handoff refused twice on the same span\n\nspans:\n  - handoff.field\n\nRefused:\n${line}\n\nRefused again:\n${line}\n`)
 })
 
 test('D4: no lean packet carries the conductor prompt', async () => {

@@ -43,12 +43,14 @@ function project(selection = true): { root: string; handoffs: string } {
 
 const lines = (start: number, end: number): Buffer => Buffer.from(V.toString().split('\n').slice(start - 1, end).map((l) => `${l}\n`).join(''))
 
-async function ran(handoffs: string, maps: Record<string, string>) {
+async function ran(handoffs: string, maps: Record<string, string | string[]>) {
   const fires: { phase: string; issue: string }[] = []
   const { run } = benched((packet, phase) => {
     fires.push({ phase, issue: packet.prompt })
     writeFileSync(join(handoffs, `${phase}.md`), HANDED[phase as keyof typeof HANDED])
-    if (maps[phase] !== undefined) writeFileSync(join(handoffs, 'map.md'), maps[phase])
+    const map = maps[phase]
+    const text = typeof map === 'string' ? map : map?.[fires.filter((f) => f.phase === phase).length - 1]
+    if (text !== undefined) writeFileSync(join(handoffs, 'map.md'), text)
     return {}
   })
   return { fires, outcome: await run(skill, handoffs, 'scaffold') }
@@ -69,7 +71,7 @@ test('D2: excerpts are V.sol\'s bytes for the cited lines', () => {
 
 test('D5: a context run with no selection is handoff.map', async () => {
   const { handoffs } = project(false)
-  expect((await ran(handoffs, { context: CONTEXT })).outcome).toMatchObject({ outcome: 'refuse', spans: ['handoff.map'] })
+  expect((await ran(handoffs, { context: CONTEXT })).outcome).toMatchObject({ outcome: 'needs_coo', spans: ['handoff.map'] })
 })
 
 test('D6: scaffold names map and excerpts, Guards rewrite refused', async () => {
@@ -79,5 +81,26 @@ test('D6: scaffold names map and excerpts, Guards rewrite refused', async () => 
   expect(cut).toContain('guards-1.sol.txt')
   for (const file of ['map.md', ...cut.map((f) => join('excerpts', f))]) expect(fires[1]?.issue).toContain(join(handoffs, file))
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold'])
-  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['handoff.layer'] })
+  expect(outcome).toMatchObject({ outcome: 'needs_coo', spans: ['handoff.layer'] })
+})
+
+const GUARDS = '- handoff.cited: context: V.deposit under ## Guards cites src/V.sol L13-L15, which hold no require, revert or custom error'
+const LIMITS = '- handoff.cited: context: V.CAP under ## Limits cites src/V.sol L13-L15, which hold no state declaration or check'
+
+test('a context map refused twice alike goes to the director', async () => {
+  const { handoffs } = project()
+  const { fires, outcome } = await ran(handoffs, { context: CONTEXT.replace('L9-L9', 'L13-L15') })
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'context'])
+  expect(outcome).toEqual({ outcome: 'needs_coo', spans: ['handoff.cited'], note: 'context handoff refused twice on the same span',
+    message: `Refused:\n${GUARDS}\n\nRefused again:\n${GUARDS}` })
+})
+
+test('a context map refused on new items runs again', async () => {
+  const { handoffs } = project()
+  const context = [CONTEXT.replace('L9-L9', 'L13-L15'), CONTEXT.replace('L5-L5', 'L13-L15'), CONTEXT]
+  const { fires } = await ran(handoffs, { context, scaffold: `${MACHINE}\n${CONTEXT.replace('L9-L9', 'L9-L10')}` })
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'context', 'context', 'scaffold', 'scaffold'])
+  expect(fires[1]?.issue).toContain(`Your handoff was refused:\n${GUARDS}`)
+  expect(fires[2]?.issue).toContain(`Your handoff was refused:\n${LIMITS}`)
+  expect(fires[2]?.issue).not.toContain(GUARDS)
 })

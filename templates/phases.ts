@@ -265,7 +265,7 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
     }
     const miss = grade(phase, sum)
     if (miss !== null) return miss
-    writeFileSync(stopped,JSON.stringify({ phase, sum, smoked }))
+    writeFileSync(stopped, JSON.stringify({ phase, sum, smoked }))
     if (phase === stop) return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
   }
   return ended(bench, manifest, hash, handoffs, stopped, sum)

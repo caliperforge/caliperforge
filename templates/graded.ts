@@ -10,7 +10,7 @@ export interface Touched { functions: (At & { name: string })[]; state: string[]
 
 export type Phase = 'context' | 'suite' | 'coverage'
 
-type Half = [names: string[], hit: string[]]
+type Half = [kind: 'functions' | 'state', names: string[], hit: string[]]
 
 interface Changed { ranges: [number, number][]; text: string[] }
 
@@ -70,21 +70,23 @@ function halves(phase: Phase, dir: string, { functions, state }: Touched): Half[
   const names = functions.map((f) => f.name)
   if (phase === 'context') {
     const text = `${read(join(dir, HANDOFF, 'context.md'))}\n${read(join(dir, HANDOFF, 'map.md'))}`
-    return [[names, named(text, names)], [state, named(text, state)]]
+    return [['functions', names, named(text, names)], ['state', state, named(text, state)]]
   }
   if (phase === 'coverage') {
     const hits = covered(read(join(dir, LCOV)))
-    return [[names, functions.filter((f) => [...hits(f.file)].some(([line, n]) => n > 0 && line >= f.start && line <= f.end)).map((f) => f.name)]]
+    return [['functions', names, functions.filter((f) => [...hits(f.file)].some(([line, n]) => n > 0 && line >= f.start && line <= f.end)).map((f) => f.name)]]
   }
   const handlers = join(dir, 'test/fizz/handlers')
   const texts = readdirSync(handlers, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol')).map((p) => readFileSync(join(handlers, p), 'utf8'))
   const properties = read(join(dir, 'test/fizz/Properties.sol'))
   const getters = texts.flatMap((text) => [...text.matchAll(GETTER)]).filter(([, name = '']) => named(properties, [name]).length > 0).map(([, , body = '']) => body)
-  return [[names, names.filter((name) => texts.some((text) => text.includes(`.${bare(name)}(`)))], [state, named([properties, ...getters].join('\n'), state)]]
+  return [['functions', names, names.filter((name) => texts.some((text) => text.includes(`.${bare(name)}(`)))], ['state', state, named([properties, ...getters].join('\n'), state)]]
 }
 
 export function graded(phase: Phase, dir: string, t: Touched): string {
   const split = halves(phase, dir, t)
-  const missed = split.find(([, hit]) => hit.length === 0)
-  return missed === undefined ? `hit ${split.flatMap(([, hit]) => hit).join(', ')}` : `miss: ${phase} names none of ${missed[0].join(', ')}`
+  const kept = split.filter(([, names]) => names.length > 0)
+  if (kept.length === 0) return `cannot run: the fix touches no ${split.map(([kind]) => kind).join(' or ')}`
+  const missed = kept.find(([, , hit]) => hit.length === 0)
+  return missed === undefined ? `hit ${kept.flatMap(([, , hit]) => hit).join(', ')}` : `miss: ${phase} names none of ${missed[1].join(', ')}`
 }

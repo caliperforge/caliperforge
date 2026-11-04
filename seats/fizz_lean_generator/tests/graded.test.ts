@@ -52,6 +52,20 @@ test('coverage hits a counted line in the span, misses count 0', () => {
   expect(graded('coverage', lcov(0), T)).toBe('miss: coverage names none of Vault.setFee')
 })
 
+test('an empty half is skipped; with none left it cannot run', () => {
+  const stateless: Touched = { ...T, state: [] }
+  const grades = [
+    graded('context', written({ [`${META}/handoff/context.md`]: '- Vault.setFee\n' }), stateless),
+    graded('context', written({ [`${META}/handoff/context.md`]: '- Vault.deposit\n' }), stateless),
+    graded('suite', written({ 'test/fizz/handlers/VaultHandler.sol': HANDLER }), stateless),
+    graded('coverage', written({}), { ...T, functions: [] }),
+    graded('context', written({}), { functions: [], state: [] }),
+  ]
+  expect(grades).toEqual(['hit Vault.setFee', 'miss: context names none of Vault.setFee', 'hit Vault.setFee',
+    'cannot run: the fix touches no functions', 'cannot run: the fix touches no functions or state'])
+  expect(grades.filter((grade) => grade.endsWith('none of '))).toEqual([])
+})
+
 test('a target.yml with no fix cannot run', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-graded-'))
   put(root, 1, 'target.yml', 'repo: o/r\npre_fix: abc\nfiles: [src/Vault.sol]\n')

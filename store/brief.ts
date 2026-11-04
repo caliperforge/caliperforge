@@ -43,7 +43,7 @@ export function halted(db: Db): PlanLine[] {
 }
 
 export function heldBy(db: Db, by: Holder): PlanLine[] {
-  return (db.prepare(`${LINES} WHERE p.held_by = ? AND p.waits_on IS NULL ORDER BY p.queued_at, p.id`).all(by) as PlanLine[])
+  return (db.prepare(`${LINES} WHERE p.held_by = ? AND p.waits_on IS NULL AND p.state NOT IN ('done', 'refused') ORDER BY p.queued_at, p.id`).all(by) as PlanLine[])
     .map((p) => ({ ...p, held_why: until(db, p.id) ?? p.held_why }))
 }
 

@@ -16,6 +16,7 @@ const TEST = 'test/fizz/ProbeReadings.t.sol'
 const TRACKED = /^t_(?:uint\d+|bool)$/
 const LOGGED = /^\s*(\w+\.\w+)= (\d+|true|false)$/gm
 const TAIL = 2000
+const WALL = 10 * 60 * 1000
 
 const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1)
 
@@ -36,8 +37,9 @@ export function readings(probes: Suite['probes'], values: Map<string, Value>): P
   return read
 }
 
-function forge(root: string, args: string[]): string {
-  const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8' })
+function forge(root: string, args: string[], held = ''): string {
+  const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8', env: { ...process.env, FOUNDRY_PROFILE: 'fuzz' }, timeout: WALL })
+  if ((ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`forge ${args.join(' ')} passed the ${String(WALL)} ms wall clock${held}`)
   if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? ran.stderr.slice(-TAIL)}`)
   return ran.stdout
 }
@@ -55,8 +57,8 @@ function entry(root: string): Entry {
   return { name, file }
 }
 
-const replayed = (sequence: Sequence): string => `        vm.revertToState(snap);\n${sequence.map(({ call }) => `        vm.prank(address(uint160(${BigInt(call.from).toString()})));\n`
-  + `        address(harness).call(hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n`
+const replayed = (sequence: Sequence, i: number): string => `    function testSequence${String(i)}() public {\n${sequence.map(({ call }) => `        vm.prank(address(uint160(${BigInt(call.from).toString()})));\n`
+  + `        address(harness).call(hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n    }\n`
 
 const source = (replays: string, reads: string, { name, file }: Entry): string => `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
@@ -66,19 +68,16 @@ import {${name}} from "./${file}";
 interface Vm {
     function load(address target, bytes32 slot) external view returns (bytes32);
     function prank(address sender) external;
-    function snapshotState() external returns (uint256);
-    function revertToState(uint256 id) external returns (bool);
 }
 
 contract Readings {
     Vm constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
     address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
+    ${name} harness;
 
-    function testReadings() public {
-        ${name} harness = new ${name}();
-        uint256 snap = vm.snapshotState();
-${replays}    }
+    function setUp() public { harness = new ${name}(); }
 
+${replays}
     function logged(address h) internal view {
         address p;
 ${reads}    }
@@ -114,8 +113,9 @@ export function trackers(root: string, corpus: string): Map<string, Value> {
   ]))
   let out: string
   try {
-    writeFileSync(join(root, TEST), source(sequences.map(replayed).join(''), reads.join(''), contract))
-    out = forge(root, ['test', '-vv', '--match-path', TEST])
+    const text = source(sequences.map(replayed).join(''), reads.join(''), contract)
+    writeFileSync(join(root, TEST), text)
+    out = forge(root, ['test', '-vv', '--match-path', TEST], ` on ${TEST}: ${String(Buffer.byteLength(text))} bytes, ${String(sequences.length)} sequences`)
   } finally {
     rmSync(join(root, TEST), { force: true })
     rmSync(join(root, 'out/ProbeReadings.t.sol'), { recursive: true, force: true })

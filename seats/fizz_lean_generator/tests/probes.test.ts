@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, vi } from 'vitest'
+import { expect, onTestFinished, test, vi } from 'vitest'
 import { compiled } from '../../../templates/extract.ts'
 import { readings, trackers } from '../../../templates/probes.ts'
 import type { Suite } from '../../../templates/suite.ts'
@@ -30,8 +30,20 @@ function project(entry: string, targets = ['FuzzTester']): { root: string; corpu
   for (const dir of [join(root, 'out'), join(root, 'src'), join(corpus, 'call_sequences/immutable')]) mkdirSync(dir, { recursive: true })
   writeFileSync(join(root, 'test/fizz/FuzzTester.sol'), entry)
   writeFileSync(join(root, 'medusa.json'), JSON.stringify({ fuzzing: { targetContracts: targets } }))
-  writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n')
+  writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n\n[profile.fuzz]\nvia_ir = false\n')
   return { root, corpus }
+}
+
+function sequenced(count: number): { root: string; corpus: string } {
+  const made = project(HARNESS)
+  for (let i = 0; i < count; i++) writeFileSync(join(made.corpus, `call_sequences/immutable/${String(i)}.json`), JSON.stringify([{ call: { from: '0x10000', data: '0x12345678' } }]))
+  return made
+}
+
+function faked(tested: (cwd: string) => object): void {
+  onTestFinished(() => { vi.mocked(spawnSync).mockReset() })
+  vi.mocked(spawnSync).mockClear().mockImplementation(((...[, args, { cwd }]: [string, string[], { cwd: string }]) => args[0] === 'inspect'
+    ? { status: 0, stdout: '{"storage":[],"types":{}}', stderr: '' } : tested(cwd)) as unknown as typeof spawnSync)
 }
 
 test('D1: readings fills the V.CAP limit and the conversion', () => {
@@ -64,6 +76,29 @@ test('targetContracts not naming one is refused before forge', () => {
   const two = project(HARNESS, ['FuzzTester', 'Other'])
   expect(() => trackers(two.root, two.corpus)).toThrow(/fuzzing\.targetContracts/)
   expect(spawnSync).not.toHaveBeenCalled()
+})
+
+test('500 sequences write 500 test functions under fuzz and wall', () => {
+  const { root, corpus } = sequenced(500)
+  let text = ''
+  faked((cwd) => { text = readFileSync(join(cwd, TEST), 'utf8'); return { status: 0, stdout: '', stderr: '' } })
+  expect(trackers(root, corpus)).toEqual(new Map())
+  expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('testReadings')]).toEqual([500, false])
+  expect(vi.mocked(spawnSync).mock.calls.map(([, , o]) => [o?.env?.FOUNDRY_PROFILE, o?.timeout])).toEqual([['fuzz', 600_000], ['fuzz', 600_000]])
+})
+
+test('a forge test past the wall clock names size and count', () => {
+  const { root, corpus } = sequenced(500)
+  let bytes = 0
+  faked((cwd) => {
+    bytes = statSync(join(cwd, TEST)).size
+    mkdirSync(join(cwd, 'out/ProbeReadings.t.sol'))
+    return { status: null, signal: 'SIGTERM', error: Object.assign(new Error('spawnSync forge ETIMEDOUT'), { code: 'ETIMEDOUT' }), stdout: '', stderr: '' }
+  })
+  const run = vi.fn(() => trackers(root, corpus))
+  expect(run).toThrow()
+  expect(run.mock.results).toEqual([{ type: 'throw', value: new Error(`forge test -vv --match-path ${TEST} passed the 600000 ms wall clock on ${TEST}: ${String(bytes)} bytes, 500 sequences`) }])
+  expect([bytes > 0,existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([true, false, false])
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('D5: a failing forge test throws stderr and leaves no file', () => {

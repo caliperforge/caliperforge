@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { parseDocument } from 'yaml'
+import { type Document, parseDocument, visit } from 'yaml'
 import { z } from 'zod'
 import type { Verdict } from '../store/verdict.ts'
 
@@ -137,5 +137,12 @@ function passed(notes: Written[], prose: string, subject_digest: string): Judged
 function yaml(body: string): unknown {
   const doc = parseDocument(body)
   const loose = doc.errors.length === 0 ? doc : parseDocument(body.replace(LOOSE, (value) => JSON.stringify(value)))
-  return loose.errors.length === 0 ? loose.toJS() : null
+  return loose.errors.length === 0 && resolved(loose) ? loose.toJS() : null
+}
+
+/** `parseDocument` leaves an alias with no anchor, such as `*emphasis*`, out of `errors`; `toJS()` throws on it. */
+function resolved(doc: Document): boolean {
+  let unresolved = false
+  visit(doc, { Alias: (...[, alias]) => { unresolved ||= alias.resolve(doc) === undefined } })
+  return !unresolved
 }

@@ -17,7 +17,7 @@ import { rewind } from '../../../store/plans.ts'
 import { runTokens } from '../../../store/runs.ts'
 import { verdictRows } from '../../../store/verdict.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
-import { type Judged, read } from '../../verdict.ts'
+import { type Judged, read, unfilled } from '../../verdict.ts'
 
 const root = join(import.meta.dirname, '../../..')
 const TRANSCRIPT = join(tmpdir(), 'cf-review.transcript.jsonl')
@@ -244,6 +244,11 @@ test('a single quoted note value reads as today, an unclosed quote fails', () =>
   const block = NOTE('text', '3', '    why: "a" # see "b" c\n').replace('old: a', "old: |\n      label: 'x' + suffix,")
   expect(read(PASS(block), 'subject')).toMatchObject({ outcome: 'pass', notes: [{ old: "label: 'x' + suffix,\n", why: 'a' }] })
   expect(read(PASS(NOTE('text', '3', '    why: "as today\n')), 'subject')).toBeNull()
+})
+
+test('a note value that reads as an unset alias fails', () => {
+  expect(read(PASS(NOTE('text', '3', '    why: *emphasis*\n')), 'subject')).toBeNull()
+  expect(unfilled(`---\noutcome: refuse\nfindings:\n  - why: **bold**\n---\n`)).toBeNull()
 })
 
 test('a refuse of class claim.unverified reads, bare or wrapped', () => {

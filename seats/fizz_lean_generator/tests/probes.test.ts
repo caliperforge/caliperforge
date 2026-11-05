@@ -105,6 +105,13 @@ test('a forge test past the wall clock names size and count', () => {
   expect([bytes > 0, existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([true, false, false])
 })
 
+test('a failing forge names its last 40 stdout lines then stderr', () => {
+  const { root, corpus } = sequenced(1)
+  const lines = [...Array(45).keys()].map((i) => `line ${String(i + 1)}`)
+  faked(() => ({ status: 1, stdout: lines.join('\n\n'), stderr: 'boom\n' }))
+  expect(() => trackers(root, corpus)).toThrow(new Error(`forge test -vv --match-path ${TEST} exited 1: ${[...lines.slice(5), 'boom'].join(' ⏎ ')}`))
+})
+
 test('the coverage handoff names kept and dropped counts', () => {
   faked(() => ({ status: 0, stdout: '', stderr: '' }))
   const handoff = (count: number, text: string): string => {
@@ -119,9 +126,9 @@ test('the coverage handoff names kept and dropped counts', () => {
   expect(handoff(3, 'phase: coverage\n')).toBe('phase: coverage\nreplayed: 3 kept, 0 dropped\n')
 })
 
-test.runIf(process.env.CF_BENCH_LIVE === '1')('D5: a failing forge test throws stderr and leaves no file', () => {
+test.runIf(process.env.CF_BENCH_LIVE === '1')('an uncompilable probe file throws the compiler\'s message', () => {
   const { root, corpus } = project('pragma solidity ^0.8.20;\ncontract FuzzTester { constructor(uint256) {} }\n')
-  expect(() => trackers(root, corpus)).toThrow(/^forge test -vv --match-path test\/fizz\/ProbeReadings\.t\.sol exited 1: \S/)
+  expect(() => trackers(root, corpus)).toThrow(/exited 1: .*Wrong argument count/)
   expect([existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([false, false])
 }, 300_000)
 

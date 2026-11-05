@@ -15,7 +15,7 @@ interface Entry { name: string; file: string }
 const TEST = 'test/fizz/ProbeReadings.t.sol'
 const TRACKED = /^t_(?:uint\d+|bool)$/
 const LOGGED = /^\s*(\w+\.\w+)= (\d+|true|false)$/gm
-const TAIL = 2000
+const LINES = 40
 const WALL = 10 * 60 * 1000
 const CAP = 50
 const REPLAYED = /^replayed: .*$/m
@@ -25,6 +25,8 @@ const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1
 const larger = (a: bigint, b: bigint): bigint => a > b ? a : b
 
 const smaller = (a: bigint, b: bigint): bigint => a < b ? a : b
+
+const tail = (text: string): string[] => text.split('\n').filter((l) => l.trim() !== '').slice(-LINES)
 
 export function readings(probes: Suite['probes'], values: Map<string, Value>): ProbeReadings {
   const read: ProbeReadings = { limits: {}, conversions: {} }
@@ -42,7 +44,7 @@ export function readings(probes: Suite['probes'], values: Map<string, Value>): P
 function forge(root: string, args: string[], held = ''): string {
   const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8', env: { ...process.env, FOUNDRY_PROFILE: 'fuzz' }, timeout: WALL })
   if ((ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`forge ${args.join(' ')} passed the ${String(WALL)} ms wall clock${held}`)
-  if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? ran.stderr.slice(-TAIL)}`)
+  if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? [...tail(ran.stdout), ...tail(ran.stderr)].join(' ⏎ ')}`)
   return ran.stdout
 }
 

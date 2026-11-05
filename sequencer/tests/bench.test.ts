@@ -1006,6 +1006,15 @@ test('D1 D2 D3 --foundry-ignore-compile is --foundry-compile-all', () => {
   for (const copy of [forced, kept]) expect(JSON.stringify(copy)).not.toContain('--foundry-ignore-compile')
 })
 
+test('D1 D2 D4 --ignore-compile is dropped beside a custom out', () => {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'foundry.toml'), '[profile.default]\nout = "out-fuzz"\n')
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), compiled(['--foundry-compile-all', '--ignore-compile']))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const copy: unknown = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))
+  expect(copy).toMatchObject({ compilation: { platformConfig: { args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } } })
+})
+
 const TOML = '[profile.default]\nsrc = "src"\n'
 
 const FORGE = 'contract Test {}\n'
@@ -1246,6 +1255,9 @@ test('D4 a side under the floor or unread names that side', () => {
 const ERRORS = [{ property: 'p1', verdict: 'error', build_log_tail: 'Compiling 3 files\nError (7576): Undeclared identifier.\n  --> src/A.sol' },
   { property: 'p2', verdict: 'error', build_log_tail: 'Error: second' }]
 
+/** `buildError` of ERRORS from both seeds. */
+const TAILS = Array(2).fill(ERRORS.map((r) => r.build_log_tail).join('\n')).join('\n')
+
 /** The bench_scorecard row and score.json `scored` writes for run_pair rows `pairs`. */
 function scoredRows(pairs: object[]) {
   const { root, db } = scoring(writes('.jsonl', pairs))
@@ -1256,7 +1268,13 @@ function scoredRows(pairs: object[]) {
 test('1645b D1 all error rows record compile_failed and the error', () => {
   const { row, json } = scoredRows(ERRORS)
   expect(row).toMatchObject({ catches: 0, false_positives: 0, not_powered: 'compile_failed' })
-  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Error (7576): Undeclared identifier.' })
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: TAILS })
+})
+
+test('1645b D1 build_error keeps the last 40 lines of a long tail', () => {
+  const tail = [...Array(50).keys()].map((at) => `line ${String(at + 1)}`)
+  const { json } = scoredRows([{ verdict: 'error', build_log_tail: `${tail.join('\n')}\n` }])
+  expect(json).toMatchObject({ build_error: tail.slice(10).join('\n') })
 })
 
 test('1645b D2 failed is compile_failed before every other reason', () => {
@@ -1270,10 +1288,11 @@ test('1645b D3 one row not error scores as today, no build_error', () => {
   expect(json).not.toHaveProperty('build_error')
 })
 
-test('1645b D6 all error with no error line records a null error', () => {
+test('1645b D6 all error records the string tails, null with none', () => {
   const { row, json } = scoredRows([{ verdict: 'error', build_log_tail: 'Compiling 3 files' }, { verdict: 'error', build_log_tail: 7 }, { verdict: 'error' }])
   expect(row?.not_powered).toBe('compile_failed')
-  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: null })
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Compiling 3 files\nCompiling 3 files' })
+  expect(scoredRows([{ verdict: 'error', build_log_tail: 7 }, { verdict: 'error' }]).json).toMatchObject({ build_error: null })
 })
 
 /** A run_pair that logs the FOUNDRY_VIA_IR and FOUNDRY_OPTIMIZER_RUNS it sees to `runs`, then fails stack-too-deep, or writes PAIRS via IR when `fixed`. */
@@ -1316,7 +1335,7 @@ test('D3 a rerun still too deep is compile_failed from the rerun', () => {
   const { row, json, seen } = retried(deep(false))
   expect(seen).toEqual(['- -', '- -', 'true -', 'true -'])
   expect(row?.not_powered).toBe('compile_failed')
-  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Error: Variable memPtr_102 is 1 too deep in the stack: true -', via_ir_retry: true })
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Compiling\nError: Variable memPtr_102 is 1 too deep in the stack: true -\nCompiling\nError: Variable memPtr_102 is 1 too deep in the stack: true -', via_ir_retry: true })
 })
 
 test('D4 run_pair sees the [profile.fuzz] keys, none without it', () => {
@@ -1616,7 +1635,7 @@ test('refuzz D6 error rows with no property are compile_failed', () => {
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toMatchObject([{ not_powered: 'compile_failed' }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ build_error: 'Error: one', union: { catch: 0, fp_candidate: 0, silent: 0 } })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ build_error: 'Error: one\nError: one', union: { catch: 0, fp_candidate: 0, silent: 0 } })
 })
 
 test('refuzz D7 null_check on hours 4 is capped at 4 × cap', () => {

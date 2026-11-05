@@ -22,7 +22,7 @@ const VALUES: [string, bigint | boolean][] = [['ProbeCap.maxTotal', 10n ** 24n],
   ['ProbeConvert.minAssets', 1n], ['ProbeConvert.saw1Wei', true], ['ProbeCalls.lastAssets', 5n]]
 const HARNESS = 'pragma solidity ^0.8.20;\nimport {ProbeCap} from "./Probes.sol";\n'
   + 'contract FuzzTester {\n    ProbeCap cap;\n    constructor() { setup(); }\n    function setup() public { cap = new ProbeCap(); }\n'
-  + '    function seen(uint256 t) external { cap.seen(t); }\n}\n'
+  + '    function seen(uint256 t) external { cap.seen(t); }\n    function stop() external { revert(); }\n}\n'
 
 function project(entry: string, targets = ['FuzzTester']): { root: string; corpus: string } {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-probes-'))
@@ -88,6 +88,7 @@ test('460 sequences replay 50, each handler, under fuzz and wall', () => {
   expect(trackers(root, corpus)).toEqual(new Map())
   expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('testReadings')]).toEqual([50, false])
   expect(selectors.filter((s) => text.includes(`hex"${s}"`))).toEqual(selectors)
+  expect([text.match(/replay\(/g)?.length, text.includes('address(harness).call(hex')]).toEqual([61, false])
   expect(vi.mocked(spawnSync).mock.calls.map(([, , o]) => [o?.env?.FOUNDRY_PROFILE, o?.timeout])).toEqual([['fuzz', 600_000], ['fuzz', 600_000]])
 })
 
@@ -105,11 +106,14 @@ test('a forge test past the wall clock names size and count', () => {
   expect([bytes > 0, existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([true, false, false])
 })
 
-test('a failing forge names its last 40 stdout lines then stderr', () => {
+test('a failing forge names failing tests, without warning blocks', () => {
   const { root, corpus } = sequenced(1)
-  const lines = [...Array(45).keys()].map((i) => `line ${String(i + 1)}`)
-  faked(() => ({ status: 1, stdout: lines.join('\n\n'), stderr: 'boom\n' }))
-  expect(() => trackers(root, corpus)).toThrow(new Error(`forge test -vv --match-path ${TEST} exited 1: ${[...lines.slice(5), 'boom'].join(' ⏎ ')}`))
+  const warning = ['Warning (9302): Return value of low-level calls not used.', `  --> ${TEST}:648:9:`, '   |', '648 |         address(harness).call(hex"12345678");', '']
+  const failed = [...Array(45).keys()].map((i) => `[FAIL: revert: ${String(i)}] testSequence${String(i)}() (gas: 1)`)
+  faked(() => ({ status: 1, stdout: [...warning, ...failed.flatMap((l) => [l, 'Logs:'])].join('\n'), stderr: 'Error: boom\n' }))
+  expect(() => trackers(root, corpus)).toThrow(new Error(`forge test -vv --match-path ${TEST} exited 1: ${[...failed.slice(6), 'Error: boom'].join(' ⏎ ')}`))
+  faked(() => ({ status: 1, stdout: ['Compiling 3 files', '', ...warning, 'Compiler run done'].join('\n'), stderr: '' }))
+  expect(() => trackers(root, corpus)).toThrow(new Error(`forge test -vv --match-path ${TEST} exited 1: Compiling 3 files ⏎ Compiler run done`))
 })
 
 test('the coverage handoff names kept and dropped counts', () => {
@@ -143,5 +147,19 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('D6: trackers keeps the largest ma
     writeFileSync(join(corpus, `call_sequences/immutable/${String(n)}.json`), JSON.stringify([{ call: { from: '0x10000', to: '0xa647ff3c36cfab592509e13860ab8c4f28781a66', data }, blockNumberDelay: 1, blockTimestampDelay: 1 }]))
   }
   expect(trackers(root, corpus)).toEqual(new Map([['ProbeCap.maxTotal', 5n]]))
+  expect([existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([false, false])
+}, 300_000)
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('a reverting replayed call still reads every tracker', () => {
+  const { root, corpus } = project(HARNESS)
+  copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
+  copyFileSync(join(fixtures, 'Probes.sol'), join(root, 'test/fizz/Probes.sol'))
+  expect(compiled(root)).toEqual([])
+  const ids = JSON.parse(spawnSync('forge', ['inspect', 'FuzzTester', 'methodIdentifiers', '--json'], { cwd: root, encoding: 'utf8' }).stdout) as Record<string, string>
+  const call = (data: string): object => ({ call: { from: '0x10000', data: `0x${data}` } })
+  const seen = (n: bigint): object => call(`${ids['seen(uint256)'] ?? ''}${n.toString(16).padStart(64, '0')}`)
+  writeFileSync(join(corpus, 'call_sequences/immutable/0.json'), JSON.stringify([seen(5n)]))
+  writeFileSync(join(corpus, 'call_sequences/immutable/1.json'), JSON.stringify([call(ids['stop()'] ?? ''), seen(7n)]))
+  expect(trackers(root, corpus)).toEqual(new Map([['ProbeCap.maxTotal', 7n]]))
   expect([existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([false, false])
 }, 300_000)

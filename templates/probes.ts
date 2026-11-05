@@ -19,6 +19,8 @@ const LINES = 40
 const WALL = 10 * 60 * 1000
 const CAP = 50
 const REPLAYED = /^replayed: .*$/m
+const WARNING = /^Warning \(\d+\)/
+const FAILED = /\[FAIL|error|revert/i
 
 const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1)
 
@@ -26,7 +28,19 @@ const larger = (a: bigint, b: bigint): bigint => a > b ? a : b
 
 const smaller = (a: bigint, b: bigint): bigint => a < b ? a : b
 
-const tail = (text: string): string[] => text.split('\n').filter((l) => l.trim() !== '').slice(-LINES)
+function unwarned(text: string): string[] {
+  let warned = false
+  return text.split('\n').filter((l) => {
+    warned = WARNING.test(l) || (warned && l.trim() !== '')
+    return !warned && l.trim() !== ''
+  })
+}
+
+function told(stdout: string, stderr: string): string {
+  const lines = [...unwarned(stdout), ...unwarned(stderr)]
+  const failed = lines.filter((l) => FAILED.test(l))
+  return (failed.length === 0 ? lines : failed).slice(-LINES).join(' ⏎ ')
+}
 
 export function readings(probes: Suite['probes'], values: Map<string, Value>): ProbeReadings {
   const read: ProbeReadings = { limits: {}, conversions: {} }
@@ -44,7 +58,7 @@ export function readings(probes: Suite['probes'], values: Map<string, Value>): P
 function forge(root: string, args: string[], held = ''): string {
   const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8', env: { ...process.env, FOUNDRY_PROFILE: 'fuzz' }, timeout: WALL })
   if ((ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`forge ${args.join(' ')} passed the ${String(WALL)} ms wall clock${held}`)
-  if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? [...tail(ran.stdout), ...tail(ran.stderr)].join(' ⏎ ')}`)
+  if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? told(ran.stdout, ran.stderr)}`)
   return ran.stdout
 }
 
@@ -61,8 +75,7 @@ function entry(root: string): Entry {
   return { name, file }
 }
 
-const replayed = (sequence: Sequence, i: number): string => `    function testSequence${String(i)}() public {\n${sequence.map(({ call }) => `        vm.prank(address(uint160(${BigInt(call.from).toString()})));\n`
-  + `        address(harness).call(hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n    }\n`
+const replayed = (sequence: Sequence, i: number): string => `    function testSequence${String(i)}() public {\n${sequence.map(({ call }) => `        replay(address(uint160(${BigInt(call.from).toString()})), hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n    }\n`
 
 const source = (replays: string, reads: string, { name, file }: Entry): string => `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
@@ -80,6 +93,8 @@ contract Readings {
     ${name} harness;
 
     function setUp() public { harness = new ${name}(); }
+
+    function replay(address from, bytes memory data) internal returns (bool ok) { vm.prank(from); (ok, ) = address(harness).call(data); }
 
 ${replays}
     function logged(address h) internal view {

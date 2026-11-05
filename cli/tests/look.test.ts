@@ -41,6 +41,18 @@ test.each<[string, string | typeof RangeError]>([
   expect(select(path, COUNT)).toEqual(before)
 })
 
+test('select names the real columns of an unknown column', () => {
+  const { path } = file()
+  expect(() => select(path, 'SELECT plan_id FROM events WHERE plan_id = 2150'))
+    .toThrow(/no such column: plan_id[^]*\nevents: id, plan, at, kind, actor, outcome, message, pointer, run(\n|$)/)
+})
+
+test('select names the store tables of an unknown table', () => {
+  const { path } = file()
+  expect(() => select(path, 'SELECT * FROM nonesuch'))
+    .toThrow(/^(?![^]*settings)no such table: nonesuch\ntables: (?=.*\bevents\b)(?=.*\bdeliverables\b)/)
+})
+
 test.each(['../1/x', '../../cf.db'])('D3 planFile refuses %s', (name) => {
   expect(() => planFile(mkdtempSync(join(tmpdir(), 'cf-look-')), 1, name)).toThrow('reads only inside')
 })

@@ -121,6 +121,10 @@ export function setPart(db: Db, id: number, part: string): void {
   db.prepare('UPDATE targets SET part = ? WHERE id = ?').run(part, id)
 }
 
+export function setRepo(db: Db, id: number, repo: string): void {
+  db.prepare('UPDATE targets SET repo = ? WHERE id = ?').run(repo, id)
+}
+
 export function setTake(db: Db, id: number, take: string): void {
   if (db.prepare('UPDATE targets SET coo_take = ? WHERE id = ?').run(take, id).changes === 0) throw new Error(`no target ${String(id)}`)
 }

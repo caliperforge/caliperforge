@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { dropPlan } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { hold, unhold } from '../hold.ts'
 import { cloned, planDir } from '../workspace.ts'
@@ -12,7 +13,7 @@ const src = (w: World) => join(planDir(w.root, ID), 'src')
 
 function mine(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   return w

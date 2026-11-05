@@ -26,7 +26,7 @@ function gh(wanted: boolean, body = 'b'): Read {
   }
 }
 
-const state = (w: ReturnType<typeof world>): unknown => w.db.prepare('SELECT state FROM targets WHERE id = 1').pluck().get()
+const state = (w: ReturnType<typeof world>): unknown => targetRow(w.db, 1).state
 
 /** What `cf approve target --by <actor>` writes, on the measurement taken at `measured`. */
 function signed(w: World, actor: 'ceo' | 'coo', measured?: string): void {

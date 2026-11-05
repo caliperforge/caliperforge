@@ -5,6 +5,7 @@ import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
 import { profile } from '../../store/profile.ts'
+import { setRepo } from '../../store/targets.ts'
 import { at } from '../../templates/pr-path.ts'
 import { gates, type OutsideLanguage } from '../gates.ts'
 import { prTitle } from '../pr.ts'
@@ -172,7 +173,7 @@ test.each([{ ai_trailer: false, trailer: 'Co-Authored-By: Claude' }, { ai_traile
 async function prompted(repo: string, step = 2, id = 1): Promise<string> {
   const w = world()
   cpSync(join(REPO, 'profiles'), join(w.root, 'profiles'), { recursive: true })
-  w.db.prepare('UPDATE targets SET repo = ? WHERE id = 1').run(repo)
+  setRepo(w.db, 1, repo)
   if (id !== 1) internalPlan(w.db, w.root, id)
   const seen: Packet[] = []
   await ran(w.db, w.root, plan(w.db, id), at(step), stub(CARRIED, 0, PASS, (p) => seen.push(p)), 'the ask', false)

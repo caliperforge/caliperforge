@@ -1,13 +1,12 @@
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { terminal } from '../../store/plans.ts'
+import { type PlanRow, putPlan, terminal } from '../../store/plans.ts'
 import { planDir, put, reap, srcDir } from '../workspace.ts'
 import { world, type World } from './world.ts'
 
-function laid(w: World, plan: number, state: string): string {
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step)
-    VALUES (?, ?, 1, 'pr_path', ?, '2026-09-20', 3)`).run(plan, w.pipe.id, state)
+function laid(w: World, plan: number, state: PlanRow['state']): string {
+  putPlan(w.db, { id: plan, pipe_id: w.pipe.id, target_id: 1, template: 'pr_path', state, queued_at: '2026-09-20', step: 3, retries: 0 })
   writeFileSync(join(srcDir(w.root, plan), 'hello.ts'), 'export const hello = 1\n')
   put(w.root, plan, 'refusal.md', 'the rails said no\n')
   return join(planDir(w.root, plan), 'src')
@@ -30,7 +29,7 @@ test('refused and halted go the same way', () => {
 
 test('a plan still in play keeps its checkout', () => {
   const w = world()
-  const live = ['queued', 'running', 'blocked_on_ceo'].map((state, at) => laid(w, 30 + at, state))
+  const live = (['queued', 'running', 'blocked_on_ceo'] as const).map((state, at) => laid(w, 30 + at, state))
   expect(reap(w.root, terminal(w.db))).toEqual([])
   expect(live.map((dir) => existsSync(dir))).toEqual([true, true, true])
 })

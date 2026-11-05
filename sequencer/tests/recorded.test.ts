@@ -4,7 +4,9 @@ import { fresh } from '../../checks/sqlite.ts'
 import type { Fired } from '../../providers/kind.ts'
 import { planRow } from '../../runner/index.ts'
 import { load, seat } from '../../runner/rules.ts'
+import { newestRun } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
+import { runOf } from '../../store/runs.ts'
 import { recorded } from '../seat.ts'
 
 const root = join(import.meta.dirname, '../..')
@@ -12,8 +14,7 @@ const root = join(import.meta.dirname, '../..')
 const fired = (usage: Fired['usage']): Fired =>
   ({ text: '', transcript_path: '/tmp/cf-recorded.transcript.jsonl', usage, seconds: 1, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
 
-const newest = (db: Db, column: string): unknown =>
-  db.prepare(`SELECT ${column} FROM runs WHERE id = (SELECT max(id) FROM runs)`).pluck().get()
+const newest = (db: Db, column: string): unknown => runOf(db, newestRun(db))[column]
 
 test('recorded() writes the fire\'s cost, or NULL when it has none', () => {
   const db = fresh(join(root, 'schema'))

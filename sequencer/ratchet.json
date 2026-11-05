@@ -152,21 +152,6 @@
   "symbols.ts": {
     "lines": 43
   },
-  "tests/park.test.ts": {
-    "prepare": 1
-  },
-  "tests/profile.test.ts": {
-    "prepare": 1
-  },
-  "tests/reap.test.ts": {
-    "prepare": 1
-  },
-  "tests/recorded.test.ts": {
-    "prepare": 1
-  },
-  "tests/resume.test.ts": {
-    "prepare": 1
-  },
   "tests/size.test.ts": {
     "prepare": 1
   },

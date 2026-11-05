@@ -50,7 +50,7 @@ export function selected(json: string): string[] {
 
 export function drawn(facts: Extracted, selection: string, text: string): string {
   const rows: Record<string, string[]> = {
-    Signatures: facts.signatures.map((s) => `${s.signature} | ${cited(s)}`),
+    Signatures: [...facts.signatures, ...facts.inherited].map((s) => `${s.signature} | ${cited(s)}`),
     'Selected entry points': selected(selection),
     Modifiers: facts.modifiers.map((m) => `${m.name} | ${cited(m)}`),
   }

@@ -20,7 +20,7 @@ import { grader } from './missed.ts'
 import { duplicated, packets, planned } from './plan.ts'
 import type { Step } from './pr-path.ts'
 import { readings, trackers } from './probes.ts'
-import { met, reach, unmet, written } from './reach.ts'
+import { met, reach, unlocated, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
 import { callee, rows, slices } from './slices.ts'
 import { packed, smoke, type Smoked, unrun } from './smoke.ts'
@@ -159,6 +159,8 @@ async function reached(bench: Bench, manifest: Seat, hash: string, skill: string
   if (broken !== undefined) return { outcome: 'refuse', spans: [broken.rule], note: broken.note }
   const items = reach(root, read(map), join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json'), readings(suite(root).probes, trackers(root, corpus)))
   writeFileSync(map, written(read(map), items))
+  const [lost] = unlocated(items)
+  if (lost !== undefined) return { outcome: 'refuse', spans: [lost.rule], note: lost.note }
   const fixes = fixing(bench, manifest, hash, handoffs, 'coverage', sum)
   const got = await fixes.fix({ name: 'reach', rules: machine(skill, 'coverage'), facts: '', run: () => unmet(read(map), items).map((i) => ({ rule: 'reach.unmet', note: i.note })) })
   if (!('turns' in got)) return got

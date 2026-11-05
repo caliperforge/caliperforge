@@ -10,6 +10,7 @@ import { pipeNamed, putPlan } from '../../../store/plans.ts'
 import { dried } from '../../../templates/dry.ts'
 import { compiled } from '../../../templates/extract.ts'
 import { trackers } from '../../../templates/probes.ts'
+import { reach } from '../../../templates/reach.ts'
 import type { Suite } from '../../../templates/suite.ts'
 
 const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [], standIns: [], probes: [], trackers: [], build: { command: null, via_ir: null, optimizer: null } }))
@@ -81,6 +82,17 @@ test('a throwing check refuses and every later row still prints', () => {
   const rows = ROWS.map((row) => row[1] === 'probe readings' ? [...row.slice(0, 2), 'refuse throw | forge inspect Harness exited 1: boom'] : row)
   expect(dried(db, root, 1, fizz())).toBe(table(rows))
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'swallowed').map((e) => [e.actor, e.message])).toEqual([['bench', 'forge inspect Harness exited 1: boom']])
+})
+
+test('an unlocated item refuses the reach and boundary rows', () => {
+  const corpus = `${META}/corpus_medusa`
+  const { db, root } = planted({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{}' })
+  const key = 'Selected entry points C.transfer(address to)'
+  vi.mocked(reach).mockReturnValueOnce([{ key, met: false, cells: ['at: none'], note: `${key}: no at`, reverts: [], located: false }])
+  const refused = `refuse reach.unlocated | 1 row(s) have no at: <file> L<start>-L<end> in map.md: ${key}`
+  const now = new Map([['probe readings', 'pass'], ['reach', refused], ['boundary', refused]])
+  const rows = ROWS.map(([phase = '', check = '', result = '']) => [phase, check, now.get(check) ?? result])
+  expect(dried(db, root, 1, fizz())).toBe(table(rows))
 })
 
 const tree = (dir: string): [string, string][] => readdirSync(dir, { recursive: true, encoding: 'utf8' }).sort()

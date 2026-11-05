@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeF
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
-import { extract } from '../../../templates/extract.ts'
+import { extract, type Node } from '../../../templates/extract.ts'
 import { drawn, excerpts } from '../../../templates/map.ts'
 import { benched } from './benched.ts'
 
@@ -59,6 +59,21 @@ async function ran(handoffs: string, maps: Record<string, string | string[]>) {
 test('D1: drawn writes the machine layer, keeps the agent\'s', () => {
   const { root } = project()
   expect(drawn(extract(root), SELECTION, `## Signatures\n\n- V.bogus() | at: src/V.sol L1-L1\n\n${CONTEXT}`)).toBe(`${MACHINE}\n${CONTEXT}`)
+})
+
+test('an inherited function gets its at: from the parent\'s file', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-fizz-map-'))
+  for (const dir of ['out/V.sol', 'out/C.sol', 'src', 'lib']) mkdirSync(join(root, dir), { recursive: true })
+  writeFileSync(join(root, 'lib/V.sol'), V)
+  writeFileSync(join(root, 'out/V.sol/V.json'), readFileSync(join(fixtures, 'V.ast.json'), 'utf8').replace('"src/V.sol"', '"lib/V.sol"'))
+  const { ast } = JSON.parse(readFileSync(join(fixtures, 'V.ast.json'), 'utf8')) as { ast: Node }
+  const withdraw = { ...ast.nodes?.[1]?.nodes?.find((n) => n.name === 'withdraw'), id: 70 }
+  const c = { id: 60, name: 'C', nodeType: 'ContractDefinition', src: '0:20:1', linearizedBaseContracts: [60, 50], nodes: [withdraw] }
+  writeFileSync(join(root, 'src/C.sol'), 'contract C is V {}\n')
+  writeFileSync(join(root, 'out/C.sol/C.json'), JSON.stringify({ ast: { absolutePath: 'src/C.sol', id: 61, nodeType: 'SourceUnit', src: '0:20:1', nodes: [c] } }))
+  const facts = extract(root)
+  expect(facts.inherited.map((s) => s.name)).toEqual(['C.deposit', 'C.convertToAssets'])
+  expect(drawn(facts, '[]', '')).toContain('- C.deposit(uint256 assets) | at: lib/V.sol L8-L11\n')
 })
 
 test('D2: excerpts are V.sol\'s bytes for the cited lines', () => {

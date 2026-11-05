@@ -15,6 +15,7 @@ export interface Extracted {
   state: (At & { name: string; constant: boolean; writers: string[]; writes: At[] })[]
   conversions: (At & { name: string; divisions: number[] })[]
   aggregates: string[]
+  inherited: Extracted['signatures']
 }
 
 export interface Node {
@@ -24,7 +25,7 @@ export interface Node {
   modifiers?: (Node & { modifierName: { name: string; referencedDeclaration?: number } })[]
   parameters?: { parameters: Node[] }; returnParameters?: { parameters: Node[] }
   leftHandSide?: Node; subExpression?: Node; baseExpression?: Node; expression?: Node
-  functionSelector?: string; storageLocation?: string; declarations?: (Node | null)[]; initialValue?: Node
+  functionSelector?: string; storageLocation?: string; declarations?: (Node | null)[]; initialValue?: Node; linearizedBaseContracts?: number[]
 }
 
 export interface Member { node: Node; name: string; at: (node: Node) => At }
@@ -162,12 +163,31 @@ function signatureOf(f: Member): Extracted['signatures'][number] {
     modifiers: (f.node.modifiers ?? []).map((m) => m.modifierName.name) }
 }
 
+interface Owner { file: string; unit: Node; c: Node }
+
+function inheritedOf(root: string, all: Map<string, Node>): Extracted['signatures'] {
+  const owners = new Map([...all].flatMap(([file, unit]) => (unit.nodes ?? []).filter((c) => c.nodeType === 'ContractDefinition').map((c): [number, Owner] => [c.id, { file, unit, c }])))
+  const read = new Map<string, Member[]>()
+  const membersIn = (file: string, unit: Node): Member[] => read.get(file) ?? read.set(file, membersOf(file, readFileSync(join(root, file)), unit)).get(file) ?? []
+  return [...owners.values()].filter(({ file }) => file.startsWith('src/')).flatMap(({ c }) => {
+    const firsts = new Map<string, [Owner, Node]>()
+    for (const base of (c.linearizedBaseContracts ?? []).flatMap((id) => owners.get(id) ?? [])) {
+      for (const f of (base.c.nodes ?? []).filter((n) => n.implemented === true && n.functionSelector !== undefined)) {
+        if (!firsts.has(f.functionSelector ?? '')) firsts.set(f.functionSelector ?? '', [base, f])
+      }
+    }
+    return [...firsts.values()].filter(([base]) => base.c !== c).flatMap(([{ file, unit }, f]) => membersIn(file, unit).filter((m) => m.node.id === f.id)
+      .map((m) => signatureOf({ ...m, name: `${c.name ?? ''}.${f.name ?? ''}` })))
+  })
+}
+
 export function extract(root: string): Extracted {
-  const units = new Map<string, Node>()
+  const all = new Map<string, Node>()
   for (const path of readdirSync(join(root, 'out'), { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.json'))) {
     const { ast } = JSON.parse(readFileSync(join(root, 'out', path), 'utf8')) as { ast?: Node }
-    if (ast?.absolutePath?.startsWith('src/') === true) units.set(ast.absolutePath, ast)
+    if (ast?.absolutePath !== undefined) all.set(ast.absolutePath, ast)
   }
+  const units = new Map([...all].filter(([file]) => file.startsWith('src/')))
   const sources = [...units].map(([file, unit]) => ({ file, unit, source: readFileSync(join(root, file)) }))
   const members = sources.flatMap(({ file, unit, source }) => membersOf(file, source, unit))
   const of = (type: string): Member[] => members.filter((m) => m.node.nodeType === type)
@@ -185,5 +205,6 @@ export function extract(root: string): Extracted {
       writers: writers.filter((e) => e.writes.some((w) => w.id === v.node.id)).map((e) => e.name), writes: writes.filter((w) => w.id === v.node.id).map((w) => w.at) })),
     conversions: functions.flatMap(conversionsOf),
     aggregates: vars.filter((v) => aggregate(v, direct)).map((v) => v.name),
+    inherited: inheritedOf(root, all),
   }
 }

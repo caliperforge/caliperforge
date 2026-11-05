@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { filled } from './handoff.ts'
+import { filled, type Refused } from './handoff.ts'
 import { laid, RANGE } from './map.ts'
 import type { Reach } from './report.ts'
 import { NONE, type Row, rows } from './slices.ts'
 
 export interface ProbeReadings { limits: Record<string, { max: bigint }>; conversions: Record<string, { min: bigint; max: bigint; saw1Wei: boolean }> }
 
-export interface Item { key: string; met: boolean; cells: string[]; note: string; reverts: string[] }
+export interface Item { key: string; met: boolean; cells: string[]; note: string; reverts: string[]; located: boolean }
 
 type Judged = Pick<Item, 'met' | 'cells' | 'note'>
 
@@ -26,6 +26,7 @@ const TYPES: [string, RegExp][] = [['allowance/balance', /allowance|balance/i], 
 const FLOORS = { lines: 50, success: 10 }
 const WIDE = 10n ** 24n
 const UNCALLED: Metrics = { totalCalls: 0, totalReverts: 0, revertReasonMetrics: {} }
+const UNLOCATED: Judged = { met: false, cells: ['at: none'], note: 'no at: <file> L<start>-L<end> in map.md' }
 
 const yes = (b: boolean): string => b ? 'yes' : 'no'
 
@@ -33,10 +34,9 @@ const pct = (part: number, whole: number): number => whole === 0 ? 0 : Math.roun
 
 const floored = (key: keyof typeof FLOORS, n: number): string => `${key}: ${String(n)}%${n < FLOORS[key] ? ` (below ${String(FLOORS[key])})` : ''}`
 
-function span(row: Row | undefined, name: string): [string, number, number] {
+function span(row: Row | undefined): [string, number, number] | undefined {
   const [, file, start, end] = RANGE.exec(row?.cells.get('at') ?? '') ?? []
-  if (file === undefined) throw new Error(`${name} has no at: <file> L<start>-L<end> in map.md`)
-  return [file, Number(start), Number(end)]
+  return file === undefined ? undefined : [file, Number(start), Number(end)]
 }
 
 export const covered = (lcov: string) => (file: string): Map<number, number> => {
@@ -66,7 +66,9 @@ function integer(text: string): bigint | undefined {
 function entry({ rows: map, hits, metrics }: Read, { name }: Row): Judged {
   const m = metrics(name)
   const successes = m.totalCalls - m.totalReverts
-  const [file, start, end] = span(map.get('Signatures')?.find((s) => s.name.startsWith(`${name.split('(')[0] ?? ''}(`)), name)
+  const at = span(map.get('Signatures')?.find((s) => s.name.startsWith(`${name.split('(')[0] ?? ''}(`)))
+  if (at === undefined) return UNLOCATED
+  const [file, start, end] = at
   const lines = [...hits(file)].filter(([l]) => l >= start && l <= end)
   return { met: successes > 0, note: m === UNCALLED ? 'never called' : 'no successful call',
     cells: [`calls: ${String(m.totalCalls)}`, `successes: ${String(successes)}`, floored('success', pct(successes, m.totalCalls)),
@@ -74,7 +76,9 @@ function entry({ rows: map, hits, metrics }: Read, { name }: Row): Judged {
 }
 
 function guard({ root, hits, metrics }: Read, row: Row): Judged {
-  const [file, start, end] = span(row, row.name)
+  const at = span(row)
+  if (at === undefined) return UNLOCATED
+  const [file, start, end] = at
   const source = readFileSync(join(root, file), 'utf8').split('\n').slice(start - 1, end).join('\n')
   const [m, literal, error] = [metrics(row.name), LITERAL.exec(source)?.[1], ERROR.exec(source)?.[1]]
   const seen = (match: (reason: string) => boolean): boolean => Object.entries(m.revertReasonMetrics).some(([r, { count }]) => match(r) && count > 0)
@@ -104,8 +108,13 @@ export function reach(root: string, map: string, lcov: string, report: string, p
   const read: Read = { root, rows: rows(map), hits: covered(readFileSync(lcov, 'utf8')), metrics: measured(JSON.parse(readFileSync(report, 'utf8')) as Revert), probes }
   return Object.entries(JUDGES).flatMap(([section, judge]) => (read.rows.get(section) ?? []).filter((row) => row.name !== NONE).map((row) => {
     const [key, judged] = [`${section} ${row.name}`, judge(read, row)]
-    return { ...judged, key, note: judged.met ? '' : `${key}: ${judged.note}`, reverts: reverts(read.metrics(row.name)) }
+    return { ...judged, key, note: judged.met ? '' : `${key}: ${judged.note}`, reverts: reverts(read.metrics(row.name)), located: judged !== UNLOCATED }
   }))
+}
+
+export function unlocated(items: Item[]): Refused[] {
+  const keys = items.filter((i) => !i.located).map((i) => i.key)
+  return keys.length === 0 ? [] : [{ rule: 'reach.unlocated', note: `${String(keys.length)} row(s) have no at: <file> L<start>-L<end> in map.md: ${keys.join(', ')}` }]
 }
 
 export function written(map: string, items: Item[]): string {
@@ -114,7 +123,7 @@ export function written(map: string, items: Item[]): string {
 
 export function unmet(map: string, items: Item[]): Item[] {
   const reasoned = (rows(map).get('Unreachable') ?? []).filter(({ cells }) => filled(cells.get('reason'))).map((r) => r.name)
-  return items.filter((i) => !i.met && !reasoned.includes(i.key))
+  return items.filter((i) => i.located && !i.met && !reasoned.includes(i.key))
 }
 
 export function met(map: string, items: Item[]): Reach {

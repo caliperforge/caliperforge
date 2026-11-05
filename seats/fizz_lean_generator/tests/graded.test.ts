@@ -25,7 +25,7 @@ const fn = (name: string, file: string, start: number, end: number): Extracted['
 const variable = (name: string, line: number, constant = false): Extracted['state'][number] => ({ file: VAULT, start: line, end: line, name, constant, writers: [], writes: [] })
 
 test('touched skips hunks outside bodies, keeps named state', () => {
-  const extracted: Extracted = { sources: {}, modifiers: [], checks: [], conversions: [], aggregates: [],
+  const extracted: Extracted = { sources: {}, modifiers: [], checks: [], conversions: [], aggregates: [], inherited: [],
     signatures: [fn('Vault.deposit', VAULT, 20, 25), fn('Vault.setFee', VAULT, 28, 33), fn('Other.run', 'src/Other.sol', 25, 35)],
     state: [variable('Vault.cap', 3), variable('Vault.fee', 4), variable('Vault.MAX', 5, true), variable('Vault.idle', 6)] }
   const diff = ['diff --git a/src/Vault.sol b/src/Vault.sol', 'index 1111111..2222222 100644', '--- a/src/Vault.sol', '+++ b/src/Vault.sol',

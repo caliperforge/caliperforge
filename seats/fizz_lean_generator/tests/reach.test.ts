@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { layered } from '../../../templates/handoff.ts'
 import { sections } from '../../../templates/map.ts'
-import { type Item, met, type ProbeReadings, reach, unmet, written } from '../../../templates/reach.ts'
+import { type Item, met, type ProbeReadings, reach, unlocated, unmet, written } from '../../../templates/reach.ts'
 
 const fixtures = join(import.meta.dirname, 'fixtures')
 const REPORT = join(fixtures, 'reach_revert_report.json')
@@ -21,11 +21,11 @@ const MAP = [
 const PROBES: ProbeReadings = { limits: { 'V.CAP': { max: 5n * 10n ** 23n } }, conversions: { 'V.convertToAssets': { min: 0n, max: 2n * 10n ** 24n, saw1Wei: false } } }
 const WITHDRAW = 'Selected entry points V.withdraw(uint256 assets)'
 
-function judged(probes = PROBES, report = REPORT): Item[] {
+function judged(probes = PROBES, report = REPORT, map = MAP, lcov = join(fixtures, 'lcov.info')): Item[] {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-reach-'))
   mkdirSync(join(root, 'src'))
   copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
-  return reach(root, MAP, join(fixtures, 'lcov.info'), report, probes)
+  return reach(root, map, lcov, report, probes)
 }
 
 const at = (items: Item[], key: string): Item | undefined => items.find((i) => i.key === key)
@@ -56,6 +56,23 @@ test('D4: entry rows carry typed reverts, line and success %', () => {
     'reverts: panic: arithmetic underflow/overflow [other] 25, paused [paused] 3'] })
   expect(at(items, 'Selected entry points V.deposit(uint256 assets)')?.cells).toEqual(['calls: 40', 'successes: 40', 'success: 100%', 'lines: 100%', 'reverts: none'])
   expect(keys(unmet(MAP, items))).not.toContain(WITHDRAW)
+})
+
+test('an inherited entry point counts its parent file\'s lines', () => {
+  const lcov = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'lcov.info')
+  writeFileSync(lcov, readFileSync(join(fixtures, 'lcov.info'), 'utf8').replace('src/V.sol', 'lib/V.sol'))
+  const map = '## Signatures\n\n- C.deposit(uint256 assets) | at: lib/V.sol L8-L11\n\n## Selected entry points\n\n- C.deposit(uint256 assets) | tier: primary\n'
+  expect(at(judged(PROBES, REPORT, map, lcov), 'Selected entry points C.deposit(uint256 assets)')?.cells).toContain('lines: 100%')
+})
+
+test('a row with no range is reach.unlocated, not a throw', () => {
+  const map = MAP.replace('| tier: secondary\n', '| tier: secondary\n- V.transfer(address to) | tier: primary\n').replace('L14-L14\n', 'L14-L14\n- V.transfer | reverts: never\n')
+  const items = judged(PROBES, REPORT, map)
+  const lost = ['Selected entry points V.transfer(address to)', 'Guards V.transfer']
+  expect(keys(items.filter((i) => !i.located))).toEqual(lost)
+  expect(unlocated(items)).toEqual([{ rule: 'reach.unlocated', note: `2 row(s) have no at: <file> L<start>-L<end> in map.md: ${lost.join(', ')}` }])
+  for (const key of lost) expect(keys(unmet(map, items))).not.toContain(key)
+  expect(unlocated(judged())).toEqual([])
 })
 
 test('D5: unmet drops only a filled Unreachable reason', () => {

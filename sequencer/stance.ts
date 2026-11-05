@@ -23,6 +23,9 @@ const MAINTAINERS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const ABOUT = /\b(?:AI|LLMs?|agents?|Copilot|ChatGPT|Claude|(?:AI|machine)[- ]generated|generated code)\b/i
 const NO = /\b(?:no|not|never|won't|don't|cannot|refuse[sd]?|reject(?:ed)?|prohibit(?:ed)?|forbid(?:den)?|ban(?:ned)?)\b/i
 const YES = /\b(?:welcome[sd]?|accept(?:s|ed)?|allow(?:s|ed)?|permit(?:s|ted)?)\b/i
+const MAY = /\b(?:may use|allowed|welcome[sd]?|permitted)\b/i
+const BANNED = /\b(?:do not accept|not accepted|prohibited|banned|will be closed)\b/i
+const OPTION = /^[-*+] \[[ xX]\]/
 const DISCLOSED = /co-authored-by: (?:claude|copilot)|generated with \[?claude code|\b(?:AI|LLM)[- ](?:assisted|generated)\b/i
 const DAYS = 90
 const LINE = /^- ai stance: (open|closed|unstated) — (.*)$/gm
@@ -38,10 +41,13 @@ export function stanceOf(repo: string, no: number, read: Read, now = new Date())
     ...files.flatMap((f) => linesOf(Buffer.from(Blob.parse(read(['api', `repos/${repo}/git/blobs/${f.sha}`])).content, 'base64').toString('utf8'),
       (n) => `https://github.com/${repo}/blob/HEAD/${f.path}#L${String(n)}`)),
     ...comments.flatMap((c) => linesOf(c.body, () => c.html_url)),
-  ].filter((s) => ABOUT.test(s.line))
-  const closed = lines.filter((s) => NO.test(s.line))
-  if (closed.length > 0) return { stance: 'closed', says: cite(closed) }
-  const open = [...lines.filter((s) => YES.test(s.line)), ...outside.flatMap((p) => linesOf(p.body, () => p.url).filter((s) => DISCLOSED.test(s.line)))]
+  ].filter((s) => ABOUT.test(s.line) && !OPTION.test(s.line))
+  const closed = lines.filter((s) => NO.test(s.line) || BANNED.test(s.line))
+  const allowed = lines.filter((s) => (YES.test(s.line) || MAY.test(s.line)) && !NO.test(s.line))
+  if (closed.some((s) => BANNED.test(s.line)) || (closed.length > 0 && !allowed.some((s) => MAY.test(s.line)))) {
+    return { stance: 'closed', says: cite(closed) }
+  }
+  const open = [...allowed, ...outside.flatMap((p) => linesOf(p.body, () => p.url).filter((s) => DISCLOSED.test(s.line)))]
   if (open.length > 0) return { stance: 'open', says: cite(open) }
   return { stance: 'unstated', says: `no statement in ${String(files.length)} files, ${String(comments.length)} maintainer comments, `
     + `${String(outside.length)} outside merges in ${String(DAYS)} days` }

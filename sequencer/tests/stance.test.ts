@@ -43,6 +43,31 @@ test('D6 an outside merge generated with Claude Code is open', () => {
     .toEqual({ stance: 'open', says: `"Generated with Claude Code" ${PR}` })
 })
 
+test('a permission outweighs a negated line and unchecked options', () => {
+  const read = gh({ files: {
+    'CONTRIBUTING.md': '## AI-assisted contributions\n\nYou may use AI-assisted tools.\nYou must be able to explain every line of your diff without an LLM.\n',
+    '.github/pull_request_template.md': '- [ ] No AI tooling was used beyond editor autocomplete.\n- [ ] AI tooling was used.\n',
+  } })
+  expect(stanceOf(REPO, 12, read)).toEqual({
+    stance: 'open', says: '"You may use AI-assisted tools." https://github.com/acme/widget/blob/HEAD/CONTRIBUTING.md#L3' })
+})
+
+test('a ban is closed even beside a permission', () => {
+  const ban = 'We do not accept AI-generated contributions.'
+  expect(stanceOf(REPO, 12, gh({ files: { 'CONTRIBUTING.md': `You may use AI-assisted tools.\n${ban}\n` } }))).toEqual({
+    stance: 'closed', says: `"${ban}" https://github.com/acme/widget/blob/HEAD/CONTRIBUTING.md#L2` })
+  expect(stanceOf(REPO, 12, gh({ files: { 'CONTRIBUTING.md': 'PRs written by AI will be closed.\n' } })).stance).toBe('closed')
+})
+
+test('task-list option lines alone are unstated', () => {
+  const read = gh({ files: { '.github/pull_request_template.md': '- [ ] No AI tooling was used beyond editor autocomplete.\n' } })
+  expect(stanceOf(REPO, 12, read)).toEqual({ stance: 'unstated', says: 'no statement in 1 files, 0 maintainer comments, 0 outside merges in 90 days' })
+})
+
+test('a negated welcome is closed', () => {
+  expect(stanceOf(REPO, 12, gh({ files: { 'CONTRIBUTING.md': 'AI contributions are not welcome.\n' } })).stance).toBe('closed')
+})
+
 test('unstated counts files, maintainer comments, outside merges', () => {
   const read = gh({ files: { 'CONTRIBUTING.md': 'Run the tests.\n' }, comments: [{ body: 'thanks', author_association: 'OWNER' }],
     merged: [['outsider', 'b'], ['keeper', 'b']] })

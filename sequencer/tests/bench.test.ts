@@ -1006,7 +1006,7 @@ test('D1 D2 D3 --foundry-ignore-compile is --foundry-compile-all', () => {
   for (const copy of [forced, kept]) expect(JSON.stringify(copy)).not.toContain('--foundry-ignore-compile')
 })
 
-test('D1 D2 D4 --ignore-compile is dropped beside a custom out', () => {
+test('--ignore-compile is dropped beside a custom out', () => {
   const { root, db } = scoring()
   writeFileSync(join(srcDir(root, 1), 'foundry.toml'), '[profile.default]\nout = "out-fuzz"\n')
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), compiled(['--foundry-compile-all', '--ignore-compile']))
@@ -1271,7 +1271,7 @@ test('1645b D1 all error rows record compile_failed and the error', () => {
   expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: TAILS })
 })
 
-test('1645b D1 build_error keeps the last 40 lines of a long tail', () => {
+test('build_error keeps the last 40 lines of a long tail', () => {
   const tail = [...Array(50).keys()].map((at) => `line ${String(at + 1)}`)
   const { json } = scoredRows([{ verdict: 'error', build_log_tail: `${tail.join('\n')}\n` }])
   expect(json).toMatchObject({ build_error: tail.slice(10).join('\n') })
@@ -1288,7 +1288,7 @@ test('1645b D3 one row not error scores as today, no build_error', () => {
   expect(json).not.toHaveProperty('build_error')
 })
 
-test('1645b D6 all error records the string tails, null with none', () => {
+test('all error records the string tails, null with none', () => {
   const { row, json } = scoredRows([{ verdict: 'error', build_log_tail: 'Compiling 3 files' }, { verdict: 'error', build_log_tail: 7 }, { verdict: 'error' }])
   expect(row?.not_powered).toBe('compile_failed')
   expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Compiling 3 files\nCompiling 3 files' })

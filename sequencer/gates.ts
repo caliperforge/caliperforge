@@ -188,8 +188,9 @@ export function recipes(path: string): Set<string> | null {
 
 /**
  * The format check their CI runs, read off `.github/workflows`, at the workspace root; then the tests of
- * the crates the brief touches, never the whole workspace, which on surfpool is minutes of build. The tests take
- * the features their CI's `cargo test` line names, where the crate declares them: surfpool's `ignore_tests_ci`
+ * the crates the brief touches, never the whole workspace, which on surfpool is minutes of build. The tests run
+ * once per `cargo test` line in their CI, with that line's features where the crate declares them, never merged,
+ * as solana-keychain's `sdk-v2`/`sdk-v3`/`sdk-v4` exclude each other: surfpool's `ignore_tests_ci`
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
  * (surfpool's `postgres`) is left off, as this host runs no such service.
  */
@@ -197,20 +198,26 @@ function rust(src: string, files: string[], excused: string[], test?: string[]):
   const own = files.filter((f) => f.endsWith('.rs'))
   const root = workspace(src, own[0] ?? files[0] ?? '')
   const crates = unique(own.map((f) => crate(src, f)).filter((c): c is Crate => c !== null))
-  const wanted = ciFeatures(src)
-  const features = crates.flatMap((c) => wanted.filter((f) => c.features.has(f)).map((f) => `${c.name}/${f}`))
   const through = excused.some((span) => crates.some((c) => c.name === /^-p (\S+)/.exec(span)?.[1]))
-  return [
-    { script: 'format', bin: 'cargo', args: formatLine(src), dir: root },
-    { script: 'test', bin: 'cargo', args: test ?? ['test', ...crates.flatMap((c) => ['-p', c.name]),
-      ...(features.length === 0 ? [] : ['--features', features.join(',')]), ...(through ? ['--no-fail-fast'] : []), '--', '--test-threads=4'], dir: root },
-  ]
+  const runs = test === undefined ? featureArgs(crates, ciFeatures(src)).map((features) => ['test', ...crates.flatMap((c) => ['-p', c.name]),
+    ...features, ...(through ? ['--no-fail-fast'] : []), '--', '--test-threads=4']) : [test]
+  return [{ script: 'format', bin: 'cargo', args: formatLine(src), dir: root }, ...runs.map((args) => ({ script: 'test', bin: 'cargo', args, dir: root }))]
+}
+
+function featureArgs(crates: Crate[], sets: FeatureSet[]): string[][] {
+  const args = sets.map(({ features, bare }) => {
+    const named = crates.flatMap((c) => features.filter((f) => c.features.has(f)).map((f) => `${c.name}/${f}`))
+    return [...(bare ? ['--no-default-features'] : []), ...(named.length === 0 ? [] : ['--features', named.join(',')])]
+  }).filter((a) => a.length > 0)
+  return args.length === 0 ? [[]] : args.filter((a, at) => args.findIndex((b) => b.join(' ') === a.join(' ')) === at)
 }
 
 interface Crate {
   name: string
   features: Set<string>
 }
+
+interface FeatureSet { features: string[]; bare: boolean }
 
 function unique(crates: Crate[]): Crate[] {
   return crates.filter((c, at) => crates.findIndex((d) => d.name === c.name) === at)
@@ -259,13 +266,14 @@ const TEST_LINE = /\bcargo[ \t]+test\b[^\n]*/g
 
 const FEATURES = /(?:--features|-F)(?:[ \t]+|=)(?:"([^"]*)"|'([^']*)'|(\S+))/g
 
-/** The features every `cargo test` line in their workflows turns on, less those named for a service the CI starts. */
-export function ciFeatures(src: string): string[] {
+/** Each `cargo test` line's features in their workflows, in order, less those named for a service the CI starts. */
+export function ciFeatures(src: string): FeatureSet[] {
   const texts = workflows(src)
   const services = new Set(texts.flatMap((t) => [...t.matchAll(/^\s+image:\s*["']?([\w.-]+)/gm)].map((m) => m[1] ?? '')))
-  const named = texts.flatMap((t) => [...t.matchAll(TEST_LINE)].flatMap((line) => [...line[0].matchAll(FEATURES)]
-    .flatMap((m) => (m[1] ?? m[2] ?? m[3] ?? '').split(/[\s,]+/))))
-  return [...new Set(named.filter((f) => f !== '' && !services.has(f)))]
+  const sets = texts.flatMap((t) => [...t.matchAll(TEST_LINE)].map(([line]) => ({ features: [...new Set([...line.matchAll(FEATURES)]
+    .flatMap((m) => (m[1] ?? m[2] ?? m[3] ?? '').split(/[\s,]+/)))].filter((f) => f !== '' && !services.has(f)), bare: /--no-default-features\b/.test(line) })))
+    .filter((s) => s.features.length > 0 || s.bare)
+  return sets.filter((s, at) => sets.findIndex((o) => JSON.stringify(o) === JSON.stringify(s)) === at)
 }
 
 /** The topmost folder on the file's path that holds a Cargo.toml: `cargo fmt --all` reads the whole workspace from there. */

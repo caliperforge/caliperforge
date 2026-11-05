@@ -1256,10 +1256,56 @@ test('#204 rust tests take CI features, less services, per crate', () => {
     '.github/workflows/rust.yml': 'jobs:\n  build:\n    services:\n      postgres:\n        image: postgres:15\n    steps:\n'
       + '      - run: cargo test --all --verbose --features "postgres,ignore_tests_ci"\n',
   })
-  expect(ciFeatures(src)).toEqual(['ignore_tests_ci'])
+  expect(ciFeatures(src)).toEqual([{ features: ['ignore_tests_ci'], bare: false }])
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/types/src/types.rs', 'crates/core/src/types.rs'] })).toBeNull()
   expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci -- --test-threads=4 @${src}`)
+  expect(calls).toHaveLength(2)
+  const plain = heard()
+  expect(checks(src, {}, plain.run, [], { language: 'rust', files: ['crates/types/src/types.rs'] })).toBeNull()
+  expect(plain.calls.slice(1)).toEqual([`cargo test -p surfpool-types -- --test-threads=4 @${src}`])
+})
+
+const SDKS = ['sdk-v2', 'sdk-v3', 'sdk-v4']
+
+function keychain(lines: string[]): string {
+  return nested({
+    'Cargo.toml': '[package]\nname = "solana-keychain"\n\n[features]\nsdk-v2 = []\nsdk-v3 = []\nsdk-v4 = []\nunsafe-debug = []\nintegration-tests = []\n',
+    '.github/workflows/test.yml': `jobs:\n  test:\n    steps:\n${lines.map((l) => `      - run: ${l}\n`).join('')}`,
+  })
+}
+
+const PER_SDK = SDKS.map((sdk) => `cargo test --features ${sdk},unsafe-debug,integration-tests`)
+
+function sdkCommand(sdk: string): string {
+  return `cargo test -p solana-keychain --features solana-keychain/${sdk},solana-keychain/unsafe-debug,solana-keychain/integration-tests -- --test-threads=4`
+}
+
+test('rust tests run once per CI feature set, never their union', () => {
+  const src = keychain(PER_SDK)
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(calls.slice(1)).toEqual(SDKS.map((sdk) => `${sdkCommand(sdk)} @${src}`))
+  expect(calls.filter((c) => SDKS.filter((sdk) => c.includes(sdk)).length > 1)).toEqual([])
+})
+
+test('a red feature set refuses with its own command and stops', () => {
+  const src = keychain(PER_SDK)
+  const calls: string[] = []
+  const run: Run = (...[args, , bin]) => {
+    const command = `${bin ?? 'npm'} ${args.join(' ')}`
+    calls.push(command)
+    return command.includes('sdk-v3') ? { ok: false, code: '101', output: 'test failed' } : { ok: true, output: '' }
+  }
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toMatchObject({ script: 'test', command: sdkCommand('sdk-v3'), code: '101' })
+  expect(calls.some((c) => c.includes('sdk-v4'))).toBe(false)
+})
+
+test('a no-default-features CI line keeps defaults off', () => {
+  const src = keychain(['cargo test --no-default-features --features sdk-v4'])
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(calls[1]).toBe(`cargo test -p solana-keychain --no-default-features --features solana-keychain/sdk-v4 -- --test-threads=4 @${src}`)
 })
 
 const BINDINGS = 'jobs:\n  bindings:\n    steps:\n      - name: Verify committed bindings are up to date\n        run: |\n'

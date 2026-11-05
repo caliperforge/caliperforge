@@ -88,7 +88,7 @@ test('460 sequences replay 50, each handler, under fuzz and wall', () => {
   expect(trackers(root, corpus)).toEqual(new Map())
   expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('testReadings')]).toEqual([50, false])
   expect(selectors.filter((s) => text.includes(`hex"${s}"`))).toEqual(selectors)
-  expect([text.match(/replay\(/g)?.length, text.includes('address(harness).call(hex')]).toEqual([61, false])
+  expect([text.match(/replay\(/g)?.length, /^ *[\w()]+\.(?:static)?call\(/m.test(text)]).toEqual([61, false])
   expect(vi.mocked(spawnSync).mock.calls.map(([, , o]) => [o?.env?.FOUNDRY_PROFILE, o?.timeout])).toEqual([['fuzz', 600_000], ['fuzz', 600_000]])
 })
 

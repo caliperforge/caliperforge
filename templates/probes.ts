@@ -106,12 +106,12 @@ ${reads}    }
         return size == 32 ? w : w & ((1 << (size * 8)) - 1);
     }
 
-    function log(string memory key, uint256 value) internal view {
-        CONSOLE.staticcall(abi.encodeWithSignature("log(string,uint256)", key, value));
+    function log(string memory key, uint256 value) internal view returns (bool ok) {
+        (ok, ) = CONSOLE.staticcall(abi.encodeWithSignature("log(string,uint256)", key, value));
     }
 
-    function log(string memory key, bool value) internal view {
-        CONSOLE.staticcall(abi.encodeWithSignature("log(string,bool)", key, value));
+    function log(string memory key, bool value) internal view returns (bool ok) {
+        (ok, ) = CONSOLE.staticcall(abi.encodeWithSignature("log(string,bool)", key, value));
     }
 }
 `

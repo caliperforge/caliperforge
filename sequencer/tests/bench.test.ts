@@ -222,7 +222,9 @@ function staffedIn(root: string): void {
   for (const dir of ['rules', 'seats']) cpSync(join(REPO, dir), join(root, dir), { recursive: true })
 }
 
-const BODY = 'contract FizzTest {\n  function invariant_holds() public {}\n}\n'
+const suite = (properties: number): string => `contract FizzTest {\n${'  function invariant_holds() public {}\n'.repeat(properties)}}\n`
+
+const BODY = suite(3)
 
 /** A generator that spends `tokens`, ends `ended` and writes `body` to `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, when `xray`, x-ray/x-ray.md, and a transcript spawning `agents` sub-agents. */
 function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], stop: string | null = null, xray = false,
@@ -659,7 +661,7 @@ test('D3 a run at the ceiling is refused', async () => {
 
 test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
   const { root } = await generated(stub(1000, 'completed', true, null, true))
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 0, properties: 1 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 0, properties: 3 })
 })
 
 test('D4 generate.json counts the sub-agents the run spawned', async () => {
@@ -721,9 +723,15 @@ test('D1 a property outside Properties.sol is refused', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
-test('D2 a suite with one invariant_ function passes', async () => {
+test('a suite under 3 properties is refused, 3 pass', async () => {
+  for (const properties of [1, 2]) {
+    const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol'], null, false, suite(properties)))
+    expect(outcome).toEqual({ outcome: 'refuse', spans: ['bench.few_properties'],
+      note: `fizz_generator (completed, 1000 tokens) wrote ${String(properties)} properties under test/fizz, fewer than the 3 score counts` })
+    expect(maybe(root, 1, 'generate.json')).toBeNull()
+  }
   const { outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol']))
-  expect(outcome).toMatchObject({ outcome: 'pass', note: expect.stringMatching(/, 1 properties$/) as string })
+  expect(outcome).toMatchObject({ outcome: 'pass', note: expect.stringMatching(/, 3 properties$/) as string })
 })
 
 test('D4 a generate pass with 0 properties is seen', () => {
@@ -1200,6 +1208,7 @@ test('D3 8 agents and 1 property is few_properties', () => {
 test('D4 generate.json without properties counts the suite', () => {
   const { root, db } = sided(8, 505660, 505660)
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8 }))
+  writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), suite(1))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)[0]?.not_powered).toBe('few_properties')
 })
@@ -1490,7 +1499,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
   const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
   rmSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))
-  const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_holds() public {}\n}\n')
+  const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_a() public {}\n  function property_b() public {}\n  function property_c() public {}\n}\n')
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
   expect(fired.packets[0]?.reads).toEqual([real(ATTEMPTS)])

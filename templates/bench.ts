@@ -21,7 +21,7 @@ import { costWall, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { heldForCoo, profiled, rows, seedsOf } from './paired.ts'
 import { firing, phased, START } from './phases.ts'
-import { buildError, kept, powered, walled } from './powered.ts'
+import { buildError, FEWEST, fewer, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { report } from './report.ts'
 import { placed, recloned, rooted, scrapped } from './rooted.ts'
@@ -148,7 +148,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const { tokens, seconds, transcripts, wall } = sum
   if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall }, wall)
   const properties = unproven(join(dir, SUITE), `${name} (completed, ${String(tokens)} tokens)`)
-  if (typeof properties !== 'number') return properties
+  if (typeof properties !== 'number' || properties < FEWEST) return fewer(properties, name, tokens, SUITE)
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
   return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, properties }, `${name} completed, ${String(tokens)} tokens, ${String(properties)} properties`)
 }

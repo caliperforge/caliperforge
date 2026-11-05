@@ -9,15 +9,21 @@ type Keys = Pick<Score, 'target' | 'generator'>
 
 const AGENTS = 8
 
-const PROPERTIES = 3
+export const FEWEST = 3
 
 export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false, refuzz = false): Score['not_powered'] {
   if (failed) return 'compile_failed'
   if (agents < AGENTS) return 'reduced_generate'
-  if (properties < PROPERTIES) return 'few_properties'
+  if (properties < FEWEST) return 'few_properties'
   if (refuzz) return null
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'
   return fix === null || fix < FLOOR ? 'fix_calls' : null
+}
+
+/** `unproven`'s refusal, or the refusal of a suite under the FEWEST properties `powered` counts. */
+export function fewer(properties: Outcome | number, name: string, tokens: number, suite: string): Outcome {
+  return typeof properties === 'number' ? { outcome: 'refuse', spans: ['bench.few_properties'],
+    note: `${name} (completed, ${String(tokens)} tokens) wrote ${String(properties)} properties under ${suite}, fewer than the ${String(FEWEST)} score counts` } : properties
 }
 
 const UNCOUNTED: Score['not_powered'][] = ['compile_failed', 'wall', 'reduced_generate', 'few_properties']

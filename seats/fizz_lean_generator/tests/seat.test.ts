@@ -62,7 +62,7 @@ function stub(tokens: number, filled: Record<string, string>, spawns: Record<str
     mkdirSync(join(packet.cwd, HANDOFFS), { recursive: true })
     writeFileSync(join(packet.cwd, HANDOFFS, `${phase}.md`), filled[phase] ?? '')
     writeFileSync(packet.transcript, `${SPAWN}\n`.repeat(spawns[phase] ?? 0))
-    if (phase === 'invariants') writeFileSync(join(packet.cwd, 'test/fizz/Properties.sol'), 'contract P { function property_a() public {} }\n')
+    if (phase === 'invariants') writeFileSync(join(packet.cwd, 'test/fizz/Properties.sol'), 'contract P { function property_a() public {} function property_b() public {} function property_c() public {} }\n')
     return Promise.resolve({ text: '', transcript_path: packet.transcript, usage: { input: tokens - 1000, cache: 0, output: 1000 }, seconds: 1,
       ended: 'completed', exit: 0, stop_reason: null, denials: 0 })
   } } }
@@ -174,7 +174,7 @@ test('1994 D4: every lean packet is offline', async () => {
 
 test('D6: generate.json agents adds up every phase transcript', async () => {
   const { tree } = await generated('fizz_lean', 1000, FILLED, { context: 1, scaffold: 2 })
-  expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 4000, seconds: 4, properties: 1 })
+  expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 4000, seconds: 4, properties: 3 })
 })
 
 test('D4: stop_after context parks, unhold fires the rest', async () => {

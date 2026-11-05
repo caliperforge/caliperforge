@@ -10,7 +10,7 @@ interface Layout { storage: { label: string; slot: string; offset: number; type:
 
 type Sequence = { call: { from: string; data: string } }[]
 
-interface Entry { name: string; file: string }
+interface Entry { name: string; file: string; deployer: bigint; value: bigint }
 
 const TEST = 'test/fizz/ProbeReadings.t.sol'
 const TRACKED = /^t_(?:uint\d+|bool)$/
@@ -56,7 +56,7 @@ export function readings(probes: Suite['probes'], values: Map<string, Value>): P
 }
 
 function forge(root: string, args: string[], held = ''): string {
-  const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8', env: { ...process.env, FOUNDRY_PROFILE: 'fuzz' }, timeout: WALL })
+  const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8', env: { ...process.env, FOUNDRY_PROFILE: 'fuzz', FOUNDRY_CODE_SIZE_LIMIT: '4294967295' }, timeout: WALL })
   if ((ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new Error(`forge ${args.join(' ')} passed the ${String(WALL)} ms wall clock${held}`)
   if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? told(ran.stdout, ran.stderr)}`)
   return ran.stdout
@@ -65,19 +65,20 @@ function forge(root: string, args: string[], held = ''): string {
 const layout = (root: string, contract: string): Layout => JSON.parse(forge(root, ['inspect', contract, 'storageLayout', '--json'])) as Layout
 
 function entry(root: string): Entry {
-  const { fuzzing: { targetContracts = [] } = {} } = JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8')) as { fuzzing?: { targetContracts?: string[] } }
+  const { fuzzing: { targetContracts = [], deployerAddress = '0x30000', targetContractsBalances: [balance = 0] = [] } = {} } = JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8')) as
+    { fuzzing?: { targetContracts?: string[]; deployerAddress?: string; targetContractsBalances?: (string | number)[] } }
   if (targetContracts.length !== 1) throw new Error(`medusa.json fuzzing.targetContracts names ${String(targetContracts.length)} contracts; probe readings need exactly one`)
   const [name = ''] = targetContracts
   const dir = join(root, 'test/fizz')
   const declares = new RegExp(`\\bcontract ${name}\\b`)
   const file = readdirSync(dir, { recursive: true, encoding: 'utf8' }).find((p) => p.endsWith('.sol') && declares.test(readFileSync(join(dir, p), 'utf8')))
   if (file === undefined) throw new Error(`no .sol under test/fizz/ declares contract ${name}`)
-  return { name, file }
+  return { name, file, deployer: BigInt(deployerAddress), value: BigInt(balance) }
 }
 
 const replayed = (sequence: Sequence, i: number): string => `    function testSequence${String(i)}() public {\n${sequence.map(({ call }) => `        replay(address(uint160(${BigInt(call.from).toString()})), hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n    }\n`
 
-const source = (replays: string, reads: string, { name, file }: Entry): string => `// SPDX-License-Identifier: MIT
+const source = (replays: string, reads: string, { name, file, deployer, value }: Entry): string => `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import {${name}} from "./${file}";
@@ -85,6 +86,7 @@ import {${name}} from "./${file}";
 interface Vm {
     function load(address target, bytes32 slot) external view returns (bytes32);
     function prank(address sender) external;
+    function deal(address account, uint256 newBalance) external;
 }
 
 contract Readings {
@@ -92,7 +94,7 @@ contract Readings {
     address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
     ${name} harness;
 
-    function setUp() public { harness = new ${name}(); }
+    function setUp() public { vm.deal(address(uint160(${String(deployer)})), ${String(value)}); vm.prank(address(uint160(${String(deployer)}))); harness = new ${name}${value > 0n ? `{value: ${String(value)}}` : ''}(); }
 
     function replay(address from, bytes memory data) internal returns (bool ok) { vm.prank(from); (ok, ) = address(harness).call(data); }
 

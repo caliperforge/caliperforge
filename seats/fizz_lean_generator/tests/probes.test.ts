@@ -24,12 +24,12 @@ const HARNESS = 'pragma solidity ^0.8.20;\nimport {ProbeCap} from "./Probes.sol"
   + 'contract FuzzTester {\n    ProbeCap cap;\n    constructor() { setup(); }\n    function setup() public { cap = new ProbeCap(); }\n'
   + '    function seen(uint256 t) external { cap.seen(t); }\n    function stop() external { revert(); }\n}\n'
 
-function project(entry: string, targets = ['FuzzTester']): { root: string; corpus: string } {
+function project(entry: string, targets = ['FuzzTester'], fuzzing = {}): { root: string; corpus: string } {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-probes-'))
   const corpus = join(root, 'test/fizz/fizz_data/corpus_medusa')
   for (const dir of [join(root, 'out'), join(root, 'src'), join(corpus, 'call_sequences/immutable')]) mkdirSync(dir, { recursive: true })
   writeFileSync(join(root, 'test/fizz/FuzzTester.sol'), entry)
-  writeFileSync(join(root, 'medusa.json'), JSON.stringify({ fuzzing: { targetContracts: targets } }))
+  writeFileSync(join(root, 'medusa.json'), JSON.stringify({ fuzzing: { targetContracts: targets, ...fuzzing } }))
   writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n\n[profile.fuzz]\nvia_ir = false\n')
   return { root, corpus }
 }
@@ -78,6 +78,26 @@ test('targetContracts not naming one is refused before forge', () => {
   expect(spawnSync).not.toHaveBeenCalled()
 })
 
+test('the harness deploys from medusa.json\'s deployer and balance', () => {
+  const setUp = (fuzzing: object): string[] => {
+    const { root, corpus } = project(HARNESS, ['FuzzTester'], fuzzing)
+    let text = ''
+    faked((cwd) => { text = readFileSync(join(cwd, TEST), 'utf8'); return { status: 0, stdout: '', stderr: '' } })
+    trackers(root, corpus)
+    return (/function setUp\(\) public \{ (.*) \}$/m.exec(text)?.[1] ?? '').split('; ').map((s) => s.replace(/;?$/, ';'))
+  }
+  expect(setUp({ targetContractsBalances: ['0xd3c21bcecceda1000000'] })).toEqual(['vm.deal(address(uint160(196608)), 1000000000000000000000000);',
+    'vm.prank(address(uint160(196608)));', 'harness = new FuzzTester{value: 1000000000000000000000000}();'])
+  expect(setUp({})).toEqual(['vm.deal(address(uint160(196608)), 0);', 'vm.prank(address(uint160(196608)));', 'harness = new FuzzTester();'])
+})
+
+test('a balance that is not an integer throws before forge', () => {
+  vi.mocked(spawnSync).mockClear()
+  const { root, corpus } = project(HARNESS, ['FuzzTester'], { targetContractsBalances: ['lots'] })
+  expect(() => trackers(root, corpus)).toThrow(SyntaxError)
+  expect(spawnSync).not.toHaveBeenCalled()
+})
+
 test('460 sequences replay 50, each handler, under fuzz and wall', () => {
   const { root, corpus } = sequenced(400)
   const selectors = [1, 2, 3, 4, 5].map((n) => String(n).repeat(8))
@@ -89,7 +109,8 @@ test('460 sequences replay 50, each handler, under fuzz and wall', () => {
   expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('testReadings')]).toEqual([50, false])
   expect(selectors.filter((s) => text.includes(`hex"${s}"`))).toEqual(selectors)
   expect([text.match(/replay\(/g)?.length, /^ *[\w()]+\.(?:static)?call\(/m.test(text)]).toEqual([61, false])
-  expect(vi.mocked(spawnSync).mock.calls.map(([, , o]) => [o?.env?.FOUNDRY_PROFILE, o?.timeout])).toEqual([['fuzz', 600_000], ['fuzz', 600_000]])
+  expect(vi.mocked(spawnSync).mock.calls.map(([, , o]) => [o?.env?.FOUNDRY_PROFILE, o?.env?.FOUNDRY_CODE_SIZE_LIMIT, o?.timeout]))
+    .toEqual([['fuzz', '4294967295', 600_000], ['fuzz', '4294967295', 600_000]])
 })
 
 test('a forge test past the wall clock names size and count', () => {
@@ -162,4 +183,15 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('a reverting replayed call still r
   writeFileSync(join(corpus, 'call_sequences/immutable/1.json'), JSON.stringify([call(ids['stop()'] ?? ''), seen(7n)]))
   expect(trackers(root, corpus)).toEqual(new Map([['ProbeCap.maxTotal', 7n]]))
   expect([existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([false, false])
+}, 300_000)
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('a Medusa-deployed payable harness reads every tracker', () => {
+  const payable = HARNESS.replace('constructor() { setup(); }', 'constructor() payable { require(msg.sender == address(0x30000) && msg.value == 1e24); setup(); }')
+  const { root, corpus } = project(payable, ['FuzzTester'], { targetContractsBalances: ['0xd3c21bcecceda1000000'] })
+  copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
+  copyFileSync(join(fixtures, 'Probes.sol'), join(root, 'test/fizz/Probes.sol'))
+  expect(compiled(root)).toEqual([])
+  const ids = JSON.parse(spawnSync('forge', ['inspect', 'FuzzTester', 'methodIdentifiers', '--json'], { cwd: root, encoding: 'utf8' }).stdout) as Record<string, string>
+  writeFileSync(join(corpus, 'call_sequences/immutable/0.json'), JSON.stringify([{ call: { from: '0x10000', data: `0x${ids['seen(uint256)'] ?? ''}${5n.toString(16).padStart(64, '0')}` } }]))
+  expect(trackers(root, corpus)).toEqual(new Map([['ProbeCap.maxTotal', 5n]]))
 }, 300_000)

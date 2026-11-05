@@ -10,6 +10,7 @@ import { fresh } from './inherited.ts'
 import { contained, subprojects } from './loose.ts'
 import { malformed } from './malformed.ts'
 import { nodeTests, Package } from './node.ts'
+import { current } from './toolchain.ts'
 import { unfinished } from './unfinished.ts'
 
 export type Commands = NonNullable<Profile['commands']>
@@ -126,7 +127,8 @@ function stalled(gate: Gate, ran: Extract<Ran, { ok: false }>): string[] | null 
  */
 export function gated(src: string, list: Gate[], run: Run, excused: string[] = [], said?: (line: string) => void): Failure | null {
   for (const gate of list) {
-    const first = settled(gate, run(gate.args, join(src, gate.dir), gate.bin), excused)
+    const cwd = join(src, gate.dir)
+    const first = settled(gate, current(gate, run(gate.args, cwd, gate.bin), run, cwd, said), excused)
     if (first.ok || waived(src, gate, first.code, said)) continue
     const command = `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`
     const unfinished = stalled(gate, first)

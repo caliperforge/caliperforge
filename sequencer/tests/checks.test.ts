@@ -14,7 +14,7 @@ import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
 import { refusalRows, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { checks, excluded, finish, mode, network, npm, own, type Ran, type Run } from '../checks.ts'
+import { checks, excluded, finish, gated, mode, network, npm, own, type Ran, type Run } from '../checks.ts'
 import { ruledTest } from '../cited.ts'
 import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
@@ -1374,6 +1374,55 @@ test('2057 D5 ruledTest takes the last cargo verify, no shell', () => {
   expect(ruledTest('verify: cargo test -p a\nverify: npm test\nverify: `cargo test -p surfpool-core --lib remote::tests::`\n'))
     .toEqual(['test', '-p', 'surfpool-core', '--lib', 'remote::tests::'])
   for (const text of ['verify: npm test', 'verify: cargo test -p a && cargo fmt', 'verify: `cargo test -p a | tail`', 'no ruling']) expect(ruledTest(text)).toBeUndefined()
+})
+
+const OK: Ran = { ok: true, output: '' }
+const MSRV = 'error: rustc 1.96.1 is not supported by the following packages:\n  agave-feature-set@4.3.2 requires rustc 1.97.1\n'
+const TOO_OLD: Ran = { ok: false, code: '101', output: MSRV }
+
+function answered(...answers: Ran[]): { run: Run; calls: string[] } {
+  const calls: string[] = []
+  const run: Run = (args, cwd, bin) => {
+    calls.push(`${bin ?? 'npm'} ${args.join(' ')} @${cwd}`)
+    return answers[calls.length - 1] ?? OK
+  }
+  return { run, calls }
+}
+
+test('a rustc too old for a package updates stable and re-runs', () => {
+  const src = nested(PAY)
+  const at = join(src, 'rust')
+  const { run, calls } = answered(OK, TOO_OLD)
+  const lines: string[] = []
+  expect(checks(src, {}, run, [], KIT, [], undefined, (line) => lines.push(line))).toBeNull()
+  expect(calls.slice(1)).toEqual([`cargo test -p pay-core -- --test-threads=4 @${at}`, `rustup update stable --no-self-update @${at}`,
+    `cargo test -p pay-core -- --test-threads=4 @${at}`])
+  expect(lines).toEqual(['rustc 1.96.1 is older than agave-feature-set@4.3.2 needs (1.97.1): rustup updated stable'])
+})
+
+test('a failed rustup update refuses with no second cargo run', () => {
+  const { run, calls } = answered(OK, TOO_OLD, { ok: false, code: '1', output: 'error: could not download\n' })
+  expect(checks(nested(PAY), {}, run, [], KIT)).toMatchObject({ script: 'test', code: '1', output: 'rustup update stable --no-self-update exited 1\nerror: could not download\n' })
+  expect(calls).toHaveLength(3)
+})
+
+test('a re-run still too old refuses with its own output', () => {
+  const again = MSRV.replace('1.97.1', '1.98.0')
+  const { run, calls } = answered(OK, TOO_OLD, OK, { ok: false, code: '101', output: again })
+  expect(checks(nested(PAY), {}, run, [], KIT)).toMatchObject({ script: 'test', code: '101', output: again })
+  expect(calls.filter((call) => call.startsWith('rustup'))).toHaveLength(1)
+})
+
+test('a red test, red fmt or non-cargo gate runs no rustup', () => {
+  const reds: Ran[][] = [[OK, { ok: false, code: '101', output: 'test b ... FAILED\n' }], [{ ok: false, code: '1', output: 'Diff in src/lib.rs\n' }], [OK, OK]]
+  for (const answers of reds) {
+    const { run, calls } = answered(...answers)
+    checks(nested(PAY), {}, run, [], KIT)
+    expect(calls.join('\n')).not.toContain('rustup')
+  }
+  const { run, calls } = answered({ ok: false, code: '1', output: MSRV })
+  expect(gated(tmpdir(), [{ script: 'test', bin: 'npm', args: ['test'], dir: '' }], run)).toMatchObject({ output: MSRV })
+  expect(calls).toHaveLength(1)
 })
 
 test('a program that never starts is named', () => {

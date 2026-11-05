@@ -11,6 +11,8 @@ const AGENTS = 8
 
 export const FEWEST = 3
 
+const TAIL = 40
+
 export function degraded(properties: number, agents = 0): 'reduced_generate' | 'few_properties' | null {
   if (agents < AGENTS) return 'reduced_generate'
   return properties < FEWEST ? 'few_properties' : null
@@ -41,8 +43,8 @@ export function counted(notPowered: Score['not_powered'], critic: Event['outcome
 }
 
 export function buildError(rows: { build_log_tail?: unknown }[]): string | null {
-  const lines = rows.flatMap((r) => (typeof r.build_log_tail === 'string' ? r.build_log_tail.split('\n') : []))
-  return lines.find((line) => /error/i.test(line))?.trim() ?? null
+  const lines = rows.flatMap((r) => (typeof r.build_log_tail === 'string' ? r.build_log_tail.trimEnd().split('\n') : []))
+  return lines.length === 0 ? null : lines.slice(-TAIL).join('\n')
 }
 
 export function walled(db: Db, root: string, plan: number, keys: Keys, made: Pick<Score, 'tokens' | 'seconds' | 'x_ray'>, wall: string): Outcome {

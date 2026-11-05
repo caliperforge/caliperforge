@@ -258,7 +258,7 @@ function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hour
   }
   const platform = field(field(config, 'compilation'), 'platformConfig')
   const args = field(platform, 'args') ?? []
-  if (Array.isArray(args)) args.forEach((arg: unknown, at) => { if (arg === '--foundry-ignore-compile') args[at] = '--foundry-compile-all' })
+  if (Array.isArray(args)) args.splice(0, args.length, ...(args as unknown[]).flatMap((arg) => arg === '--ignore-compile' ? [] : [arg === '--foundry-ignore-compile' ? '--foundry-compile-all' : arg]))
   if (existsSync(join(src, 'foundry.toml')) && typeof platform === 'object' && platform !== null && Array.isArray(args) && !args.includes('--compile-force-framework')) Object.assign(platform, { args: [...(args as unknown[]), '--compile-force-framework', 'foundry'] })
   if (refuzz !== null && field(config, 'fuzzing') === undefined) Object.assign(config as object, { fuzzing: {} })
   const fuzzing = field(config, 'fuzzing')

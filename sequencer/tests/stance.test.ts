@@ -45,7 +45,8 @@ test('D6 an outside merge generated with Claude Code is open', () => {
 
 test('a permission outweighs a negated line and unchecked options', () => {
   const read = gh({ files: {
-    'CONTRIBUTING.md': '## AI-assisted contributions\n\nYou may use AI-assisted tools.\nYou must be able to explain every line of your diff without an LLM.\n',
+    'CONTRIBUTING.md': '## AI-assisted contributions\n\nYou may use AI-assisted tools.\nYou must be able to explain every line of your diff without an LLM.\n'
+      + 'You must not submit AI output you cannot explain.\n',
     '.github/pull_request_template.md': '- [ ] No AI tooling was used beyond editor autocomplete.\n- [ ] AI tooling was used.\n',
   } })
   expect(stanceOf(REPO, 12, read)).toEqual({

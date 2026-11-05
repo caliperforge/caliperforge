@@ -189,8 +189,8 @@ export function recipes(path: string): Set<string> | null {
 /**
  * The format check their CI runs, read off `.github/workflows`, at the workspace root; then the tests of
  * the crates the brief touches, never the whole workspace, which on surfpool is minutes of build. The tests run
- * once per `cargo test` line in their CI, with that line's features where the crate declares them, never merged,
- * as solana-keychain's `sdk-v2`/`sdk-v3`/`sdk-v4` exclude each other: surfpool's `ignore_tests_ci`
+ * once per `cargo test` line in their CI, with that line's features where the crate declares them:
+ * surfpool's `ignore_tests_ci`
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
  * (surfpool's `postgres`) is left off, as this host runs no such service.
  */

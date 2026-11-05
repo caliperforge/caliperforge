@@ -16,6 +16,7 @@ import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
+import { refusalRows } from '../../store/refusals.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
 import { counted, powered } from '../../templates/powered.ts'
 import { KINDS } from '../../templates/report.ts'
@@ -228,7 +229,7 @@ const BODY = suite(3)
 
 /** A generator that spends `tokens`, ends `ended` and writes `body` to `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, when `xray`, x-ray/x-ray.md, and a transcript spawning `agents` sub-agents. */
 function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], stop: string | null = null, xray = false,
-  body = BODY, agents = 0): { provider: Provider; packets: Packet[] } {
+  body = BODY, agents = 8): { provider: Provider; packets: Packet[] } {
   const packets: Packet[] = []
   return { packets, provider: { name: 'claude-agent-sdk', fire: (packet) => {
     packets.push(packet)
@@ -635,6 +636,21 @@ test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   expect(planById(db, 1).state).not.toBe('blocked_on_ceo')
 })
 
+test('tick on a degraded fizz suite refuses back to step 0', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  staffedIn(root)
+  checkedOut(root)
+  target(root, { generator: 'fizz' })
+  const db = fresh(schema)
+  dial(db, 3, AT)
+  queued(db, 'bench', 1)
+  await tick(db, root, stub(1000, 'completed', true, null, false, suite(1)).provider, OPENS)
+  expect(refusalRows(db, 1)).toMatchObject([{ step: 1, span: 'bench.few_properties' }])
+  expect(planById(db, 1).step).toBe(0)
+  expect(maybe(root, 1, 'generate.json')).toBeNull()
+  expect(maybe(root, 1, 'score.json')).toBeNull()
+})
+
 test('D3 cf return --to 1 on a NULL-lane bench plan fires it', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)
@@ -661,12 +677,12 @@ test('D3 a run at the ceiling is refused', async () => {
 
 test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
   const { root } = await generated(stub(1000, 'completed', true, null, true))
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 0, properties: 3 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 8, properties: 3 })
 })
 
 test('D4 generate.json counts the sub-agents the run spawned', async () => {
-  const { root, db } = await generated(stub(1000, 'completed', true, null, false, BODY, 8))
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toMatchObject({ agents: 8 })
+  const { root, db } = await generated(stub(1000, 'completed', true))
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toMatchObject({ agents: 8, properties: 3 })
   expect(runRows(db)).toMatchObject([{ transcript_path: join(planDir(root, 1), 'run-1.transcript.jsonl') }])
 })
 
@@ -723,15 +739,24 @@ test('D1 a property outside Properties.sol is refused', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
-test('a suite under 3 properties is refused, 3 pass', async () => {
-  for (const properties of [1, 2]) {
-    const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol'], null, false, suite(properties)))
-    expect(outcome).toEqual({ outcome: 'refuse', spans: ['bench.few_properties'],
-      note: `fizz_generator (completed, 1000 tokens) wrote ${String(properties)} properties under test/fizz, fewer than the 3 score counts` })
+test('a fizz suite under 3 properties or 8 agents goes to step 0', async () => {
+  for (const [properties, agents, why] of [[1, 8, 'few_properties'], [2, 8, 'few_properties'], [3, 5, 'reduced_generate'], [1, 5, 'reduced_generate']] as const) {
+    const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol'], null, false, suite(properties), agents))
+    expect(outcome).toEqual({ outcome: 'refuse', spans: [`bench.${why}`], to: 0,
+      note: `fizz_generator (completed, 1000 tokens) spawned ${String(agents)} sub-agents and wrote ${String(properties)} properties` })
     expect(maybe(root, 1, 'generate.json')).toBeNull()
   }
   const { outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol']))
   expect(outcome).toMatchObject({ outcome: 'pass', note: expect.stringMatching(/, 3 properties$/) as string })
+})
+
+test('a house_generator suite is not gated on agents', async () => {
+  const { root, outcome } = await generated(stub(1000, 'completed', true, null, false, BODY, 0), { generator: 'house_generator' })
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toMatchObject({ agents: 0, properties: 3 })
+  const few = await generated(stub(1000, 'completed', true, null, false, suite(1), 0), { generator: 'house_generator' })
+  expect(few.outcome).toEqual({ outcome: 'refuse', spans: ['bench.few_properties'],
+    note: 'house_generator (completed, 1000 tokens) wrote 1 properties under test/fizz, fewer than the 3 score counts' })
 })
 
 test('D4 a generate pass with 0 properties is seen', () => {
@@ -786,7 +811,7 @@ test('1617b D1 the generate packet carries the $40 cost wall', async () => {
 test('1617b D2 a cost-walled generate passes with its wall', async () => {
   const { root, outcome } = await generated(stub(1000, 'stopped', false, COST_WALLED))
   expect(outcome).toEqual({ outcome: 'pass', spans: [], note: `generate.json written: ${COST_WALLED}` })
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, wall: COST_WALLED, x_ray: 0, agents: 0 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, wall: COST_WALLED, x_ray: 0, agents: 8 })
 })
 
 test('1617b D3 a cost-walled generate scores wall, no pair', () => {
@@ -1499,7 +1524,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
   const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
   rmSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))
-  const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_a() public {}\n  function property_b() public {}\n  function property_c() public {}\n}\n')
+  const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_a() public {}\n  function property_b() public {}\n  function property_c() public {}\n}\n', 0)
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
   expect(fired.packets[0]?.reads).toEqual([real(ATTEMPTS)])
@@ -1514,7 +1539,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
 test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
   const { root, db, sha } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
-  expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), stub(1234, 'completed', true, null, true).provider))
+  expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), stub(1234, 'completed', true, null, true, BODY, 0).provider))
     .toMatchObject({ outcome: 'pass' })
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toMatchObject([{ plan: 1, x_ray: 1 }])

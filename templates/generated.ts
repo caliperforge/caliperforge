@@ -6,6 +6,7 @@ import { put } from '../sequencer/workspace.ts'
 import { price } from '../store/brief.ts'
 import type { Db } from '../store/index.ts'
 import { spawned } from '../store/transcript.ts'
+import { degraded } from './powered.ts'
 
 const BENCH_COST_WALL_USD = 40
 
@@ -19,9 +20,20 @@ export function costWalled(stop: string | null): string | null {
   return stop !== null && ['ruling:run.cost_wall', 'ruling:run.repeat_read'].some((wall) => stop.startsWith(wall)) ? stop : null
 }
 
+function agentsOf(transcripts: string[]): number {
+  return transcripts.reduce((n, transcript) => n + spawned(transcript), 0)
+}
+
+export function floored(name: string, tokens: number, transcripts: string[], properties: Outcome | number): Outcome | number {
+  if (typeof properties !== 'number' || name !== 'fizz_generator') return properties
+  const agents = agentsOf(transcripts)
+  const why = degraded(properties, agents)
+  return why === null ? properties : { outcome: 'refuse', spans: [`bench.${why}`],
+    note: `${name} (completed, ${String(tokens)} tokens) spawned ${String(agents)} sub-agents and wrote ${String(properties)} properties`, to: 0 }
+}
+
 export function written(root: string, plan: number, dir: string, transcripts: string[],
   made: { suite: string; tokens: number; seconds: number; wall?: string; properties?: number }, note: string): Outcome {
-  put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0,
-    agents: transcripts.reduce((n, transcript) => n + spawned(transcript), 0) }))
+  put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: agentsOf(transcripts) }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${note}` }
 }

@@ -17,7 +17,7 @@ import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
 import { CAP } from './extract.ts'
-import { costWall, written } from './generated.ts'
+import { costWall, floored, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { heldForCoo, profiled, rows, seedsOf } from './paired.ts'
 import { firing, phased, START } from './phases.ts'
@@ -147,7 +147,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if ('outcome' in sum) return sum
   const { tokens, seconds, transcripts, wall } = sum
   if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall }, wall)
-  const properties = unproven(join(dir, SUITE), `${name} (completed, ${String(tokens)} tokens)`)
+  const properties = floored(name, tokens, transcripts, unproven(join(dir, SUITE), `${name} (completed, ${String(tokens)} tokens)`))
   if (typeof properties !== 'number' || properties < FEWEST) return fewer(properties, name, tokens, SUITE)
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
   return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, properties }, `${name} completed, ${String(tokens)} tokens, ${String(properties)} properties`)

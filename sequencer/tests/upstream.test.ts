@@ -140,17 +140,17 @@ test.each([
   `- \`a.json\` — github.com/caliperforge/sky-schema@${PIN} gone.json`,
   '- `a.json` from sky-schema',
   `- \`.git/config\` — github.com/caliperforge/sky-schema@${PIN} schema/object.json`,
-  `- \`tests\` — github.com/caliperforge/sky-schema@${PIN} schema/object.json`,
+  `- \`lib\` — github.com/caliperforge/sky-schema@${PIN} schema/object.json`,
   `- \`a.ts/x.json\` — github.com/caliperforge/sky-schema@${PIN} schema/object.json`,
   GOOD,
 ])('%s is held for the CEO with no file written', (row) => {
   const db = seeded()
   const root = briefed(`## Vendored\n\n${GOOD}\n${row}\n\n`)
-  mkdirSync(join(srcDir(root, 7), 'tests'))
+  mkdirSync(join(srcDir(root, 7), 'lib'))
   writeFileSync(join(srcDir(root, 7), 'a.ts'), '')
   const { read } = upstream()
   const held = vendored(db, root, 7, read)
   expect(held).toMatchObject({ outcome: 'needs_ceo', spans: [row] })
   expect(held?.note.startsWith(`vendor: ${row}: `)).toBe(true)
-  expect(readdirSync(srcDir(root, 7), { recursive: true }).sort()).toEqual(['a.ts', 'tests'])
+  expect(readdirSync(srcDir(root, 7), { recursive: true }).sort()).toEqual(['a.ts', 'lib'])
 })

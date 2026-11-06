@@ -46,6 +46,16 @@ test('suite hits through a handler getter, else misses', () => {
     .toBe('miss: suite names none of Vault.fee, Vault.cap')
 })
 
+test('suite counts option calls, not comment or string mentions', () => {
+  const suite = (body: string, name: string): string => graded('suite', written({ 'test/fizz/handlers/H.sol': `contract H {\n${body}\n}\n` }),
+    { functions: [{ file: VAULT, start: 1, end: 1, name }], state: [] })
+  const allocator = '  function reallocateTo(uint256 supplyId) public {\n    publicAllocator.reallocateTo{value: value}(vault, withdrawals, IERC4626(supplyId));\n  }'
+  expect(suite(allocator, 'PublicAllocator.reallocateTo')).toBe('hit PublicAllocator.reallocateTo')
+  for (const call of ['target.fn{value: v}(a);', 'target.fn\n  { value: v,\n    gas: g }\n  (a);']) expect(suite(call, 'X.fn')).toBe('hit X.fn')
+  for (const mention of ['// target.fn(a);', '/* target.fn(a); */', 'string s = "target.fn(a)";', 'string s = \'target.fn(a)\';', 'target.fnX(a);', 'target.fnX{value: v}(a);'])
+    expect(suite(mention, 'X.fn')).toBe('miss: suite names none of X.fn')
+})
+
 test('coverage hits a counted line in the span, misses count 0', () => {
   const lcov = (n: number): string => written({ [`${META}/corpus_medusa/coverage/lcov.info`]: `SF:/w/src/Vault.sol\nDA:27,5\nDA:29,${String(n)}\nend_of_record\n` })
   expect(graded('coverage', lcov(3), T)).toBe('hit Vault.setFee')

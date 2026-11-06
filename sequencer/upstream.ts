@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { gh, type Read } from '../cli/gh.ts'
@@ -9,6 +9,7 @@ import type { Db } from '../store/index.ts'
 import { section } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { get, srcDir } from './workspace.ts'
+import { rowOf } from './worktree.ts'
 
 export const SERVER = 'github'
 
@@ -19,8 +20,6 @@ export const CAP = 100_000
 const REPO = /^(?:https:\/\/)?github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/
 
 const SHA = /^[0-9a-f]{40}$/
-
-const ROW = /^- `([^`]+)` — ([^@\s]+)@(\S+) (\S+)$/
 
 const Args = { repo: z.string(), sha: z.string(), path: z.string() }
 
@@ -40,20 +39,18 @@ export function pinned(db: Db, plan: number, args: { repo: string; sha: string; 
 }
 
 export function vendored(db: Db, root: string, plan: number, read: Read = gh): Outcome | null {
-  const files: [string, Buffer][] = []
+  const files: [string, string, Buffer][] = []
   for (const row of section(get(root, plan, 'issue.md'), '## Vendored').split('\n').map((l) => l.trim()).filter(Boolean)) {
     try {
-      const [, path = '', repo = '', sha = '', from = ''] = ROW.exec(row) ?? []
-      if (from === '') throw new Error('not - `<checkout path>` — github.com/<owner>/<repo>@<sha> <path>')
-      if (isAbsolute(path) || path.split('/').includes('..')) throw new Error(`${path} leaves the checkout`)
-      files.push([join(srcDir(root, plan), path), fetched(db, plan, { repo, sha, path: from }, read, 'machine', false)])
+      const { path, repo, sha, from } = rowOf(srcDir(root, plan), row, files.map(([p]) => p))
+      files.push([path, join(srcDir(root, plan), path), fetched(db, plan, { repo, sha, path: from }, read, 'machine', false)])
     } catch (e) {
       const note = `vendor: ${row}: ${(e as Error).message}`
       logged(db, { plan, kind: 'vendor', actor: 'machine', outcome: 'needs_ceo', message: note, pointer: null, run: null })
       return { outcome: 'needs_ceo', spans: [row], note }
     }
   }
-  files.forEach(([to, got]) => { mkdirSync(dirname(to), { recursive: true }); writeFileSync(to, got) })
+  files.forEach(([, to, got]) => { mkdirSync(dirname(to), { recursive: true }); writeFileSync(to, got) })
   return null
 }
 

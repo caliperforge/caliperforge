@@ -20,8 +20,8 @@ export interface Outside {
   /** The brief's files, repo-relative: the first one in the language finds the folder its gates run in. */
   files: string[]
   base?: string
-  /** A ruling's `verify:` cargo args, which replace the crate-wide `cargo test`. */
-  test?: string[]
+  /** A ruling's cargo args, one list per command, which replace the crate-wide `cargo test`. */
+  tests?: string[][]
 }
 
 export interface Gate {
@@ -182,7 +182,7 @@ function rust(src: string, outside: Outside, excused: string[]): Gate[] {
   const own = outside.files.filter((f) => f.endsWith('.rs'))
   const root = workspace(src, own[0] ?? outside.files[0] ?? '')
   const format: Gate = { script: 'format', bin: 'cargo', args: formatLine(src), dir: root }
-  if (outside.test !== undefined) return [format, { script: 'test', bin: 'cargo', args: outside.test, dir: root }]
+  if (outside.tests !== undefined) return [format, ...outside.tests.map((args) => ({ script: args[0] === 'clippy' ? 'lint' : 'test', bin: 'cargo', args, dir: root }))]
   const theirs = tested(src, own)
   if (theirs.length > 0) return [format, ...theirs]
   const crates = unique(own.map((f) => crate(src, f)).filter((c): c is Crate => c !== null))

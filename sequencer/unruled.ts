@@ -1,9 +1,9 @@
-import { statSync } from 'node:fs'
+import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { carried } from '../rails/completion-audit/index.ts'
 import { parse } from '../rails/diff.ts'
 import { BLOCK } from './learn.ts'
-import { diffOf, maybe, srcDir } from './workspace.ts'
+import { diffOf, maybe, planDir, srcDir, tried } from './workspace.ts'
 
 const OVERRULED = /\b((?:G\d+[ \t,]*)+)overruled:(?=[ \t]*\S)(.*?)(?=\b(?:G\d+[ \t,]*)+overruled:|$)/gm
 
@@ -25,13 +25,37 @@ export function unruled(root: string, plan: number, sha: string, summary = ''): 
 }
 
 export function settled(root: string, plan: number, sha: string): Map<string, string> {
-  const [ok, over] = [accepted(maybe(root, plan, 'rulings.md') ?? ''), overruled(root, plan)]
-  const rows = carried(maybe(root, plan, 'step-2.handback.md') ?? '')
+  const [reply, pointer] = [replies(root, plan), pointers(root, plan)]
   return new Map(listed(root, plan, sha).flatMap(({ id }) => {
-    const pointer = typeof rows === 'string' || rows.get(id)?.status !== 'done' ? '' : rows.get(id)?.pointer?.trim() ?? ''
-    const line = ok.has(id) ? `accepted: ${ok.get(id) ?? ''}` : over.find((o) => o.id === id)?.line ?? (pointer === '' ? '' : `fixed: ${pointer}`)
+    const line = reply(id) ?? (pointer(id) === '' ? '' : `fixed: ${pointer(id)}`)
     return line === '' ? [] : [[id, line] as const]
   }))
+}
+
+/** Each finding at `head` or at a head before it on its line, with the ruling or the later commit that answers it. */
+export function handled(root: string, plan: number, head: string): { id: string; text: string; how: string | null; holds: boolean }[] {
+  const [src, reply, pointer] = [srcDir(root, plan), replies(root, plan), pointers(root, plan)]
+  return readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? [])
+    .filter((sha) => tried(src, ['merge-base', '--is-ancestor', sha, head]) !== null)
+    .flatMap((sha) => {
+      const { open } = unruled(root, plan, sha)
+      return listed(root, plan, sha).map(({ id, text }) => {
+        const at = pointer(id)
+        const fix = at === '' ? '' : tried(src, ['log', '-1', '--format=%H', `${sha}..${head}`, '--', at.split(':')[0] ?? ''])?.trim() ?? ''
+        const how = reply(id) ?? (fix === '' ? null : `fixed in ${fix.slice(0, 12)} at ${at}`)
+        return { id, text, how, holds: how === null && open.includes(id) }
+      })
+    })
+}
+
+function replies(root: string, plan: number): (id: string) => string | undefined {
+  const [ok, over] = [accepted(maybe(root, plan, 'rulings.md') ?? ''), overruled(root, plan)]
+  return (id) => ok.has(id) ? `accepted: ${ok.get(id) ?? ''}` : over.find((o) => o.id === id)?.line
+}
+
+function pointers(root: string, plan: number): (id: string) => string {
+  const rows = carried(maybe(root, plan, 'step-2.handback.md') ?? '')
+  return (id) => typeof rows === 'string' || rows.get(id)?.status !== 'done' ? '' : rows.get(id)?.pointer?.trim() ?? ''
 }
 
 export function listed(root: string, plan: number, sha: string): { id: string; text: string }[] {

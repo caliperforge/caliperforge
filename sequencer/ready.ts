@@ -24,7 +24,7 @@ import { forkOf, homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 import { stacked } from './stacked.ts'
-import { unruled } from './unruled.ts'
+import { handled, unruled } from './unruled.ts'
 
 export { proven, target, unanswered, type Target } from '../store/ready.ts'
 
@@ -67,6 +67,8 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (waiting !== null) return waiting
   const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)
   if (typeof bot !== 'string') return bot
+  const left = internal(plan) ? null : unhandled(root, plan)
+  if (left !== null) return left
   const fresh = clean(db, root, plan)
   botClean(db, plan.id, fresh)
   const verdict = readyRail(proofOf(db, root, plan, repo, { ...row, bot_clean: Number(fresh) }))
@@ -119,6 +121,13 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   if (ruled.length === 0) return ''
   logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ruled.join(', '), pointer: at, run: null })
   return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ruled.join(', ')}`
+}
+
+/** Greptile is asked once, so a finding at an earlier head holds every head after it until a commit or a ruling answers it. */
+function unhandled(root: string, plan: PlanRow): Outcome | null {
+  const held = handled(root, plan.id, headOf(root, plan.id).sha).filter((f) => f.holds)
+  return held.length === 0 ? null : { outcome: 'refuse', spans: ['greptile.unhandled'], to: 2, message: held.map((f) => f.text.trimEnd()).join('\n'),
+    note: `${String(held.length)} bot finding(s) on the pull request have neither a fix nor a reply; back to the builder with them` }
 }
 
 function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): string | null {

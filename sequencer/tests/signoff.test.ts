@@ -618,6 +618,20 @@ test('only open and accepted P2s are carried', async () => {
   expect(cardWith(w, fixed)).not.toContain('P2s carried')
 })
 
+test('the card lists each bot finding and how it was handled', async () => {
+  const w = await AT_BATCH()
+  const src = srcDir(w.root, 1)
+  const [head, before] = [headSha(src), git(src, ['rev-parse', 'HEAD~1']).trim()]
+  const side = git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', 'HEAD^{tree}', '-p', before, '-m', 'side']).trim()
+  put(w.root, 1, `findings-${before}.md`, '- G1 src/hello.ts:1 fixed\n- G2 src/hello.ts:2 overruled\n- G3 src/hello.ts:3 neither\n')
+  put(w.root, 1, `findings-${side}.md`, '- G4 src/hello.ts:4 elsewhere\n')
+  put(w.root, 1, 'rulings.md', 'G2 overruled: src/hello.ts:1 refuses it\n')
+  const fixed = CARRIED.replace(/---\n$/, '  - id: G1\n    status: done\n    pointer: src/hello.ts:1\n---\n')
+  const fix = git(src, ['log', '-1', '--format=%H', `${before}..${head}`, '--', 'src/hello.ts']).trim().slice(0, 12)
+  expect(cardWith(w, fixed)).toContain(`**Bot findings on the pull request**\n\n- \`G1\` \`src/hello.ts:1 fixed\` — \`fixed in ${fix} at src/hello.ts:1\`\n`
+    + '- `G2` `src/hello.ts:2 overruled` — `G2 overruled: src/hello.ts:1 refuses it`\n- `G3` `src/hello.ts:3 neither` — open\n\n')
+})
+
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */
 test('the cards live on the private sign-off repo, not ours', () => {
   expect(SIGNOFF).toBe('caliperforge/signoff')

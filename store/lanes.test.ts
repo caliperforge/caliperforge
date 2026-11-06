@@ -26,7 +26,7 @@ const asked = (lane: string, repo: string) =>
 
 const canned = (lane: string, repo: string): Read => () => asked(lane, repo)
 
-const RUBIN = ['vo-conformance', 'rubin-alert-monitor']
+const RUBIN = ['vo-conformance', 'rubin-alert-monitor', 'neo-watch', 'sky-schema', 'sky-core', 'sky-ui']
 
 const nameOf = (repo: unknown): string => String(repo).split('/').at(-1) ?? ''
 
@@ -98,7 +98,7 @@ it('1437 D4 a rubin or bio issue queues on its pipe', () => {
   }
 })
 
-it('1486 D1 rubin has two homes and every other lane one', () => {
+it('1486 D1 rubin has six homes and every other lane one', () => {
   expect(homes('rubin')).toEqual(RUBIN.map((r) => `${FORK}/${r}`))
   for (const l of LANES.filter((n) => n !== 'rubin')) expect(homes(l)).toEqual([LANE[l].home])
 })

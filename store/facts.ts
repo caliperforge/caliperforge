@@ -143,7 +143,7 @@ export function ruleFacts(root: string, plan: number, repo: string, row: Issue, 
   ]
 }
 
-function template(dir: string): string | undefined {
+export function template(dir: string): string | undefined {
   for (const at of [join(dir, '.github'), dir, join(dir, 'docs')]) {
     const name = existsSync(at) ? readdirSync(at).find((f) => f.toLowerCase() === 'pull_request_template.md') : undefined
     if (name !== undefined) return readFileSync(join(at, name), 'utf8')

@@ -116,8 +116,8 @@ test.each(['src', 'src.stopped'])('%s is byte for byte unchanged, map.md include
 })
 
 test("a second pass starts from the first pass's out/ and cache/", () => {
-  const { db, root } = planted({ 'out/V.json': 'src', 'cache/files.json': 'src' })
-  const built = ['out/V.json', 'cache/files.json']
+  const built = ['out/V.json', 'out/build-info/a.output.json', 'cache/files.json', 'cache/fizz-build-info.json']
+  const { db, root } = planted(Object.fromEntries(built.map((path) => [path, 'src'])))
   vi.mocked(compiled).mockImplementationOnce((dir) => {
     for (const path of built) writeFileSync(join(dir, path), 'built')
     return []
@@ -129,7 +129,7 @@ test("a second pass starts from the first pass's out/ and cache/", () => {
     return []
   })
   dried(db, root, 1, fizz())
-  expect(seen).toEqual(['built', 'built'])
+  expect(seen).toEqual(built.map(() => 'built'))
 })
 
 test("--suite lays the suite's files and the plan's own handoff", () => {

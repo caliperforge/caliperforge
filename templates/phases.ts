@@ -23,7 +23,7 @@ import { readings, trackers } from './probes.ts'
 import { met, reach, unlocated, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
 import { callee, rows, slices } from './slices.ts'
-import { packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
+import { funding, packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
 import { harnessed, probed, suite, unsourced } from './suite.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
@@ -147,11 +147,11 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   }) })
   if (!('turns' in built)) return built
   for (const line of lines) log('suite.unsourced', 'pass', line)
-  let [hung, note] = [null as Refused | null, null as string | null]
+  let [hung, note, clamped] = [null as Refused | null, null as string | null, [] as string[]]
   const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => rebuilt(root, 'smoke', () => {
     const got = smoke(root, fizz, 'test/fizz/fizz_data', read(map))
     if (!('rule' in got)) {
-      ;({ results: last, note } = got)
+      ;({ results: last, note, clamped } = got)
       return unrun(read(map), last)
     }
     hung = got
@@ -163,13 +163,15 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
     return { outcome: 'refuse', spans: [hung.rule], note: hung.note }
   }
   if (note !== null) log('smoke.slither_off', 'pass', note)
+  if (clamped.length > 0) log('smoke.clamped', 'pass', funding(clamped))
   const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, 'critic.stand_in', read(map)))
   return 'turns' in stood ? { sum: fixes.sum, smoked: packed(last) } : stood
 }
 
 function slithering({ db, plan, name }: Bench, root: string): void {
-  const off = primed(root)
+  const { off, clamped } = primed(root)
   if (off !== null) logged(db, { plan: plan.id, kind: 'coverage.slither_off', actor: name, outcome: 'pass', message: off, pointer: null, run: null })
+  if (clamped.length > 0) logged(db, { plan: plan.id, kind: 'coverage.clamped', actor: name, outcome: 'pass', message: funding(clamped), pointer: null, run: null })
 }
 
 async function reached(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<Sum | Outcome> {

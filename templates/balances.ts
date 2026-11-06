@@ -11,6 +11,13 @@ export function clamp(balances: unknown[]): { entries: unknown[]; clamped: strin
   return { entries: balances.map((entry) => oversized(entry) ? `0x${BALANCE.toString(16)}` : entry), clamped: balances.filter(oversized).map(String) }
 }
 
+export function funded<T extends { fuzzing?: object }>(config: T): { config: T; clamped: string[] } {
+  const balances = (config.fuzzing as { targetContractsBalances?: unknown } | undefined)?.targetContractsBalances
+  if (!Array.isArray(balances)) return { config, clamped: [] }
+  const { entries, clamped } = clamp(balances)
+  return { config: { ...config, fuzzing: { ...config.fuzzing, targetContractsBalances: entries } }, clamped }
+}
+
 const SHRINK = 500
 
 /** Medusa fills a key the file leaves out from its defaults, which run Slither and shrink 5000 times. */

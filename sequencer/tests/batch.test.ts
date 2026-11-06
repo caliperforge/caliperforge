@@ -704,6 +704,23 @@ test('rehearsal inline findings land under the plan HEAD', async () => {
   expect(maybe(w.root, 1, `findings-${head}.md`)).toBe('- G11 src/hello.ts:1 a mint change is lost\n')
 })
 
+const REVIEWED_PR = pr({ reviews: [{ id: 'g7', author: { login: 'greptile-apps[bot]' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, submittedAt: new Date().toISOString() }] })
+
+test('real pull request inline bot findings land under its head', async () => {
+  const w = await PUSHED()
+  capture(w.db, () => REVIEWED_PR, w.root, (args) => (args[0] === 'api' ? INLINE : []))
+  expect(maybe(w.root, 1, `findings-${SHA}.md`)).toBe('- G11 src/hello.ts:1 a mint change is lost\n')
+})
+
+test('an inline read that throws still returns the signals', async () => {
+  const w = await PUSHED()
+  const list = (args: string[]): unknown => { if (args[0] === 'api') throw new Error('HTTP 502\nbody'); return [] }
+  const fresh = capture(w.db, () => REVIEWED_PR, w.root, list)
+  expect(fresh.map((s) => s.kind)).toEqual(['bot_review'])
+  expect(fresh.map((s) => started(w.db, s, w.root)?.step)).toEqual([4])
+  expect(ofKind(w.db, 'swallowed')).toEqual([{ plan: 1, kind: 'swallowed', actor: 'inline', outcome: 'pass', message: 'HTTP 502' }])
+})
+
 test('a plan with no checkout is asked about no rehearsal', async () => {
   const w = await PUSHED()
   putPlan(w.db, SECOND)

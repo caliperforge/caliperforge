@@ -11,7 +11,7 @@ import { latest } from '../store/rulings.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { missed, reached } from '../store/unreached.ts'
-import { rehearsed, type Rehearsal } from './findings.ts'
+import { kept, rehearsed, type Rehearsal } from './findings.ts'
 import { mended } from './mended.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
@@ -35,13 +35,13 @@ const REVIEWED = /Last reviewed commit: \[[^\]]*\]\(https:\/\/github\.com\/[^/)]
 
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
 export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr, root?: string, list?: Read): SignalRow[] {
-  return pushed(db, root, list).flatMap((row) => reachable(db, row, read))
+  return pushed(db, root, list).flatMap((row) => reachable(db, row, read, root, list))
 }
 
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
-function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
+function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string, list?: Read): SignalRow[] {
   try {
-    const found = one(db, row, read)
+    const found = one(db, row, read, root, list)
     const failed = reached(db, row.plan)
     if (failed > 0) {
       logged(db, { plan: row.plan, kind: 'back', actor: 'reachable', outcome: 'pass', message: `back after ${String(failed)} failed reads`, pointer: null, run: null })
@@ -158,16 +158,27 @@ function landed(db: Db, repo: string, open: Set<string>): void {
   }
 }
 
-function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
+function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string, list?: Read): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
   if (row.rehearsal !== null) {
     for (const s of rehearsed(row.rehearsal, row.plan, row.repo, view.number, signals(view, row))) stored(db, row, s)
     return []
   }
   const fresh = signals(view, row).map((s) => stored(db, row, s)).filter((s) => s !== null)
+  const bots = fresh.filter((s) => s.kind === 'bot_review')
+  if (root !== undefined && list !== undefined && bots.length > 0) inlined(db, row, view.number, { root, list }, bots)
   attribute(db, row.plan, row.repo, view)
   closed(db, row.plan, row.evidence, view.state)
   return acted(db, view, fresh)
+}
+
+/** Only a bot review recorded this tick is read for, so a pull request polled every tick is asked once per review. */
+function inlined(db: Db, row: Pushed, pr: number, { root, list }: Rehearsal, bots: SignalRow[]): void {
+  try {
+    kept(root, row.plan, row.repo, pr, bots, list)
+  } catch (error) {
+    logged(db, { plan: row.plan, kind: 'swallowed', actor: 'inline', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+  }
 }
 
 function stored(db: Db, row: Pushed, s: Signal): SignalRow | null {

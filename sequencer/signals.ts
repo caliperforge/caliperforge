@@ -9,6 +9,7 @@ import { hhmm, zone } from '../store/lanes.ts'
 import { internal, needsCeo, pipeNamed, planById, type PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { SignalRow } from '../store/signals.ts'
+import { rowsAt } from './findings.ts'
 import { assembling } from './home.ts'
 import { WIRE, type Wire } from './push.ts'
 import { fixed } from './split.ts'
@@ -23,7 +24,7 @@ interface Started {
   step: number
 }
 
-/** A bot's finding re-enters at the first review; the reviewers weigh it. */
+/** A bot's score with no inline finding re-enters at the first review; the reviewers weigh it. */
 const REVIEW_STEP = 4
 
 /** A person's words re-enter at the brief: they grow the ask the brief is written from. */
@@ -33,11 +34,9 @@ const BRIEF_STEP = 1
 const BUILD_STEP = 2
 
 /**
- * A person's review or comment goes back to the brief writer with the words added to the ask; a question
- * among them comes back from its `unclear` fence, which holds the plan for a person. A red check on the
- * pull request goes straight to the builder with the words in the refusal it reads. Either way the refusal
- * count starts over, and the inbox says who asked. A changes-requested review on an assembled pull
- * request is the exception: it becomes one fix part.
+ * A person's review or comment goes back to the brief writer with the words added to the ask; a question among them comes back from its `unclear` fence, which
+ * holds the plan for a person. A red check or an inline bot finding goes straight to the builder with the words in the refusal it reads, a bot score alone to the
+ * reviewers. Either way the refusal count starts over, and the inbox says who asked. A changes-requested review on an assembled pull request becomes one fix part.
  */
 export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = WIRE): Started | null {
   if (signal.plan === null) return null
@@ -49,10 +48,11 @@ export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = W
     const parent = planById(db, signal.plan)
     if (assembling(db, parent) !== null) return fix(db, signal, parent, root, wire)
   }
-  const step = signal.kind === 'bot_review' ? REVIEW_STEP : signal.kind === 'ci_red' ? BUILD_STEP : BRIEF_STEP
+  const found = signal.kind === 'bot_review' && root !== undefined ? rowsAt(root, signal.plan, signal.head) : []
+  const step = signal.kind === 'bot_review' ? (found.length > 0 ? BUILD_STEP : REVIEW_STEP) : signal.kind === 'ci_red' ? BUILD_STEP : BRIEF_STEP
   rewind(db, signal.plan, step)
-  if (step === BUILD_STEP) asked(db, signal, signal.plan, root)
   if (step === BRIEF_STEP) reasked(db, signal, signal.plan, root, wire.merged)
+  else asked(db, signal, signal.plan, root, step, found)
   return { signal: signal.id, template: 'pr_path', plan: signal.plan, step }
 }
 
@@ -64,17 +64,17 @@ function fix(db: Db, signal: SignalRow, parent: PlanRow, root: string, wire: Wir
     logged(db, { plan: parent.id, kind: 'unfiled', actor: 'review', outcome: 'refuse',
       message: `fix part: ${error instanceof Error ? error.message : String(error)}`, pointer: null, run: null })
     rewind(db, parent.id, BUILD_STEP)
-    asked(db, signal, parent.id, root, false)
+    asked(db, signal, parent.id, root, BUILD_STEP, [], false)
     return { signal: signal.id, template: 'pr_path', plan: parent.id, step: BUILD_STEP }
   }
 }
 
-function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined, direct = true): void {
+function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined, step: number, found: string[], direct = true): void {
   clear(db, plan)
   if (!direct) needsCeo(db, planById(db, plan))
   if (root === undefined) return
-  put(root, plan, 'refusal.md', words(signal))
-  inbox(root, signal, plan, BUILD_STEP, direct ? 'build' : 'waits for a person')
+  put(root, plan, 'refusal.md', `${words(signal)}${found.length === 0 ? '' : `\n${found.join('\n')}\n`}`)
+  inbox(root, signal, plan, step, direct ? (step === BUILD_STEP ? 'build' : 'review') : 'waits for a person', found[0] ?? signal.body ?? '')
 }
 
 /** An adopted plan holds only `issue.md`, so its ask starts from that. */
@@ -82,12 +82,12 @@ function reasked(db: Db, signal: SignalRow, plan: number, root: string | undefin
   clear(db, plan)
   if (root === undefined) return
   put(root, plan, 'ask.md', `${(maybe(root, plan, 'ask.md') ?? maybe(root, plan, 'issue.md') ?? '').trimEnd()}\n\n${words(signal)}${threads(db, signal, plan, read)}`)
-  inbox(root, signal, plan, BRIEF_STEP, 'brief')
+  inbox(root, signal, plan, BRIEF_STEP, 'brief', signal.body ?? '')
 }
 
-function inbox(root: string, signal: SignalRow, plan: number, step: number, name: string): void {
+function inbox(root: string, signal: SignalRow, plan: number, step: number, name: string, note: string): void {
   const event: Event = { at: signal.at, plan, ticket: `${signal.repo}#${String(signal.pr)}`, kind: 'asked', step,
-    name, note: `${signal.author}: ${(signal.body ?? '').replace(/\s+/g, ' ').slice(0, 140)}` }
+    name, note: `${signal.author}: ${note.replace(/\s+/g, ' ').slice(0, 140)}` }
   keep(root, [event])
   notify([event])
 }

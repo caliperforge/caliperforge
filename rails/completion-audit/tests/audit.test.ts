@@ -121,6 +121,19 @@ test('D3 undone passes brief-wrong with no why', () => {
   expect(undone(`${WRONG}---\n`, false).outcome).toBe('pass')
 })
 
+const cannot = (id: string): string => `---\ndone:\n  - id: D1\n    status: done\n    pointer: a.ts:1\n  - id: ${id}\n    status: cannot-be-done\n    pointer: a.ts:2\n---\n`
+
+test('undone refuses a cannot-be-done D row and names it', () => {
+  const verdict = undone(cannot('D2'), false)
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['D2'])
+  expect(verdict.message).toBe('cannot-be-done: D2')
+})
+
+test('undone passes a cannot-be-done G row', () => {
+  expect(undone(cannot('G1'), false).outcome).toBe('pass')
+})
+
 test('refuses, not throws, on a fence that is not a done envelope', () => {
   const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n']
   for (const fence of fences) {

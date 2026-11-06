@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { planDir } from '../sequencer/workspace.ts'
 import { LANES } from './lanes.ts'
 
 export const Profile = z.strictObject({
@@ -49,12 +50,13 @@ export const Profile = z.strictObject({
 
 export type Profile = z.infer<typeof Profile>
 
-/** An outside repo's rules: its owner's `_org.yml` with each field its own file sets laid over whole. */
-export function profile(root: string, repo: string): Profile | null {
+/** An outside repo's rules: the plan's step 0 `profile.yml`, then its owner's `_org.yml`, then its own file, each field laid over whole. */
+export function profile(root: string, repo: string, plan?: number): Profile | null {
   const [owner = '', name = ''] = repo.split('/')
+  const planned = plan === undefined ? null : read(join(planDir(root, plan), 'profile.yml'))
   const org = read(join(root, 'profiles', owner, '_org.yml'))
   const own = read(join(root, 'profiles', owner, `${name}.yml`))
-  return org === null && own === null ? null : { ...org, ...own }
+  return planned === null && org === null && own === null ? null : { ...planned, ...org, ...own }
 }
 
 function read(path: string): Profile | null {

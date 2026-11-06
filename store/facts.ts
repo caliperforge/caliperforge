@@ -127,7 +127,7 @@ export function greptileFacts(db: Db, root: string, plan: number, head: string):
 }
 
 export function ruleFacts(root: string, plan: number, repo: string, row: Issue, body: string, read: Read = gh, now = new Date()): Fact[] {
-  const rules = profile(root, repo)
+  const rules = profile(root, repo, plan)
   const dir = srcDir(root, plan)
   const no = `#${String(row.number)}`
   const logins = row.assignees.map((a) => a.login)

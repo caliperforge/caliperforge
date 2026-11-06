@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
-import type { Provider } from '../../../providers/kind.ts'
+import type { Packet, Provider } from '../../../providers/kind.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
-import { runRows } from '../../../store/events.ts'
+import { eventsAfter, runRows } from '../../../store/events.ts'
 import { verdictRows } from '../../../store/verdict.ts'
 import { judge, loadReviews } from '../../bench.ts'
 import { read, unfilled } from '../../verdict.ts'
@@ -69,8 +69,24 @@ test('D4 under a lead a block missing verify fails the run', async () => {
   const { db, plan } = bench()
   await expect(judge(db, root, 'code_quality', plan, seeded, replies(refuse(block('verify'))), TRANSCRIPT, LEAD))
     .rejects.toThrow('reviewers.verdict_fence: F1 has no verify')
-  expect(runRows(db).filter((r) => r.plan === plan).map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }])
+  expect(runRows(db).filter((r) => r.plan === plan).map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }, { exit: 1 }])
   expect(verdictRows(db, plan)).toHaveLength(0)
+})
+
+test('a fenceless answer is asked once more for its fence', async () => {
+  const { db, plan } = bench()
+  const sent: Packet[] = []
+  const provider: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p); return replies(sent.length === 1 ? 'looks fine to me' : refuse(block())).fire(p) } }
+  const out = await judge(db, root, 'code_quality', plan, seeded, provider, TRANSCRIPT, LEAD)
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_ref: 'reviewers.verdict' })
+  const runs = runRows(db).filter((r) => r.plan === plan)
+  expect(runs.map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }, { exit: 0 }])
+  expect(out.run).toBe(runs[1]?.id)
+  expect(sent[1]?.tools).toEqual([])
+  expect(sent[1]?.prompt.startsWith(`${sent[0]?.prompt ?? ''}\n\n# Your answer\n\nlooks fine to me\n\n`)).toBe(true)
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'review')).toEqual([{ plan, kind: 'review', actor: 'code_quality', outcome: 'pass',
+    message: 'code_quality refired for the verdict fence', pointer: null, run: runs[0]?.id }])
+  expect(verdictRows(db, plan)).toHaveLength(1)
 })
 
 test('D5 a spans-only refuse names findings under a lead only', async () => {

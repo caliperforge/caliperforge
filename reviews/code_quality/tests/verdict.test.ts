@@ -78,7 +78,7 @@ test('a fenceless answer is asked once more for its fence', async () => {
   const sent: Packet[] = []
   const provider: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p); return replies(sent.length === 1 ? 'looks fine to me' : refuse(block())).fire(p) } }
   const out = await judge(db, root, 'code_quality', plan, seeded, provider, TRANSCRIPT, LEAD)
-  expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_ref: 'reviewers.verdict' })
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   const runs = runRows(db).filter((r) => r.plan === plan)
   expect(runs.map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }, { exit: 0 }])
   expect(out.run).toBe(runs[1]?.id)

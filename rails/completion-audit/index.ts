@@ -42,8 +42,11 @@ export function undone(handback: string, unmoved: boolean): Verdict {
   const line = /^[-*>_ ]*Not done.*$/m.exec(handback)?.[0]
   if (line !== undefined) return refuse(subject, ['step-2.handback.md'], line.trim())
   const rows = carried(handback)
-  const wrong = typeof rows === 'string' ? undefined : [...rows.values()].find((row) => row.status === 'brief-wrong')
+  const listed = typeof rows === 'string' ? [] : [...rows.values()]
+  const wrong = listed.find((row) => row.status === 'brief-wrong')
   if (wrong !== undefined) return refuse(subject, [wrong.id], `brief-wrong: ${(wrong.why ?? '').trim()}`)
+  const cannot = listed.filter((row) => /^D\d+$/.test(row.id) && row.status === 'cannot-be-done').map((row) => row.id)
+  if (cannot.length > 0) return refuse(subject, cannot, `cannot-be-done: ${cannot.join(', ')}`)
   if (unmoved) return refuse(subject, ['rulings.md'], 'rulings.md changed since the last step-3 lap and the diff did not')
   return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest: subject, spans: [], message: 'no case handed back not done' }
 }

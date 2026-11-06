@@ -17,7 +17,7 @@ import { addFinding, addSetting, findings, setting } from '../../store/drift.ts'
 import { eventsOf, logged, ofKind, pointers, runAt, runRows, type Event } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
-import { cap, width } from '../../store/lanes.ts'
+import { cap, hours, width } from '../../store/lanes.ts'
 import { held as holding, take } from '../../store/leases.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
@@ -1626,7 +1626,10 @@ const UNWOKEN = [
     blocked(db, home)
     take(db, 7, wokeAt, process.ppid)
   } },
-  { leased: 0, set: (db: Db) => db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7") },
+  { leased: 0, set: (db: Db) => {
+    db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
+    hours(db, 99, '07:00', '20:00')
+  } },
 ]
 
 async function unwoken() {
@@ -1697,19 +1700,26 @@ const day = new Date('2026-09-24T15:00:00.000Z')
 const lookAt = (db: Db, message: string, at: string, outcome: Event['outcome'] = 'pass') =>
   logged(db, { plan: 7, kind: 'director', actor: 'director', outcome, message, pointer: null, run: null }, at)
 
+const ALL = ['00:00', '23:59'] as const
+const DAY = ['07:00', '20:00'] as const
+const night = new Date('2026-09-25T05:00:00.000Z')
+
 const LOOKS = [
-  { at: '2026-09-24 13:59:00', when: day, priority: 1, fired: 1 },
-  { at: '2026-09-24 14:01:00', when: day, priority: 1, fired: 0 },
-  { at: '2026-09-24 11:00:00', when: new Date('2026-09-24T12:59:00.000Z'), priority: 1, fired: 0 },
-  { at: '2026-09-24 13:59:00', when: new Date('2026-09-25T02:00:00.000Z'), priority: 1, fired: 0 },
-  { at: '2026-09-24 13:59:00', when: day, priority: 2, fired: 0 },
+  { at: '2026-09-24 13:59:00', when: day, priority: 1, window: ALL, fired: 1 },
+  { at: '2026-09-24 14:01:00', when: day, priority: 1, window: ALL, fired: 0 },
+  { at: '2026-09-24 11:00:00', when: new Date('2026-09-24T12:59:00.000Z'), priority: 1, window: ALL, fired: 1 },
+  { at: '2026-09-24 13:59:00', when: new Date('2026-09-25T02:00:00.000Z'), priority: 1, window: ALL, fired: 1 },
+  { at: '2026-09-24 13:59:00', when: night, priority: 0, window: ALL, fired: 1 },
+  { at: '2026-09-24 13:59:00', when: night, priority: 0, window: DAY, fired: 0 },
+  { at: '2026-09-24 13:59:00', when: day, priority: 2, window: ALL, fired: 0 },
 ]
 
 async function looks() {
-  for (const { at, when, priority, fired } of LOOKS) {
+  for (const { at, when, priority, window: [start, end], fired } of LOOKS) {
     const { db, home } = wokeSeeded()
     blocked(db, home)
     db.exec(`UPDATE plans SET priority = ${String(priority)} WHERE id = 7`)
+    hours(db, 99, start, end)
     put(home, 7, 'orchestrator.md', `step 4 blocked ${stop(home, 7)}\n\n${SAID}\n`)
     lookAt(db, SAID, at)
     const fires: string[] = []
@@ -1755,7 +1765,7 @@ describe('wake rules', () => {
   test('a held, parked, leased or night over_cap plan is not woken', LONG, unwoken)
   test('a needs_ceo stop is held by the coo and still wakes', needed)
   test('a running plan posts once per head, a waiting one is left', running)
-  test('an unchanged stop is asked again after an hour, P1, by day', LONG, looks)
+  test('an unchanged P1 stop is re-asked hourly in its pipe\'s window', LONG, looks)
   test('an over_cap wait wakes by day at P1 only', overCapWakes)
   test('only a stop the director parked itself is woken', LONG, parkedBy)
 })

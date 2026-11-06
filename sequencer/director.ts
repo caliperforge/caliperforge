@@ -14,7 +14,7 @@ import type { Db } from '../store/index.ts'
 import { hhmm, wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { builderRan, end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
+import { builderRan, end, held, inWindow, needsCeo, originRef, pipeOf, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear, sentOnce } from '../store/refusals.ts'
 import { kin, runs, stopped, waitable, waking, type Stop } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
@@ -417,8 +417,7 @@ function ownPark(db: Db, root: string, plan: number): boolean {
 }
 
 function lasts(db: Db, plan: PlanRow, now: Date): boolean {
-  const at = hhmm(db, now)
-  return plan.priority <= 1 && at >= '07:00' && at < '20:00' && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString())
+  return plan.priority <= 1 && inWindow(pipeOf(db, plan.pipe_id), hhmm(db, now)) && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString())
 }
 
 function woken(plan: PlanRow): Woken {

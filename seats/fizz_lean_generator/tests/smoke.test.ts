@@ -35,9 +35,10 @@ test('6/9 D5: unrun flags only an Unclamped row with no success', () => {
 
 afterEach(() => { vi.unstubAllEnvs() })
 
-function medusa(script: string, forge = 'exit 0'): { root: string; fizz: string; config: string } {
+function medusa(script: string, forge = 'mkdir -p out/build-info', crytic = 'exit 0'): { root: string; fizz: string; config: string } {
   const [root, fizz, bin] = [mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-')), mkdtempSync(join(tmpdir(), 'cf-fizz-skill-')), mkdtempSync(join(tmpdir(), 'cf-fizz-bin-'))]
-  writeFileSync(join(bin, 'forge'), `#!/bin/sh\n${forge}\n`, { mode: 0o755 })
+  writeFileSync(join(bin, 'forge'), `#!/bin/sh\necho "$@" >> forge.log\n${forge}\n`, { mode: 0o755 })
+  writeFileSync(join(bin, 'crytic-compile'), `#!/bin/sh\n${crytic}\n`, { mode: 0o755 })
   vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
   mkdirSync(join(fizz, 'scripts'))
   writeFileSync(join(fizz, 'scripts/run_medusa.js'), script)
@@ -72,13 +73,39 @@ test('medusa reuses the build and medusa.json is restored', () => {
   expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
 })
 
+const STARTS = "require('node:fs').writeFileSync('started', '')\n"
+
 test('a slow forge build refuses before medusa starts', () => {
-  const { root, fizz, config } = medusa("require('node:fs').writeFileSync('started', '')\n", 'exec sleep 5')
+  const { root, fizz, config } = medusa(STARTS, 'exec sleep 5')
   expect(smoke(root, fizz, META, MAP, 30, 1)).toEqual({ rule: 'smoke.compile_slow',
-    note: 'smoke: forge build --ast --build-info ran past its 1 s limit and was stopped after 1 s; medusa did not run' })
+    note: 'smoke: forge build --ast --build-info --force ran past its 1 s limit and was stopped after 1 s; medusa did not run' })
   expect(existsSync(join(root, 'started'))).toBe(false)
   expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
 }, 10_000)
+
+test('partial build-info is rebuilt once with --force, then reused', () => {
+  const forge = 'case "$*" in *--force*) touch out/build-info/a.json out/build-info/a.output.json;; esac'
+  const { root, fizz } = medusa(SEES, forge, 'test -f out/build-info/a.output.json')
+  mkdirSync(join(root, 'out/build-info'), { recursive: true })
+  writeFileSync(join(root, 'out/build-info/a.json'), '{}')
+  writeFileSync(join(root, 'V.sol'), 'contract V {}\n')
+  const forced = 'build --ast --build-info --force\n'
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual(smoked(MAP, REPORT))
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual(smoked(MAP, REPORT))
+  expect(readFileSync(join(root, 'forge.log'), 'utf8')).toBe(forced)
+  writeFileSync(join(root, 'V.sol'), 'contract V { uint x; }\n')
+  smoke(root, fizz, META, MAP, 30)
+  expect(readFileSync(join(root, 'forge.log'), 'utf8')).toBe(forced.repeat(2))
+})
+
+test('a failing crytic-compile refuses as smoke.compile_failed', () => {
+  const { root, fizz, config } = medusa(STARTS, undefined, 'for i in $(seq 1 30); do echo "line $i" >&2; done\nexit 1')
+  const lines = [...Array(20).keys()].map((i) => `line ${String(i + 11)}`).join('\n')
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ rule: 'smoke.compile_failed',
+    note: `smoke: crytic-compile . --foundry-ignore-compile --export-format solc exited 1; last 20 lines:\n${lines}` })
+  expect(existsSync(join(root, 'started'))).toBe(false)
+  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+})
 
 test('a medusa that exits without a report still throws', () => {
   const { root, fizz } = medusa('process.exit(3)\n')

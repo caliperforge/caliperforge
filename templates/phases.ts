@@ -147,10 +147,13 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   }) })
   if (!('turns' in built)) return built
   for (const line of lines) log('suite.unsourced', 'pass', line)
-  let hung = null as Refused | null
+  let [hung, note] = [null as Refused | null, null as string | null]
   const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => rebuilt(root, 'smoke', () => {
     const got = smoke(root, fizz, 'test/fizz/fizz_data', read(map))
-    if (!('rule' in got)) return unrun(read(map), last = got)
+    if (!('rule' in got)) {
+      ;({ results: last, note } = got)
+      return unrun(read(map), last)
+    }
     hung = got
     return []
   }) }) : built
@@ -159,6 +162,7 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
     log(hung.rule, 'refuse', hung.note)
     return { outcome: 'refuse', spans: [hung.rule], note: hung.note }
   }
+  if (note !== null) log('smoke.slither_off', 'pass', note)
   const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, 'critic.stand_in', read(map)))
   return 'turns' in stood ? { sum: fixes.sum, smoked: packed(last) } : stood
 }

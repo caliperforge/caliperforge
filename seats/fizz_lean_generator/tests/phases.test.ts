@@ -21,7 +21,7 @@ const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [],
 
 vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY) }))
 
-vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => []) }))
+vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null })) }))
 
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
@@ -303,7 +303,7 @@ const SMOKED: Smoked[] = [{ name: 'V.deposit(uint256 assets)', calls: 10, succes
 
 test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {
   vi.mocked(suite).mockReturnValueOnce(EMPTY).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
-  vi.mocked(smoke).mockReturnValueOnce(SMOKED)
+  vi.mocked(smoke).mockReturnValueOnce({ results: SMOKED, note: null })
   const { db, handoffs, packets, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants-plan', 'invariants'])
   expect(fires[2]?.issue).toContain('scaffold: V.deposit has no raw handler')
@@ -325,6 +325,15 @@ test.each([
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold'])
   expect(sum).toEqual({ outcome: 'refuse', spans: [rule], note })
   expect(eventsAfter(db, 0).filter((e) => e.kind.startsWith('smoke.')).map((e) => [e.kind, e.outcome, e.message])).toEqual([[rule, 'refuse', note]])
+})
+
+test('a slither-off smoke logs smoke.slither_off and passes', async () => {
+  const note = 'smoke: slither . --ignore-compile --print echidna --json - exited 1; medusa ran with slither off'
+  vi.mocked(smoke).mockReturnValueOnce({ results: [], note })
+  const { db, fires, sum } = await mapped()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants-plan', 'invariants'])
+  expect(sum).toMatchObject({ tokens: 5, wall: null })
+  expect(eventsAfter(db, 0).filter((e) => e.kind.startsWith('smoke.')).map((e) => [e.kind, e.outcome, e.message])).toEqual([['smoke.slither_off', 'pass', note]])
 })
 
 test('a missing out/ is rebuilt before the scaffold check reads it', async () => {

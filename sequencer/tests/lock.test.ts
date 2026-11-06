@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -34,6 +34,18 @@ test('1991 D1 alone yields to a holder and keeps no place', () => {
   lock(r, 1, new Date(), 2)
   expect(lock(r, 2, new Date(), 2, true)?.plan).toBe(1)
   expect(readdirSync(join(r, '.cf'))).toEqual(['checks.lock'])
+})
+
+test('a directory at the place throws', () => {
+  const r = root()
+  mkdirSync(join(r, '.cf', 'checks.lock'))
+  expect(() => lock(r, 1, new Date(), 1)).toThrow(/EISDIR/)
+})
+
+test('a place caught mid-write is held by plan -1', () => {
+  const r = root()
+  writeFileSync(join(r, '.cf', 'checks.lock'), '')
+  expect(lock(r, 1, new Date(), 1)?.plan).toBe(-1)
 })
 
 test('unlock frees only its own place', () => {

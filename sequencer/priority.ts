@@ -1,8 +1,10 @@
 import { gh, run, type Read, type Run } from '../cli/gh.ts'
 import { issue, priorityOf } from '../cli/plan.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { priority, ranked, templatePriority } from '../store/lanes.ts'
 import { allPlans, originRef, planById, type PlanRow } from '../store/plans.ts'
+import { firstLine } from './unpolled.ts'
 
 export function relabel(db: Db, id: number, n: number, hand: { actor: string; why: string }, read: Read = gh, exec: Run = run): void {
   const ref = originRef(planById(db, id))
@@ -33,7 +35,8 @@ function priced(db: Db, plan: PlanRow, read: Read): number | null {
   if (ref === null) return null
   try {
     return priorityOf(issue(ref.repo, ref.no, read).labels) ?? templatePriority(db, plan.template)
-  } catch {
+  } catch (error) {
+    logged(db, { plan: plan.id, kind: 'swallowed', actor: 'reprice', outcome: 'pass', message: firstLine(error), pointer: plan.origin, run: null })
     return null
   }
 }

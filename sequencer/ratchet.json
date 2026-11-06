@@ -81,22 +81,19 @@
     "lines": 51
   },
   "lock.ts": {
-    "lines": 57,
-    "silent-catch": 1
+    "lines": 57
   },
   "mended.ts": {
     "lines": 49
   },
   "merge.ts": {
-    "lines": 132,
-    "silent-catch": 1
+    "lines": 132
   },
   "next.ts": {
     "lines": 74
   },
   "priority.ts": {
-    "lines": 32,
-    "silent-catch": 1
+    "lines": 32
   },
   "prose.ts": {
     "lines": 19,

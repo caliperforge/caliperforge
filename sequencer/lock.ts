@@ -44,8 +44,9 @@ function places(root: string, n: number): string[] {
 function holderOf(path: string): Lease | null {
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as Lease
-  } catch {
-    return null
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT' || error instanceof SyntaxError) return null
+    throw error
   }
 }
 

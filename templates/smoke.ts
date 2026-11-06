@@ -1,6 +1,7 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { BUILD } from './extract.ts'
 import type { Refused } from './handoff.ts'
 import { measured, type Revert } from './reach.ts'
@@ -13,6 +14,11 @@ const SECONDS = '120'
 const COMPILE = 1200
 const IGNORE = '--foundry-ignore-compile'
 const TAIL = 2000
+const FORCED = [...BUILD, '--force']
+const CRYTIC = ['.', IGNORE, '--export-format', 'solc']
+const STAMP = 'cache/fizz-build-info.json'
+const INFO = 'out/build-info'
+const SKIPPED = ['out', 'cache', '.git']
 
 export function smoked(map: string, report: string): Smoked[] {
   const metrics = measured(JSON.parse(readFileSync(report, 'utf8')) as Revert)
@@ -38,12 +44,42 @@ function reusing({ compilation }: Config): Config['compilation'] {
   return { ...compilation, platformConfig: { ...compilation?.platformConfig, args: args.includes(IGNORE) ? args : [...args, IGNORE] } }
 }
 
+function sources(root: string): string {
+  const paths = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter((path) => path.endsWith('.sol') && !SKIPPED.some((dir) => path.startsWith(`${dir}${sep}`)))
+  if (existsSync(join(root, 'foundry.toml'))) paths.push('foundry.toml')
+  const hash = createHash('sha256')
+  for (const path of paths.sort()) hash.update(`${path}\n`).update(readFileSync(join(root, path)))
+  return hash.digest('hex')
+}
+
+interface Stamp { sources: string; files: string[] }
+
+function held(root: string, hash: string): boolean {
+  if (!existsSync(join(root, STAMP))) return false
+  const stamp = JSON.parse(readFileSync(join(root, STAMP), 'utf8')) as Stamp
+  return stamp.sources === hash && stamp.files.every((file) => existsSync(join(root, INFO, file)))
+}
+
+function built(root: string, compile: number): Refused | undefined {
+  const hash = sources(root)
+  if (!held(root, hash)) {
+    const started = Date.now()
+    const forged = spawnSync('forge', FORCED, { cwd: root, encoding: 'utf8', timeout: compile * 1000 })
+    if ((forged.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') return { rule: 'smoke.compile_slow',
+      note: `smoke: forge ${FORCED.join(' ')} ran past its ${String(compile)} s limit and was stopped after ${String(Math.round((Date.now() - started) / 1000))} s; medusa did not run` }
+    if (forged.status !== 0) throw new Error(`forge ${FORCED.join(' ')} exited ${String(forged.status)}: ${(forged.error?.message ?? forged.stderr).slice(-TAIL)}`)
+    mkdirSync(join(root, 'cache'), { recursive: true })
+    writeFileSync(join(root, STAMP), JSON.stringify({ sources: hash, files: readdirSync(join(root, INFO)).sort() } satisfies Stamp))
+  }
+  const crytic = spawnSync('crytic-compile', CRYTIC, { cwd: root, encoding: 'utf8', timeout: compile * 1000 })
+  if (crytic.status !== 0) return { rule: 'smoke.compile_failed',
+    note: `smoke: crytic-compile ${CRYTIC.join(' ')} exited ${String(crytic.status)}; last 20 lines:\n${(crytic.error?.message ?? crytic.stderr).trimEnd().split('\n').slice(-20).join('\n')}` }
+  return undefined
+}
+
 export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60, compile = COMPILE): Smoked[] | Refused {
-  const started = Date.now()
-  const built = spawnSync('forge', BUILD, { cwd: root, encoding: 'utf8', timeout: compile * 1000 })
-  if ((built.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') return { rule: 'smoke.compile_slow',
-    note: `smoke: forge ${BUILD.join(' ')} ran past its ${String(compile)} s limit and was stopped after ${String(Math.round((Date.now() - started) / 1000))} s; medusa did not run` }
-  if (built.status !== 0) throw new Error(`forge ${BUILD.join(' ')} exited ${String(built.status)}: ${(built.error?.message ?? built.stderr).slice(-TAIL)}`)
+  const refused = built(root, compile)
+  if (refused !== undefined) return refused
   const [path, report] = [join(root, 'medusa.json'), join(root, meta, REPORT)]
   const kept = readFileSync(path, 'utf8')
   const config = JSON.parse(kept) as Config

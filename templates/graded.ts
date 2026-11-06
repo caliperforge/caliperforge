@@ -19,7 +19,7 @@ const LCOV = 'test/fizz/fizz_data/corpus_medusa/coverage/lcov.info'
 const HUNK = /^@@ -(\d+)(?:,(\d+))? /
 const GETTER = /\bfunction\s+(\w+)([\s\S]*?)(?=\bfunction\b|$)/g
 const BLOCK = /^files:[ \t]*\n((?:[ \t]+-[ \t]*\S.*(?:\n|$))+)/m
-const INERT = /\/\*[\s\S]*?\*\/|\/\/.*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g
+const INERT = /\bencodeWithSignature\s*\(\s*"(\w+)\((?:[^"\\\n]|\\.)*"|\/\*[\s\S]*?\*\/|\/\/.*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
@@ -27,7 +27,10 @@ const bare = (name: string): string => name.slice(name.lastIndexOf('.') + 1)
 
 const named = (text: string, names: string[]): string[] => names.filter((name) => new RegExp(`\\b${bare(name)}\\b`).test(text))
 
-const called = (text: string, name: string): boolean => new RegExp(`\\.${bare(name)}\\s*(?:\\{[^{}]*\\}\\s*)?\\(`).test(text)
+function called(text: string, name: string): boolean {
+  const n = bare(name)
+  return new RegExp(`\\.${n}\\s*(?:\\{[^{}]*\\}\\s*)?\\(|\\.${n}\\s*\\.\\s*selector\\b|\\bencodeCall\\s*\\(\\s*[^,;]*?\\.${n}\\s*,`).test(text)
+}
 
 function range(hunk: string): [number, number] {
   const [, a = '0', b = '1'] = HUNK.exec(hunk) ?? []
@@ -83,7 +86,7 @@ function halves(phase: Phase, dir: string, { functions, state }: Touched): Half[
   const texts = readdirSync(handlers, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol')).map((p) => readFileSync(join(handlers, p), 'utf8'))
   const properties = read(join(dir, 'test/fizz/Properties.sol'))
   const getters = texts.flatMap((text) => [...text.matchAll(GETTER)]).filter(([, name = '']) => named(properties, [name]).length > 0).map(([, , body = '']) => body)
-  const stripped = texts.map((text) => text.replace(INERT, ''))
+  const stripped = texts.map((text) => text.replace(INERT, (...[, signed]: (string | undefined)[]) => signed === undefined ? '' : `.${signed}(`))
   return [['functions', names, names.filter((name) => stripped.some((text) => called(text, name)))], ['state', state, named([properties, ...getters].join('\n'), state)]]
 }
 

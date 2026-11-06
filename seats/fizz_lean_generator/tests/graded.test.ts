@@ -46,13 +46,17 @@ test('suite hits through a handler getter, else misses', () => {
     .toBe('miss: suite names none of Vault.fee, Vault.cap')
 })
 
-test('suite counts option calls, not comment or string mentions', () => {
+test('suite counts option and calldata calls, not mentions', () => {
   const suite = (body: string, name: string): string => graded('suite', written({ 'test/fizz/handlers/H.sol': `contract H {\n${body}\n}\n` }),
     { functions: [{ file: VAULT, start: 1, end: 1, name }], state: [] })
   const allocator = '  function reallocateTo(uint256 supplyId) public {\n    publicAllocator.reallocateTo{value: value}(vault, withdrawals, IERC4626(supplyId));\n  }'
-  expect(suite(allocator, 'PublicAllocator.reallocateTo')).toBe('hit PublicAllocator.reallocateTo')
-  for (const call of ['target.fn{value: v}(a);', 'target.fn\n  { value: v,\n    gas: g }\n  (a);']) expect(suite(call, 'X.fn')).toBe('hit X.fn')
-  for (const mention of ['// target.fn(a);', '/* target.fn(a); */', 'string s = "target.fn(a)";', 'string s = \'target.fn(a)\';', 'target.fnX(a);', 'target.fnX{value: v}(a);'])
+  const actor = '  function reallocateTo(uint256 supplyId) public {\n    Actor(payable(actor)).callWithValue(address(publicAllocator), value, abi.encodeCall(publicAllocator.reallocateTo, (vault, withdrawals, IERC4626(supplyId))));\n  }'
+  for (const body of [allocator, actor]) expect(suite(body, 'PublicAllocator.reallocateTo')).toBe('hit PublicAllocator.reallocateTo')
+  for (const call of ['target.fn{value: v}(a);', 'target.fn\n  { value: v,\n    gas: g }\n  (a);', 'abi.encodeCall(target.fn, (a));', 'abi.encodeWithSelector(target.fn.selector, a);',
+    'address(t).call(abi.encodeWithSelector(X.fn.selector));', 'abi.encodeWithSignature("fn(uint256)", a);']) expect(suite(call, 'X.fn')).toBe('hit X.fn')
+  for (const mention of ['// target.fn(a);', '/* target.fn(a); */', 'string s = "target.fn(a)";', 'string s = \'target.fn(a)\';', 'target.fnX(a);', 'target.fnX{value: v}(a);',
+    '// abi.encodeCall(target.fn, (a));', '/* target.fn.selector */', 'string s = \'abi.encodeWithSignature("fn(uint256)")\';', '// abi.encodeWithSignature("fn(uint256)", a);',
+    'abi.encodeWithSignature("fnX(uint256)", a);', 'target.fnX.selector;', 'abi.encodeCall(target.other, (a.fn, b));'])
     expect(suite(mention, 'X.fn')).toBe('miss: suite names none of X.fn')
 })
 

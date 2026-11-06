@@ -266,7 +266,7 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
     for (const [file, text] of Object.entries(wrote[phase] ?? {})) writeFileSync(join(handoffs, file), text)
     return phase === 'scaffold' ? { misses: MISSES } : {}
   }, [fizzed()])
-  return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs) }
+  return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs), rerun: () => run(skill, handoffs) }
 }
 
 test('D7: a mapped run calls each check once, in phase order', async () => {
@@ -381,6 +381,17 @@ test('an unlocated reach item refuses before any fix turn', async () => {
   const { fires, sum } = await mapped()
   expect(fires.map((f) => f.phase)).toEqual(LEAN)
   expect(sum).toEqual({ outcome: 'refuse', spans: ['reach.unlocated'], note: '1 row(s) have no at: <file> L<start>-L<end> in map.md: Guards V.deposit' })
+})
+
+test('a not_clean scaffold passing its grade resumes at coverage', async () => {
+  vi.mocked(reach).mockReturnValueOnce([{ ...UNMET, located: false }])
+  const { db, handoffs, fires, sum, rerun } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
+  expect(sum).toMatchObject({ outcome: 'refuse', spans: ['reach.unlocated'] })
+  expect(critics(db)).toContainEqual(['refuse', 'not_clean: suite'])
+  expect(JSON.parse(readFileSync(join(handoffs, 'stopped.json'), 'utf8'))).toMatchObject({ phase: 'scaffold' })
+  const before = fires.length
+  await rerun()
+  expect(fires[before]?.phase).toBe('coverage')
 })
 
 test('reach D5: coverage.md and the # Map block carry reach', () => {

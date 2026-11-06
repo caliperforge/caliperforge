@@ -9,13 +9,15 @@ import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { allPlans, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { template } from '../store/facts.ts'
 import { profile } from '../store/profile.ts'
-import { evidenceOf, lastCi, passed, railedParts, target, targetRepo, unanswered } from '../store/ready.ts'
+import { evidenceOf, lastCi, passed, pushTarget, railedParts, target, targetRepo, unanswered } from '../store/ready.ts'
 import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
+import { prBody, refOf } from './pr.ts'
 import { forkCi, GRADES, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, git, headSha, MAIN, maybe, put, repoName, srcDir, tried } from './workspace.ts'
 import { forkOf, homeOf } from './home.ts'
@@ -133,6 +135,7 @@ function asked(root: string, plan: number, sha: string, repo: string, wire: Wire
 
 function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: DeliverableRow): Proof {
   const ci = lastCi(db, plan.id)
+  const to = internal(plan) ? null : pushTarget(db, plan)
   return {
     repo,
     ours: internal(plan),
@@ -144,6 +147,18 @@ function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Deliver
     spans: [row.diff_digest.slice(0, 12)],
     title: title(root, plan.id),
     named: [maybe(root, plan.id, 'ask.md') ?? '', ...parse(diffOf(root, plan.id)).flatMap((f) => f.added.map((l) => l.text))].join('\n'),
+    ...(to === null ? { body: '', template: null, closes: null } : posted(root, plan.id, to.issue_no, repo)),
+  }
+}
+
+/** The body step 8 posts, their PR template, and the closing line their profile requires. */
+function posted(root: string, plan: number, no: number, repo: string): Pick<Proof, 'body' | 'template' | 'closes'> {
+  const theirs = template(srcDir(root, plan))
+  const rules = profile(root, repo, plan)
+  return {
+    body: maybe(root, plan, 'pr.md') ?? prBody(no, root, plan, rules),
+    template: theirs ?? null,
+    closes: refOf(theirs, rules) === 'Fixes' ? `Fixes #${String(no)}` : null,
   }
 }
 

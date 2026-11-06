@@ -23,11 +23,15 @@ export function prBody(no: number, root: string, plan: number, rules: Profile | 
   const tested = tests.length === 0 ? [] : [`Tested in ${tests.map((t) => `\`${t}\``).join(', ')}.`]
   const ci = green(root, plan) ? ['CI is green on our fork at this head.'] : []
   const theirs = template(srcDir(root, plan))
-  const ref = theirs !== undefined && rules?.issue_ref === 'Fixes' ? 'Fixes' : 'Addresses'
+  const ref = refOf(theirs, rules)
   const pieces: [RegExp, string][] = [[/what|why/i, said(brief, ['**Why:**', '**What:**']).join('\n\n')], [/test/i, [...tested, ...ci].join(' ')],
     [/issue/i, `${ref} #${String(no)}.`], [/disclos/i, rules?.disclosure ?? '']]
   const paragraphs = theirs === undefined ? pieces.map(([, p]) => p) : filled(theirs, pieces.filter(([, p]) => p !== ''))
   return `${paragraphs.filter((p) => p !== '').join('\n\n')}\n`
+}
+
+export function refOf(theirs: string | undefined, rules: Profile | null): 'Fixes' | 'Addresses' {
+  return theirs !== undefined && rules?.issue_ref === 'Fixes' ? 'Fixes' : 'Addresses'
 }
 
 /** Each heading takes the first unused piece it names, else keeps the template's text; pieces no heading named follow. */

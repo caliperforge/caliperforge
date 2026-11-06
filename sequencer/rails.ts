@@ -54,7 +54,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const on = read?.rails
   const commands = read?.commands ?? {}
   const finishes = { entries: read?.finish ?? {}, minutes: read?.finish_minutes }
-  const refusal = on?.digests === true && forkOf(root, plan) === null ? unfilled(srcDir(root, plan.id)) : null
+  const refusal = on?.digests === true && forkOf(root, plan) === null ? unfilled(db, plan.id, srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const bare = unbuilt(root, plan.id)
   const handback = bare ? '' : handbackOf(root, plan.id)
@@ -193,18 +193,15 @@ function noted(db: Db, plan: number): Run {
 }
 
 /** The roster and seat files a fill reads are the builder's, so their typo refuses this plan where a throw takes the lap. */
-function unfilled(src: string): Outcome | null {
+function unfilled(db: Db, plan: number, src: string): Outcome | null {
   try {
     if (existsSync(join(src, 'cli/cf.ts'))) execFileSync('node', ['cli/cf.ts', 'digests'], { cwd: src, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
     else fill(src, new Date().toISOString().slice(0, 10))
     return null
   } catch (error) {
-    return {
-      outcome: 'refuse',
-      spans: [ROSTER],
-      note: 'digests: the checkout could not be filled',
-      message: error instanceof Error ? error.message : String(error),
-    }
+    const message = error instanceof Error ? error.message : String(error)
+    logged(db, { plan, kind: 'digests', actor: 'pre_review', outcome: 'refuse', message, pointer: null, run: null })
+    return { outcome: 'refuse', spans: [ROSTER], note: 'digests: the checkout could not be filled', message }
   }
 }
 

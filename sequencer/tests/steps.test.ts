@@ -10,6 +10,7 @@ import { addRule, migrate, open } from '../../store/index.ts'
 import { returnToLane } from '../../store/holds.ts'
 import { dial, hours } from '../../store/lanes.ts'
 import { addPart } from '../../store/parts.ts'
+import { profile } from '../../store/profile.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf, logged, runRows } from '../../store/events.ts'
 import { addPipe, addPlan, briefed, dropPipes, dropPlan, end, pipeNamed, planById, planRows, putPlan, requeue, type PlanRow } from '../../store/plans.ts'
@@ -294,4 +295,23 @@ test('D4 once the ceo returns it, the unstated plan passes', () => {
   expect(measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n'))).toEqual({ outcome: 'pass', spans: [],
     note: 'acme/widget#12 warm; ai stance: unstated — no statement in 1 files, 0 maintainer comments, 1 outside merges in 90 days' })
   expect(maybe(w.root, 1, 'ask.md')).not.toContain('## Ask first')
+})
+
+test('a Fixes # CONTRIBUTING gives the plan issue_ref Fixes', () => {
+  const w = world()
+  measure(w.db, w.root, planOf(w.db, 1), widget('Start the PR body with Fixes #<n>.\n'))
+  expect(profile(w.root, 'acme/widget', 1)?.issue_ref).toBe('Fixes')
+})
+
+test('an AI disclosure line gives the plan the disclosure', () => {
+  const w = world()
+  measure(w.db, w.root, planOf(w.db, 1), widget('Disclose any AI tools you used.\n'))
+  expect(profile(w.root, 'acme/widget', 1)?.disclosure).toBe('This change was written with AI assistance and reviewed by a person before it was opened.')
+})
+
+test('a CONTRIBUTING with neither rule sets neither', () => {
+  const w = world()
+  measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n'))
+  expect(maybe(w.root, 1, 'profile.yml')).toBe('{}\n')
+  expect(profile(w.root, 'acme/widget', 1)).toEqual({})
 })

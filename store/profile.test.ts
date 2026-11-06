@@ -39,6 +39,17 @@ test('D6 a stray intake key or non-boolean claim_first is refused', () => {
   expect(() => profile(claim, 'acme/widget')).toThrow(join(claim, 'profiles/acme/widget.yml'))
 })
 
+test('a plan profile.yml fills rules under the repo YAML', () => {
+  const dir = root({})
+  mkdirSync(join(dir, '.cf/work/1'), { recursive: true })
+  writeFileSync(join(dir, '.cf/work/1/profile.yml'), JSON.stringify({ issue_ref: 'Fixes', disclosure: 'planned' }))
+  expect(profile(dir, 'acme/widget', 1)).toEqual({ issue_ref: 'Fixes', disclosure: 'planned' })
+  writeFileSync(join(dir, 'profiles/acme/widget.yml'), 'disclosure: own\n')
+  expect(profile(dir, 'acme/widget', 1)).toEqual({ issue_ref: 'Fixes', disclosure: 'own' })
+  expect(profile(dir, 'acme/widget')).toEqual({ disclosure: 'own' })
+  expect(profile(mkdtempSync(join(tmpdir(), 'cf-profile-')), 'acme/widget', 1)).toBeNull()
+})
+
 test('D2 a field both files set comes whole from the repo file', () => {
   const dir = root({ '_org.yml': 'notes: [org]\ncommit: org\n', 'widget.yml': 'notes: [own, more]\n' })
   expect(profile(dir, 'acme/widget')).toEqual({ notes: ['own', 'more'], commit: 'org' })

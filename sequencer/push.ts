@@ -124,14 +124,14 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip, base: onto, rejected } = sent(db, root, plan, repo, wire)
   if (rejected !== null) return { outcome: 'refuse', spans: ['fork.sent'], to: 6, note: rejected }
-  const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo)))
+  const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo, plan.id)))
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
   const on = { fork, branch: ci, sha: tip }
   const early = unfired(db, root, plan, repo, head, on, wire)
   if (early !== null) return early.stop
-  const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
+  const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo, plan.id)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`
   const waiting = unfinished(verdict.spans) ?? others(board)
@@ -206,7 +206,7 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const dir = srcDir(root, plan.id)
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const ci = outside ? rehearsed(root, plan.id, branch) : branch
-  const rules = profile(root, repo)
+  const rules = profile(root, repo, plan.id)
   const base = !outside ? null : onFork(dir, branch) ? follow(root, plan.id, messageOf(root, plan.id, rules)) : squash(root, plan.id, rules)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(db, root, plan.id, head, ci, repo, wire) : head.sha
@@ -460,7 +460,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const late = overlap(root, plan.id, head.dir, signed)
   if (late !== null) return refuse('their_work', late)
-  const rules = profile(root, target.repo)
+  const rules = profile(root, target.repo, plan.id)
   const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, rules)
   const named = prTitle(root, plan.id)
   const open = opened(db, plan.id)

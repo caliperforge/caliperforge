@@ -13,7 +13,7 @@ import type { fixed } from '../../../templates/graded.ts'
 import { packets } from '../../../templates/plan.ts'
 import { type Item, reach } from '../../../templates/reach.ts'
 import { report } from '../../../templates/report.ts'
-import { packed, smoke, type Smoked } from '../../../templates/smoke.ts'
+import { packed, primed, smoke, type Smoked } from '../../../templates/smoke.ts'
 import { suite, type Suite } from '../../../templates/suite.ts'
 import { benched, transcripts } from './benched.ts'
 
@@ -21,7 +21,7 @@ const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [],
 
 vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY) }))
 
-vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null })) }))
+vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null, cache: null })), primed: vi.fn(() => null) }))
 
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
@@ -271,12 +271,14 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
 
 test('D7: a mapped run calls each check once, in phase order', async () => {
   vi.clearAllMocks()
+  let covered = true
+  vi.mocked(primed).mockImplementationOnce((dir) => { covered = existsSync(join(dir, 'test/fizz/fizz_data/handoff/coverage.md')); return null })
   await mapped()
   const at = (f: (...args: never[]) => unknown): number[] => vi.mocked(f).mock.invocationCallOrder
-  expect([at(smoke).length, at(reach).length]).toEqual([1, 1])
+  expect([at(smoke).length, at(primed).length, at(reach).length, covered]).toEqual([1, 1, 1, false])
   expect(vi.mocked(criticCheck).mock.calls.map((call) => call[2])).toEqual(['critic.stand_in', 'critic.share_converted', 'critic.stand_in'])
-  const [[smoked], [reached], [stood, shared, ended]] = [at(smoke), at(reach), at(criticCheck)]
-  const order = [smoked, stood, reached, shared, ended]
+  const [[smoked], [slithered], [reached], [stood, shared, ended]] = [at(smoke), at(primed), at(reach), at(criticCheck)]
+  const order = [smoked, stood, slithered, reached, shared, ended]
   expect(order).toEqual([...order].sort((a, b) => Number(a) - Number(b)))
   expect(vi.mocked(compiled).mock.calls.map((call) => call[1])).toEqual(['scaffold', 'smoke', 'coverage', 'invariants'])
 })
@@ -303,7 +305,7 @@ const SMOKED: Smoked[] = [{ name: 'V.deposit(uint256 assets)', calls: 10, succes
 
 test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {
   vi.mocked(suite).mockReturnValueOnce(EMPTY).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
-  vi.mocked(smoke).mockReturnValueOnce({ results: SMOKED, note: null })
+  vi.mocked(smoke).mockReturnValueOnce({ results: SMOKED, note: null, cache: null })
   const { db, handoffs, packets, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants-plan', 'invariants'])
   expect(fires[2]?.issue).toContain('scaffold: V.deposit has no raw handler')
@@ -329,11 +331,19 @@ test.each([
 
 test('a slither-off smoke logs smoke.slither_off and passes', async () => {
   const note = 'smoke: slither . --ignore-compile --print echidna --json - exited 1; medusa ran with slither off'
-  vi.mocked(smoke).mockReturnValueOnce({ results: [], note })
+  vi.mocked(smoke).mockReturnValueOnce({ results: [], note, cache: null })
   const { db, fires, sum } = await mapped()
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants-plan', 'invariants'])
   expect(sum).toMatchObject({ tokens: 5, wall: null })
   expect(eventsAfter(db, 0).filter((e) => e.kind.startsWith('smoke.')).map((e) => [e.kind, e.outcome, e.message])).toEqual([['smoke.slither_off', 'pass', note]])
+})
+
+test('an off primed logs coverage.slither_off and coverage fires', async () => {
+  const note = 'smoke: slither . --ignore-compile --foundry-out-directory cache/fizz-slither-out --print echidna --json - exited 1; medusa ran with slither off'
+  vi.mocked(primed).mockReturnValueOnce(note)
+  const { db, fires } = await mapped()
+  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'invariants-plan', 'invariants'])
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'coverage.slither_off').map((e) => [e.outcome, e.message])).toEqual([['pass', note]])
 })
 
 test('a missing out/ is rebuilt before the scaffold check reads it', async () => {
@@ -401,8 +411,10 @@ test('a not_clean scaffold passing its grade resumes at coverage', async () => {
   expect(critics(db)).toContainEqual(['refuse', 'not_clean: suite'])
   expect(JSON.parse(readFileSync(join(handoffs, 'stopped.json'), 'utf8'))).toMatchObject({ phase: 'scaffold' })
   const before = fires.length
+  vi.mocked(primed).mockClear()
   await rerun()
   expect(fires[before]?.phase).toBe('coverage')
+  expect(primed).toHaveBeenCalledOnce()
 })
 
 test('reach D5: coverage.md and the # Map block carry reach', () => {

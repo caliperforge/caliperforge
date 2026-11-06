@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { alive } from '../../../store/leases.ts'
 import { selected } from '../../../templates/map.ts'
-import { packed, type Ran, smoke, smoked, unrun } from '../../../templates/smoke.ts'
+import { packed, primed, type Ran, smoke, smoked, unrun } from '../../../templates/smoke.ts'
 
 const fixtures = join(import.meta.dirname, 'fixtures')
 const REPORT = join(fixtures, 'revert_report.json')
@@ -60,21 +60,24 @@ test('a never-exiting medusa is killed and refused as smoke.hung', async () => {
     note: `smoke: medusa ran past --timeout 120 + 60 s and its process group was killed; last 40 lines:\n${lines}` })
   const pid = Number(readFileSync(join(root, 'pid'), 'utf8'))
   await expect.poll(() => alive(pid)).toBe(false)
-  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+  expect(JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8'))).toMatchObject(JSON.parse(config) as object)
 }, 10_000)
 
 const SEES = "const { copyFileSync, mkdirSync } = require('node:fs')\ncopyFileSync('medusa.json', 'seen.json')\n"
   + `mkdirSync('${META}/corpus_medusa/coverage', { recursive: true })\ncopyFileSync(${JSON.stringify(REPORT)}, '${META}/corpus_medusa/coverage/revert_report.json')\n`
-const SLITHER = '. --ignore-compile --print echidna --json -'
+const SLITHER = '. --ignore-compile --foundry-out-directory cache/fizz-slither-out --print echidna --json -'
+const SCOPED = 'build --build-info --out cache/fizz-slither-out --cache-path cache/fizz-slither-cache src test/fizz\n'
+const CACHE = expect.stringMatching(/^cache\/fizz-slither-[0-9a-f]{64}\.json$/) as string
 const slither = (root: string): { useSlither: boolean; cachePath: string } =>
   (JSON.parse(readFileSync(join(root, 'seen.json'), 'utf8')) as { slither: { useSlither: boolean; cachePath: string } }).slither
+const restored = (root: string): unknown => JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8'))
 
-test('medusa reuses the build and medusa.json is restored', () => {
-  const { root, fizz, config } = medusa(SEES)
-  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT), note: null })
+test('medusa reuses the build, medusa.json keeps the slither block', () => {
+  const { root, fizz } = medusa(SEES)
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT), note: null, cache: CACHE })
   const seen = JSON.parse(readFileSync(join(root, 'seen.json'), 'utf8')) as typeof MEDUSA
   expect(seen.compilation).toEqual({ ...MEDUSA.compilation, platformConfig: { target: '.', args: ['--foundry-ignore-compile'] } })
-  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+  expect(restored(root)).toEqual({ ...MEDUSA, slither: { useSlither: true, cachePath: CACHE } })
 })
 
 const STARTS = "require('node:fs').writeFileSync('started', '')\n"
@@ -93,38 +96,60 @@ test('partial build-info is rebuilt once with --force, then reused', () => {
   mkdirSync(join(root, 'out/build-info'), { recursive: true })
   writeFileSync(join(root, 'out/build-info/a.json'), '{}')
   writeFileSync(join(root, 'V.sol'), 'contract V {}\n')
-  const forced = 'build --ast --build-info --force\n'
-  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT), note: null })
-  const first = slither(root)
-  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT), note: null })
+  const forced = `build --ast --build-info --force\n${SCOPED}`
+  const info = (): string[] => readdirSync(join(root, 'out/build-info')).sort().map((f) => readFileSync(join(root, 'out/build-info', f), 'utf8'))
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT), note: null, cache: CACHE })
+  const [first, built] = [slither(root), info()]
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT), note: null, cache: first.cachePath })
   expect(readFileSync(join(root, 'forge.log'), 'utf8')).toBe(forced)
   expect(readFileSync(join(root, 'slither.log'), 'utf8')).toBe(`${SLITHER}\n`)
   expect(slither(root)).toEqual(first)
-  expect([first.useSlither, readFileSync(first.cachePath, 'utf8')]).toEqual([true, '{}\n'])
+  expect([first.useSlither, readFileSync(join(root, first.cachePath), 'utf8')]).toEqual([true, '{}\n'])
   writeFileSync(join(root, 'V.sol'), 'contract V { uint x; }\n')
   smoke(root, fizz, META, MAP, 30)
   expect(readFileSync(join(root, 'forge.log'), 'utf8')).toBe(forced.repeat(2))
   expect(readFileSync(join(root, 'slither.log'), 'utf8')).toBe(`${SLITHER}\n`.repeat(2))
+  expect(info()).toEqual(built)
   expect(slither(root).cachePath).not.toBe(first.cachePath)
-  expect(readFileSync(slither(root).cachePath, 'utf8')).toBe('{}\n')
+  expect(readFileSync(join(root, slither(root).cachePath), 'utf8')).toBe('{}\n')
 })
 
 test('a slow slither runs medusa with slither off and notes it', () => {
-  const { root, fizz, config } = medusa(SEES, undefined, undefined, 'exec sleep 5')
+  const { root, fizz } = medusa(SEES, undefined, undefined, 'exec sleep 5')
   expect(smoke(root, fizz, META, MAP, 30, 1)).toEqual({ results: smoked(MAP, REPORT),
-    note: `smoke: slither ${SLITHER} ran past its 1 s limit; medusa ran with slither off` })
+    note: `smoke: slither ${SLITHER} ran past its 1 s limit; medusa ran with slither off`, cache: null })
   expect(slither(root)).toEqual({ useSlither: false })
   expect(readdirSync(join(root, 'cache'))).toEqual(['fizz-build-info.json'])
-  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+  expect(restored(root)).toEqual({ ...MEDUSA, slither: { useSlither: false } })
 }, 10_000)
 
 test('a failing slither runs medusa with slither off', () => {
   const { root, fizz } = medusa(SEES, undefined, undefined, "echo '{'\nexit 2")
   expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT),
-    note: `smoke: slither ${SLITHER} exited 2; medusa ran with slither off` })
+    note: `smoke: slither ${SLITHER} exited 2; medusa ran with slither off`, cache: null })
   expect(slither(root)).toEqual({ useSlither: false })
   expect(readdirSync(join(root, 'cache'))).toEqual(['fizz-build-info.json'])
 })
+
+test('primed runs nothing on a held cache or slither off', () => {
+  const { root } = medusa('')
+  mkdirSync(join(root, 'cache'))
+  writeFileSync(join(root, 'cache/held.json'), '{}')
+  for (const slither of [{ useSlither: true, cachePath: 'cache/held.json' }, { useSlither: false }]) {
+    writeFileSync(join(root, 'medusa.json'), JSON.stringify({ ...MEDUSA, slither }))
+    expect(primed(root)).toBeNull()
+  }
+  expect(['forge.log', 'slither.log'].map((log) => existsSync(join(root, log)))).toEqual([false, false])
+})
+
+test('a slow primed scan turns slither off and returns the note', () => {
+  const { root } = medusa('', undefined, undefined, 'exec sleep 5')
+  mkdirSync(join(root, 'cache'))
+  writeFileSync(join(root, 'medusa.json'), JSON.stringify({ ...MEDUSA, slither: { useSlither: true, cachePath: 'cache/gone.json' } }))
+  expect(primed(root, 1)).toBe(`smoke: slither ${SLITHER} ran past its 1 s limit; medusa ran with slither off`)
+  expect(restored(root)).toEqual({ ...MEDUSA, slither: { useSlither: false, cachePath: 'cache/gone.json' } })
+  expect(readdirSync(join(root, 'cache'))).toEqual([])
+}, 10_000)
 
 test('a failing crytic-compile refuses as smoke.compile_failed', () => {
   const { root, fizz, config } = medusa(STARTS, undefined, 'for i in $(seq 1 30); do echo "line $i" >&2; done\nexit 1')
@@ -140,7 +165,7 @@ test('a medusa that exits without a report still throws', () => {
   expect(() => smoke(root, fizz, META, MAP, 2)).toThrow('run_medusa.js exited 3 and wrote no ')
 })
 
-test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restores medusa.json', () => {
+test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, points medusa.json at the cache', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-'))
   for (const dir of ['src', META]) mkdirSync(join(root, dir), { recursive: true })
   copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
@@ -154,5 +179,6 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restor
   const { results } = smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP) as Ran
   expect(results.map((r) => [r.name, r.calls > 0, r.successes > 0])).toEqual([[DEPOSIT, true, true], [WITHDRAW, true, true], [CONVERT, false, false]])
   expect(info()).toEqual(built)
-  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+  const { slither: kept } = JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8')) as { slither: { useSlither: boolean; cachePath: string } }
+  expect([kept.useSlither, existsSync(join(root, kept.cachePath))]).toEqual([true, true])
 }, 300_000)

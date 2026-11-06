@@ -18,7 +18,7 @@ const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [],
 
 vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY) }))
 
-vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null })) }))
+vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null, cache: null })) }))
 
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
@@ -96,10 +96,18 @@ test('a hung smoke prints a refusal row', () => {
 test('a smoke with slither off passes with its note', () => {
   const { db, root } = planted()
   const note = 'smoke: slither . --ignore-compile --print echidna --json - ran past its 1200 s limit; medusa ran with slither off'
-  vi.mocked(smoke).mockReturnValueOnce({ results: [], note })
+  vi.mocked(smoke).mockReturnValueOnce({ results: [], note, cache: null })
   const rows = ROWS.map((row) => row[1] === 'smoke' ? [...row.slice(0, 2), `pass | ${note}`] : row)
   expect(dried(db, root, 1, fizz())).toBe(table(rows))
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'bench.dry').map((e) => e.outcome)).toEqual(['pass'])
+})
+
+test('a smoke with a slither cache names it in its row', () => {
+  const { db, root } = planted()
+  const cache = `cache/fizz-slither-${'a'.repeat(64)}.json`
+  vi.mocked(smoke).mockReturnValueOnce({ results: [], note: null, cache })
+  const rows = ROWS.map((row) => row[1] === 'smoke' ? [...row.slice(0, 2), `pass | slither cache ${cache}`] : row)
+  expect(dried(db, root, 1, fizz())).toBe(table(rows))
 })
 
 test('an unlocated item refuses the reach and boundary rows', () => {

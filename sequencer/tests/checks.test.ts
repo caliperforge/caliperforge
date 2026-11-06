@@ -1307,6 +1307,18 @@ test('a no-default-features CI line keeps defaults off', () => {
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
   expect(calls[1]).toBe(`cargo test -p solana-keychain --no-default-features --features solana-keychain/sdk-v4 -- --test-threads=4 @${src}`)
+  const matrix = 'cargo test --no-default-features --features ${{ matrix.features }}'
+  const defaults = 'cargo test -p solana-keychain -- --test-threads=4'
+  const unread = keychain([matrix])
+  const bare = heard()
+  expect(checks(unread, {}, bare.run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(bare.calls.slice(1)).toEqual([`${defaults} @${unread}`])
+  const both = keychain([matrix, 'cargo test --no-default-features --features sdk-v4'])
+  const named = heard()
+  expect(checks(both, {}, named.run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(named.calls.slice(1)).toEqual([`cargo test -p solana-keychain --no-default-features --features solana-keychain/sdk-v4 -- --test-threads=4 @${both}`])
+  const red: Run = (...[args, , bin]) => (`${bin ?? 'npm'} ${args.join(' ')}` === defaults ? { ok: false, code: '101', output: 'test failed' } : { ok: true, output: '' })
+  expect(checks(unread, {}, red, [], { language: 'rust', files: ['src/lib.rs'] })).toMatchObject({ script: 'test', command: defaults })
 })
 
 const BINDINGS = 'jobs:\n  bindings:\n    steps:\n      - name: Verify committed bindings are up to date\n        run: |\n'

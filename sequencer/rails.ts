@@ -24,7 +24,7 @@ import { laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
 import { rebuilt } from '../store/runs.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, finish, gated, mode, network, npm, own, type Commands, type Failure, type Run } from './checks.ts'
+import { based, checks, finish, gated, mode, network, npm, own, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
 import { newest, ruled } from './cited.ts'
 import { outsideLanguage, sushi } from './gates.ts'
@@ -146,8 +146,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) { put(root, plan.id, 'step-3.capped', ''); return capped(failed, alone) }
       drop(root, plan.id, 'step-3.capped')
-      const blip = failed === null ? null : offline(failed)
-      if (blip !== null) return blip
+      const unjudged = failed === null ? null : offline(failed) ?? based(failed)
+      if (unjudged !== null) return unjudged
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diff), 0)
       if (failed !== null) return broke(db, root, plan, failed)
     } finally {

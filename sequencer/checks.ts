@@ -6,7 +6,8 @@ import { alive } from '../store/leases.ts'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
-import { fresh } from './inherited.ts'
+import { fresh, inherited } from './inherited.ts'
+import type { Outcome } from './kind.ts'
 import { contained, subprojects } from './loose.ts'
 import { malformed } from './malformed.ts'
 import { nodeTests, Package } from './node.ts'
@@ -43,6 +44,8 @@ export interface Failure {
   capped?: true
   /** On a capped whole vitest suite, the test files it never printed as finished; on a capped `cargo test`, the binaries it never ended. */
   unfinished?: string[]
+  /** The sha where the command, as built, also failed. */
+  base?: string
 }
 
 export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string; capped?: true }
@@ -133,8 +136,8 @@ export function gated(src: string, list: Gate[], run: Run, excused: string[] = [
     const command = `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`
     const unfinished = stalled(gate, first)
     if (unfinished !== null) return { script: gate.script, command, code: first.code, output: tail(first.output), tests: [], retried: false, capped: true, unfinished }
-    const left = fresh(src, gate, first.output, run, said)
-    if (left?.length !== 0) return { script: gate.script, command, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false }
+    const left = gate.bin === 'cargo' ? null : fresh(src, gate, first.output, run, said)
+    if (left?.length !== 0) return { script: gate.script, command, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false, ...inherited(src, gate, first.output, run) }
   }
   return null
 }
@@ -191,6 +194,10 @@ export const NETWORK = /RPC failed|fatal: expected 'packfile'|Could not resolve 
 
 export function network(output: string): string | null {
   return output.split('\n').map((line) => line.trim()).find((line) => NETWORK.test(line)) ?? null
+}
+
+export function based(failed: Failure): Outcome | null {
+  return failed.base === undefined ? null : { outcome: 'needs_ceo', spans: ['machine_fault', `checks:${failed.script}`], note: `${failed.command} fails at base ${failed.base.slice(0, 12)}: the command is red before the diff`, message: failed.output }
 }
 
 export function failures(output: string): string[] {

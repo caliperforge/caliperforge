@@ -14,11 +14,12 @@ import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
 import { refusalRows, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { checks, excluded, finish, gated, mode, network, npm, own, type Ran, type Run } from '../checks.ts'
+import { based, checks, excluded, finish, gated, mode, network, npm, own, type Ran, type Run } from '../checks.ts'
 import { ruledTest } from '../cited.ts'
-import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
+import { ciFeatures, formatLine, type Outside } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow, offline } from '../rails.ts'
+import { recipes } from '../recipes.ts'
 import { streak } from '../refusal.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { ATELIER, BROKEN, GREEN, GREETED, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
@@ -1473,4 +1474,94 @@ test('a red test, red fmt or non-cargo gate runs no rustup', () => {
 
 test('a program that never starts is named', () => {
   expect(npm(['--version'], tmpdir(), 'cf-no-such-bin')).toEqual({ ok: false, code: '127', output: expect.stringMatching(/^cf-no-such-bin: spawnSync cf-no-such-bin ENOENT/) as string })
+})
+
+const KEYCHAIN_JUST = 'sdkv2 := "sdk-v2"\n\nrust-test:\n    cargo test --no-default-features --features {{ sdkv2 }}\n\nrust-test-ledger:\n    @just ledger::test\n'
+
+const FMT = 'cargo fmt --all -- --check'
+
+function recipe(name: string, text: string): string {
+  const src = keychain(PER_SDK)
+  writeFileSync(join(src, name), text)
+  return src
+}
+
+test('a justfile rust-test runs instead of built cargo lines', () => {
+  const src = recipe('justfile', KEYCHAIN_JUST)
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(calls).toEqual([`${FMT} @${src}`, `just --justfile justfile rust-test @${src}`])
+})
+
+test('a ledger file adds rust-test-ledger, and lib.rs does not', () => {
+  const src = recipe('justfile', KEYCHAIN_JUST)
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/ledger/mod.rs', 'src/lib.rs'] })).toBeNull()
+  expect(calls.slice(1)).toEqual([`just --justfile justfile rust-test @${src}`, `just --justfile justfile rust-test-ledger @${src}`])
+  const lib = heard()
+  expect(checks(src, {}, lib.run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(lib.calls.join('\n')).not.toContain('rust-test-ledger')
+})
+
+test('a Makefile test-rust runs through make', () => {
+  const src = recipe('Makefile', '.PHONY: test-rust\n\ntest-rust:\n\tcargo test --features sdk-v2\n')
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(calls.slice(1)).toEqual([`make test-rust @${src}`])
+})
+
+test('a ruled test beats the recipe', () => {
+  const src = recipe('justfile', KEYCHAIN_JUST)
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'], test: ['test', '--features', 'sdk-v2'] })).toBeNull()
+  expect(calls).toEqual([`${FMT} @${src}`, `cargo test --features sdk-v2 @${src}`])
+})
+
+const UNGATED: Ran = { ok: false, code: '101', output: 'error: Must enable one of sdk-v2, sdk-v3, or sdk-v4 feature.\n  |     compile_error!("Must enable one of sdk-v2, sdk-v3, or sdk-v4 feature.");\n' }
+
+function committed(): { src: string; base: string; worktrees: () => number } {
+  const src = keychain(PER_SDK)
+  const git = (args: string[]): string => spawnSync('git', args, { cwd: src, encoding: 'utf8' }).stdout.trim()
+  git(['init', '-q'])
+  git(['add', '-A'])
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'base'])
+  return { src, base: git(['rev-parse', 'HEAD']), worktrees: () => git(['worktree', 'list', '--porcelain']).split('\n').filter((l) => l.startsWith('worktree ')).length }
+}
+
+/** `cargo test` answers `head` in `src` and `base` in any other tree. */
+function trees(src: string, head: Ran, base: Ran): { run: Run; cwds: string[] } {
+  const cwds: string[] = []
+  const run: Run = (args, cwd) => {
+    if (args[0] !== 'test') return OK
+    cwds.push(cwd)
+    return cwd === src ? head : base
+  }
+  return { run, cwds }
+}
+
+test('compile_error! at head and base is a machine fault', () => {
+  const { src, base } = committed()
+  const failed = checks(src, {}, trees(src, UNGATED, UNGATED).run, [], { language: 'rust', files: ['src/lib.rs'], base })
+  expect(failed).toMatchObject({ script: 'test', command: sdkCommand('sdk-v2'), base })
+  expect(failed && based(failed)).toEqual({ outcome: 'needs_ceo', spans: ['machine_fault', 'checks:test'],
+    note: `${sdkCommand('sdk-v2')} fails at base ${base.slice(0, 12)}: the command is red before the diff`, message: UNGATED.output })
+})
+
+test('compile_error! green at base refuses, one worktree', () => {
+  const { src, base, worktrees } = committed()
+  const { run, cwds } = trees(src, UNGATED, OK)
+  const failed = checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'], base })
+  expect(failed).toMatchObject({ script: 'test', command: sdkCommand('sdk-v2') })
+  expect(failed?.base).toBeUndefined()
+  expect(failed && based(failed)).toBeNull()
+  expect(cwds).toHaveLength(2)
+  expect(worktrees()).toBe(1)
+})
+
+test('a red cargo test without compile_error! skips base', () => {
+  const { src, base } = committed()
+  const red: Ran = { ok: false, code: '101', output: 'test b ... FAILED\n' }
+  const { run, cwds } = trees(src, red, red)
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'], base })?.base).toBeUndefined()
+  expect(cwds).toEqual([src])
 })

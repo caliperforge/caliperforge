@@ -4,6 +4,7 @@ import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
+import { home, recipes, tested } from './recipes.ts'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
 const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift', 'typescript'] as const
@@ -139,7 +140,7 @@ export function sushi(src: string, base?: string): Gate[] {
 }
 
 function own(src: string, outside: Outside, excused: string[]): Gate[] {
-  if (outside.language === 'rust') return rust(src, outside.files, excused, outside.test)
+  if (outside.language === 'rust') return rust(src, outside, excused)
   const recipe = RECIPES[outside.language]
   const near = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
   const found = recipes(join(src, near, JUSTFILE))
@@ -168,40 +169,25 @@ function languageHint(path: string, language: OutsideLanguage): boolean {
   return EXT[language].test(path) || path.startsWith(`${language}/`)
 }
 
-/** The nearest folder at or above the file's own that holds a marker; the root when none does. */
-function home(src: string, file: string, marks: (name: string) => boolean): string {
-  let dir = dirname(file)
-  for (;;) {
-    const here = join(src, dir === '.' ? '' : dir)
-    if (existsSync(here) && readdirSync(here).some(marks)) return dir === '.' ? '' : dir
-    if (dir === '.' || dir === '') return ''
-    dir = dirname(dir)
-  }
-}
-
-/** A Justfile's recipe names, or null when there is none. */
-export function recipes(path: string): Set<string> | null {
-  if (!existsSync(path)) return null
-  const names = [...readFileSync(path, 'utf8').matchAll(/^@?([A-Za-z_][\w-]*)(?:[ \t][^:\n]*)?:(?!=)/gm)].map((m) => m[1] ?? '')
-  return new Set(names)
-}
-
 /**
  * The format check their CI runs, read off `.github/workflows`, at the workspace root; then the tests of
  * the crates the brief touches, never the whole workspace, which on surfpool is minutes of build. The tests run
  * once per `cargo test` line in their CI, with that line's features where the crate declares them:
  * surfpool's `ignore_tests_ci`
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
- * (surfpool's `postgres`) is left off, as this host runs no such service.
+ * (surfpool's `postgres`) is left off, as this host runs no such service. Their own `rust-test` recipe replaces those lines.
  */
-function rust(src: string, files: string[], excused: string[], test?: string[]): Gate[] {
-  const own = files.filter((f) => f.endsWith('.rs'))
-  const root = workspace(src, own[0] ?? files[0] ?? '')
+function rust(src: string, outside: Outside, excused: string[]): Gate[] {
+  const own = outside.files.filter((f) => f.endsWith('.rs'))
+  const root = workspace(src, own[0] ?? outside.files[0] ?? '')
+  const format: Gate = { script: 'format', bin: 'cargo', args: formatLine(src), dir: root }
+  if (outside.test !== undefined) return [format, { script: 'test', bin: 'cargo', args: outside.test, dir: root }]
+  const theirs = tested(src, own)
+  if (theirs.length > 0) return [format, ...theirs]
   const crates = unique(own.map((f) => crate(src, f)).filter((c): c is Crate => c !== null))
   const through = excused.some((span) => crates.some((c) => c.name === /^-p (\S+)/.exec(span)?.[1]))
-  const runs = test === undefined ? featureArgs(crates, ciFeatures(src)).map((features) => ['test', ...crates.flatMap((c) => ['-p', c.name]),
-    ...features, ...(through ? ['--no-fail-fast'] : []), '--', '--test-threads=4']) : [test]
-  return [{ script: 'format', bin: 'cargo', args: formatLine(src), dir: root }, ...runs.map((args) => ({ script: 'test', bin: 'cargo', args, dir: root }))]
+  return [format, ...featureArgs(crates, ciFeatures(src)).map((features) => ({ script: 'test', bin: 'cargo', args: ['test', ...crates.flatMap((c) => ['-p', c.name]),
+    ...features, ...(through ? ['--no-fail-fast'] : []), '--', '--test-threads=4'], dir: root, ...(outside.base === undefined ? {} : { base: outside.base }) }))]
 }
 
 function featureArgs(crates: Crate[], sets: FeatureSet[]): string[][] {

@@ -156,7 +156,7 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   }) }) : built
   if (!('turns' in ran)) return ran
   if (hung !== null) {
-    log('smoke.hung', 'refuse', hung.note)
+    log(hung.rule, 'refuse', hung.note)
     return { outcome: 'refuse', spans: [hung.rule], note: hung.note }
   }
   const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, 'critic.stand_in', read(map)))

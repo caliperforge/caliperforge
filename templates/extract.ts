@@ -43,10 +43,12 @@ const REFERENCE = new Set(['Mapping', 'ArrayTypeName'])
 
 export const CAP = 60 * 60 * 1000
 
+export const BUILD = ['build', '--ast', '--build-info']
+
 export function compiled(root: string, phase = 'context'): Refused[] {
-  const built = spawnSync('forge', ['build', '--ast'], { cwd: root, encoding: 'utf8', timeout: CAP })
+  const built = spawnSync('forge', BUILD, { cwd: root, encoding: 'utf8', timeout: CAP })
   if (built.status === 0) return []
-  return [{ rule: 'handoff.ast', note: `${phase}: forge build --ast failed: ${built.error?.message ?? built.stderr.split('\n')[0] ?? ''}` }]
+  return [{ rule: 'handoff.ast', note: `${phase}: forge ${BUILD.join(' ')} failed: ${built.error?.message ?? built.stderr.split('\n')[0] ?? ''}` }]
 }
 
 const breaks = (source: Buffer): number[] => [...source.keys()].filter((i) => source[i] === 0x0a)

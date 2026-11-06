@@ -1,5 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { scoredSuite } from '../cli/bench.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
@@ -22,6 +21,8 @@ import { harnessed, probed, suite } from './suite.ts'
 const META = 'test/fizz/fizz_data'
 
 const KEPT = ['handoff', 'entry-point-selection.json']
+
+const BUILT = ['out', 'cache']
 
 const ENTRY = 'Selected entry points '
 
@@ -131,13 +132,19 @@ function laid(src: string, dir: string, suites: string): void {
   }
 }
 
+function cleared(dir: string): void {
+  for (const name of readdirSync(dir).filter((name) => !BUILT.includes(name))) rmSync(join(dir, name), { recursive: true, force: true })
+}
+
 export function dried(db: Db, root: string, plan: number, fizz: string, scored?: number): string {
   const suites = scored === undefined ? null : scoredSuite(db, root, scored).suites
   const src = [`${join(planDir(root, plan), 'src')}.stopped`, join(planDir(root, plan), 'src')].find((path) => existsSync(path))
   if (src === undefined) throw new Error(`plan ${String(plan)} has no checkout`)
-  const dir = mkdtempSync(join(tmpdir(), 'cf-bench-dry-'))
+  const dir = join(root, '.cf/dry', String(plan))
+  mkdirSync(dir, { recursive: true })
+  cleared(dir)
   try {
-    cpSync(src, dir, { recursive: true })
+    cpSync(src, dir, { recursive: true, filter: (from) => !BUILT.some((name) => from === join(src, name) && existsSync(join(dir, name))) })
     if (suites !== null) laid(src, dir, suites)
     const handoffs = join(dir, META, 'handoff')
     let t: Touched | string | undefined
@@ -148,6 +155,6 @@ export function dried(db: Db, root: string, plan: number, fizz: string, scored?:
     logged(db, { plan, kind: 'bench.dry', actor: 'bench', outcome: table.some(([, , result]) => result.startsWith('refuse')) ? 'refuse' : 'pass', message: heading, pointer: null, run: null })
     return `${heading}\n${table.map((row) => `${row.join('\t')}\n`).join('')}`
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    cleared(dir)
   }
 }

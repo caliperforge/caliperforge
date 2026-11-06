@@ -1,7 +1,7 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { alive } from '../../../store/leases.ts'
 import { selected } from '../../../templates/map.ts'
 import { packed, smoke, type Smoked, smoked, unrun } from '../../../templates/smoke.ts'
@@ -33,8 +33,12 @@ test('6/9 D5: unrun flags only an Unclamped row with no success', () => {
   expect(unrun(MAP, smoked(MAP, report))).toEqual([])
 })
 
-function medusa(script: string): { root: string; fizz: string; config: string } {
-  const [root, fizz] = [mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-')), mkdtempSync(join(tmpdir(), 'cf-fizz-skill-'))]
+afterEach(() => { vi.unstubAllEnvs() })
+
+function medusa(script: string, forge = 'exit 0'): { root: string; fizz: string; config: string } {
+  const [root, fizz, bin] = [mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-')), mkdtempSync(join(tmpdir(), 'cf-fizz-skill-')), mkdtempSync(join(tmpdir(), 'cf-fizz-bin-'))]
+  writeFileSync(join(bin, 'forge'), `#!/bin/sh\n${forge}\n`, { mode: 0o755 })
+  vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
   mkdirSync(join(fizz, 'scripts'))
   writeFileSync(join(fizz, 'scripts/run_medusa.js'), script)
   const config = JSON.stringify(MEDUSA)
@@ -57,6 +61,25 @@ test('a never-exiting medusa is killed and refused as smoke.hung', async () => {
   expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
 }, 10_000)
 
+const SEES = "const { copyFileSync, mkdirSync } = require('node:fs')\ncopyFileSync('medusa.json', 'seen.json')\n"
+  + `mkdirSync('${META}/corpus_medusa/coverage', { recursive: true })\ncopyFileSync(${JSON.stringify(REPORT)}, '${META}/corpus_medusa/coverage/revert_report.json')\n`
+
+test('medusa reuses the build and medusa.json is restored', () => {
+  const { root, fizz, config } = medusa(SEES)
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual(smoked(MAP, REPORT))
+  const seen = JSON.parse(readFileSync(join(root, 'seen.json'), 'utf8')) as typeof MEDUSA
+  expect(seen.compilation).toEqual({ ...MEDUSA.compilation, platformConfig: { target: '.', args: ['--foundry-ignore-compile'] } })
+  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+})
+
+test('a slow forge build refuses before medusa starts', () => {
+  const { root, fizz, config } = medusa("require('node:fs').writeFileSync('started', '')\n", 'exec sleep 5')
+  expect(smoke(root, fizz, META, MAP, 30, 1)).toEqual({ rule: 'smoke.compile_slow',
+    note: 'smoke: forge build --ast --build-info ran past its 1 s limit and was stopped after 1 s; medusa did not run' })
+  expect(existsSync(join(root, 'started'))).toBe(false)
+  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+}, 10_000)
+
 test('a medusa that exits without a report still throws', () => {
   const { root, fizz } = medusa('process.exit(3)\n')
   expect(() => smoke(root, fizz, META, MAP, 2)).toThrow('run_medusa.js exited 3 and wrote no ')
@@ -70,7 +93,11 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restor
   writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n')
   const config = JSON.stringify(MEDUSA)
   writeFileSync(join(root, 'medusa.json'), config)
+  const info = (): [string, string][] => readdirSync(join(root, 'out/build-info')).sort().map((f) => [f, readFileSync(join(root, 'out/build-info', f), 'utf8')])
+  smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP)
+  const built = info()
   const results = smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP) as Smoked[]
   expect(results.map((r) => [r.name, r.calls > 0, r.successes > 0])).toEqual([[DEPOSIT, true, true], [WITHDRAW, true, true], [CONVERT, false, false]])
+  expect(info()).toEqual(built)
   expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
 }, 300_000)

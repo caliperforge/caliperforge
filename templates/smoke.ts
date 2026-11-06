@@ -1,6 +1,7 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { BUILD } from './extract.ts'
 import type { Refused } from './handoff.ts'
 import { measured, type Revert } from './reach.ts'
 import { callee, NONE, rows } from './slices.ts'
@@ -9,6 +10,8 @@ export interface Smoked { name: string; calls: number; successes: number }
 
 const REPORT = 'corpus_medusa/coverage/revert_report.json'
 const SECONDS = '120'
+const COMPILE = 1200
+const IGNORE = '--foundry-ignore-compile'
 const TAIL = 2000
 
 export function smoked(map: string, report: string): Smoked[] {
@@ -28,12 +31,24 @@ export function unrun(map: string, results: Smoked[]): Refused[] {
     note: `smoke: ${r.name} is raw-only and made 0 successful calls in ${String(r.calls)}; it needs a clamped handler` }))
 }
 
-export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60): Smoked[] | Refused {
+interface Config { fuzzing?: object; compilation?: { platformConfig?: { args?: string[] } } }
+
+function reusing({ compilation }: Config): Config['compilation'] {
+  const args = (compilation?.platformConfig?.args ?? []).filter((arg) => arg !== '--foundry-compile-all')
+  return { ...compilation, platformConfig: { ...compilation?.platformConfig, args: args.includes(IGNORE) ? args : [...args, IGNORE] } }
+}
+
+export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60, compile = COMPILE): Smoked[] | Refused {
+  const started = Date.now()
+  const built = spawnSync('forge', BUILD, { cwd: root, encoding: 'utf8', timeout: compile * 1000 })
+  if ((built.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') return { rule: 'smoke.compile_slow',
+    note: `smoke: forge ${BUILD.join(' ')} ran past its ${String(compile)} s limit and was stopped after ${String(Math.round((Date.now() - started) / 1000))} s; medusa did not run` }
+  if (built.status !== 0) throw new Error(`forge ${BUILD.join(' ')} exited ${String(built.status)}: ${(built.error?.message ?? built.stderr).slice(-TAIL)}`)
   const [path, report] = [join(root, 'medusa.json'), join(root, meta, REPORT)]
   const kept = readFileSync(path, 'utf8')
-  const config = JSON.parse(kept) as { fuzzing?: object }
+  const config = JSON.parse(kept) as Config
   rmSync(report, { force: true })
-  writeFileSync(path, JSON.stringify({ ...config, fuzzing: { ...config.fuzzing, revertReporterEnabled: true } }, null, 2))
+  writeFileSync(path, JSON.stringify({ ...config, fuzzing: { ...config.fuzzing, revertReporterEnabled: true }, compilation: reusing(config) }, null, 2))
   let ran: SpawnSyncReturns<string>
   try {
     ran = spawnSync(process.execPath, [join(import.meta.dirname, 'walled.ts'), String(wall), 'node', join(fizz, 'scripts/run_medusa.js'), root, '--meta-dir', meta, '--timeout', SECONDS],

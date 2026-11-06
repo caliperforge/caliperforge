@@ -85,7 +85,7 @@ import {${name}} from "./${file}";
 
 interface Vm {
     function load(address target, bytes32 slot) external view returns (bytes32);
-    function prank(address sender) external;
+    function startPrank(address sender) external;
     function deal(address account, uint256 newBalance) external;
 }
 
@@ -94,9 +94,9 @@ contract Readings {
     address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
     ${name} harness;
 
-    function setUp() public { vm.deal(address(uint160(${String(deployer)})), ${String(value)}); vm.prank(address(uint160(${String(deployer)}))); harness = new ${name}${value > 0n ? `{value: ${String(value)}}` : ''}(); }
+    function setUp() public { vm.deal(address(uint160(${String(deployer)})), ${String(value)}); vm.startPrank(address(uint160(${String(deployer)}))); harness = new ${name}${value > 0n ? `{value: ${String(value)}}` : ''}(); }
 
-    function replay(address from, bytes memory data) internal returns (bool ok) { vm.prank(from); (ok, ) = address(harness).call(data); }
+    function replay(address from, bytes memory data) internal returns (bool ok) { vm.startPrank(from); (ok, ) = address(harness).call(data); }
 
 ${replays}
     function logged(address h) internal view {

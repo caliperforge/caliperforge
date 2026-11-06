@@ -405,6 +405,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   const cut = assembled(src) ?? 'main'
   if (cut !== base) return refuse('base:branch', `plan ${String(plan.id)} was cut from ${cut} but its ticket lands on ${base}; cut it again from ${base}`)
   const head = headOf(root, plan.id)
+  if (tried(head.dir, ['diff', '--quiet', MAIN, head.sha]) !== null) return { outcome: 'needs_ceo', spans: ['base:empty'], note: `plan ${String(plan.id)} changes nothing past ${base}; nothing lands and #${String(issue)} stays open` }
   const sha = merged(head.dir, head.branch)
   if (sha === null) return refuse('base:stale', `${base} moved under plan ${String(plan.id)} between ready and land; cut it again from ${base}`)
   try {

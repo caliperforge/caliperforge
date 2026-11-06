@@ -18,7 +18,7 @@ const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [],
 
 vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY) }))
 
-vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => []) }))
+vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null })) }))
 
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
@@ -91,6 +91,15 @@ test('a hung smoke prints a refusal row', () => {
   vi.mocked(smoke).mockReturnValueOnce({ rule: 'smoke.hung', note })
   const rows = ROWS.map((row) => row[1] === 'smoke' ? [...row.slice(0, 2), `refuse smoke.hung | ${note}`] : row)
   expect(dried(db, root, 1, fizz())).toBe(table(rows))
+})
+
+test('a smoke with slither off passes with its note', () => {
+  const { db, root } = planted()
+  const note = 'smoke: slither . --ignore-compile --print echidna --json - ran past its 1200 s limit; medusa ran with slither off'
+  vi.mocked(smoke).mockReturnValueOnce({ results: [], note })
+  const rows = ROWS.map((row) => row[1] === 'smoke' ? [...row.slice(0, 2), `pass | ${note}`] : row)
+  expect(dried(db, root, 1, fizz())).toBe(table(rows))
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'bench.dry').map((e) => e.outcome)).toEqual(['pass'])
 })
 
 test('an unlocated item refuses the reach and boundary rows', () => {

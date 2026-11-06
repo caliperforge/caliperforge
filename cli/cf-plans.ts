@@ -13,6 +13,7 @@ import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { held, holderOf, HOLDERS, originRef, planById, terminal } from '../store/plans.ts'
 import { until } from '../store/until.ts'
+import { resumesAt } from '../templates/resumed.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
 import { registerReturn } from './cf-return.ts'
@@ -90,7 +91,7 @@ function planned(cf: Command, { root, db, out }: Cli): Command {
   return plan
 }
 
-function shown(plan: Command, { db, out }: Cli): void {
+function shown(plan: Command, { root, db, out }: Cli): void {
   plan.argument('<id>').action((id: string) => {
     const handle = db()
     const plan = planById(handle, Number(id))
@@ -103,6 +104,8 @@ function shown(plan: Command, { db, out }: Cli): void {
     const after = on === null ? '' : `\tplan ${String(on)}`
     out(`  waiting on ${plan.wait_reason === null ? '-' : `${plan.wait_reason}\t${WAITING[plan.wait_reason]}${after}`}\n`)
     out(`  lease ${lease === null ? 'none' : `pid ${String(lease.pid)}\ttaken ${lease.taken_at}`}\n`)
+    const phase = resumesAt(root, plan.id)
+    if (phase !== null) out(`  resumes at ${phase}\n`)
     for (const r of runsOf(handle, plan.id)) {
       out(`  run ${String(r.id)}\tstep ${String(r.step)}\t${String(r.seat)}\texit ${String(r.exit)}\n`)
     }

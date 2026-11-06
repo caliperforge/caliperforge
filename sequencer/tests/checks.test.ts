@@ -15,7 +15,7 @@ import { profile } from '../../store/profile.ts'
 import { refusalRows, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { based, checks, excluded, finish, gated, mode, network, npm, own, type Ran, type Run } from '../checks.ts'
-import { ruledTest } from '../cited.ts'
+import { ruled, ruledTest } from '../cited.ts'
 import { ciFeatures, formatLine, type Outside } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow, offline } from '../rails.ts'
@@ -1424,7 +1424,7 @@ test('2057 D2 a capped cargo test with a red test is not capped', () => {
 test('2057 D4 a ruled test replaces the crate-wide cargo test', () => {
   const src = surfpool(BINDINGS)
   const { run, calls } = heard()
-  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'], test: ['test', '-p', 'surfpool-core', '--lib', 'remote::tests::'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'], tests: [['test', '-p', 'surfpool-core', '--lib', 'remote::tests::']] })).toBeNull()
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core --lib remote::tests:: @${src}`, `git add -A @${src}`,
     `node crates/sdk-node/scripts/generate-kit-types.js @${src}`, `git diff --exit-code @${src}`])
 })
@@ -1551,8 +1551,48 @@ test('a Makefile test-rust runs through make', () => {
 test('a ruled test beats the recipe', () => {
   const src = recipe('justfile', KEYCHAIN_JUST)
   const { run, calls } = heard()
-  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'], test: ['test', '--features', 'sdk-v2'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'], tests: [['test', '--features', 'sdk-v2']] })).toBeNull()
   expect(calls).toEqual([`${FMT} @${src}`, `cargo test --features sdk-v2 @${src}`])
+})
+
+const VERIFY = 'verify: in rust/, the three per-SDK cargo test runs and three clippy -D warnings runs with ledger,unsafe-debug exit 0\n'
+
+const director = (step: string, said: string): string => `## Answer from the director (2026-11-05)\n\n${said}\n\napplies to: plan 2155, step ${step}\n${VERIFY}`
+
+const PROSE = 'cargo test --locked --features ledger,sdk-v2,unsafe-debug; cargo test --locked --no-default-features --features ledger,sdk-v3,unsafe-debug; '
+  + 'cargo test --locked --no-default-features --features ledger,sdk-v4,unsafe-debug; and the same three as cargo clippy --locked --all-targets ... -- -D warnings'
+
+const SDK_FLAGS = ['--features ledger,sdk-v2,unsafe-debug', ...['sdk-v3', 'sdk-v4'].map((sdk) => `--no-default-features --features ledger,${sdk},unsafe-debug`)]
+
+const SIX = [...SDK_FLAGS.map((f) => `test --locked ${f}`), ...SDK_FLAGS.map((f) => `clippy --locked --all-targets ${f} -- -D warnings`)]
+
+function ruledBy(issue: string): ReturnType<typeof ruled> {
+  const root = mkdtempSync(join(tmpdir(), 'cf-ruled-'))
+  put(root, ID, 'issue.md', issue)
+  return ruled(root, ID)
+}
+
+test('a step-3 ruling runs its cargo commands, not the defaults', () => {
+  const tests = ruledBy(`# Checks\n\n${director('3', PROSE)}`)
+  expect(tests).toEqual({ tests: SIX.map((c) => c.split(' ')) })
+  const src = keychain(PER_SDK)
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'], ...tests })).toBeNull()
+  expect(calls).toEqual([FMT, ...SIX.map((c) => `cargo ${c}`)].map((c) => `${c} @${src}`))
+  expect(calls.join('\n')).not.toContain('cargo test -p solana-keychain --no-default-features -- --test-threads=4')
+})
+
+test('a step-3 ruling beats verify; others leave the defaults', () => {
+  for (const issue of [director('2', PROSE), director('3', 'cargo test --features a | tail'), director('3', 'then cargo test runs')]) expect(ruledBy(issue)).toEqual({})
+  expect(ruledBy(`verify: cargo test -p a\n\n${director('3', 'run cargo test --locked.')}`)).toEqual({ tests: [['test', '--locked']] })
+  expect(ruledBy(`verify: cargo test -p a\n\n${director('2', PROSE)}`)).toEqual({ tests: [['test', '-p', 'a']] })
+})
+
+test('a red ruled clippy refuses as lint, named by folder', () => {
+  const clippy = 'clippy --locked --all-targets -- -D warnings'
+  const { run } = recorder(clippy)
+  expect(checks(nested({ 'rust/Cargo.toml': '[package]\nname = "k"\n' }), {}, run, [], { language: 'rust', files: ['rust/src/lib.rs'], tests: [['test', '--locked'], clippy.split(' ')] }))
+    .toMatchObject({ script: 'lint', command: `cargo ${clippy} (in rust/)`, code: '2' })
 })
 
 const UNGATED: Ran = { ok: false, code: '101', output: 'error: Must enable one of sdk-v2, sdk-v3, or sdk-v4 feature.\n  |     compile_error!("Must enable one of sdk-v2, sdk-v3, or sdk-v4 feature.");\n' }

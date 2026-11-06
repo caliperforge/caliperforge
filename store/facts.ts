@@ -4,7 +4,7 @@ import { gh, type Issue, type Read } from '../cli/gh.ts'
 import { paced } from '../cli/queue.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { parse, type FileDiff } from '../rails/diff.ts'
-import { TEST_FILE } from '../rails/test-weakened/index.ts'
+import { TEST, TEST_FILE } from '../rails/test-weakened/index.ts'
 import { conventionsOf } from '../rails/test-weakened/languages.ts'
 import { unsigned } from '../sequencer/conventions.ts'
 import { listed, settled } from '../sequencer/unruled.ts'
@@ -27,6 +27,13 @@ const REASONS: [string, RegExp][] = [
 ]
 
 const PASSED: Record<string, string> = { success: 'green', skipped: 'skipped', neutral: 'neutral' }
+
+const MARKERS: [RegExp, RegExp][] = [
+  [/\.rs$/, /^\s*#\[(?:tokio::)?test\b/],
+  [/\.(?:kts?|java)$/, /^\s*@Test\b/],
+  [/\.py$/, /^\s*(?:async\s+)?def\s+test_/],
+  [/\.[jt]sx?$/, TEST],
+]
 
 function gate(name: string, outcome: string | undefined): Fact {
   return { name, ok: outcome === 'pass', says: outcome ?? 'no verdict' }
@@ -87,15 +94,30 @@ function signed(lines: Counted[]): string {
 }
 
 export function testFacts(db: Db, plan: number, diff: string, board: Board[] | null): Fact[] {
-  const changed = parse(diff).filter((f) => !f.deleted && TEST_FILE.test(f.path)).length
+  const files = parse(diff).filter((f) => !f.deleted)
+  const changed = files.filter((f) => TEST_FILE.test(f.path)).length
   const gating = (board ?? []).filter((r) => r.gates)
   const ok = gating.every((r) => r.status === 'completed' && r.conclusion === 'success')
   const says = board === null || board.length === 0 ? "no fork CI; step 3's checks stand as it" : gating.map((r) => r.url ?? r.workflow).join(', ')
   return [
-    { name: 'tests changed', ok: true, says: `${String(changed)} test files added or changed` },
+    { name: 'tests changed', ok: true, says: `${String(changed)} test files added or changed; ${testsAdded(files)}` },
     gate('local', lastChecks(db, plan)?.outcome),
     { name: 'fork', ok, says },
   ]
+}
+
+function testsAdded(files: FileDiff[]): string {
+  const holding = files.map((f) => ({ path: f.path, n: markers(f) })).filter((f) => f.n > 0)
+  const n = holding.reduce((sum, f) => sum + f.n, 0)
+  if (n === 0) return '0 tests added'
+  const inline = holding.some((f) => TEST_FILE.test(f.path)) ? '' : ' (inline)'
+  const m = holding.length
+  return `${String(n)} test${n === 1 ? '' : 's'} added in ${String(m)} file${m === 1 ? '' : 's'}${inline}`
+}
+
+function markers(file: FileDiff): number {
+  const marker = MARKERS.find(([path]) => path.test(file.path))?.[1]
+  return marker === undefined ? 0 : file.added.filter((l) => marker.test(l.text)).length
 }
 
 export function ciFacts(board: Board[]): Fact[] {

@@ -207,7 +207,7 @@ test('a reply with no readable verdict fence is a failed run',async () => {
   const { db, plan } = bench(root)
   await expect(judge(db, root, 'code_quality', plan, seeded(), replies('looks fine to me'), TRANSCRIPT))
     .rejects.toThrow('reviewers.verdict_fence')
-  expect(runRows(db).filter((r) => r.plan === plan).map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }])
+  expect(runRows(db).filter((r) => r.plan === plan).map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }, { exit: 1 }])
   expect(verdictRows(db, plan)).toHaveLength(0)
 })
 
@@ -284,6 +284,7 @@ test('a capped run fires once more with no tools for the verdict',async () => {
   expect(runRows(db).filter((r) => r.plan === plan).at(-1)?.id).toBe(out.run)
   expect(verdictRows(db, plan))
     .toMatchObject([{ id: out.verdict, outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 36, seconds: 1 }])
+  expect(eventsOf(db, plan, 'review')).toEqual([])
 })
 
 test('a refusal of an unlisted class still refuses with its spans',async () => {

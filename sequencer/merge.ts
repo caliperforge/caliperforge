@@ -2,6 +2,7 @@ import { recount } from '../checks/ratchet.ts'
 import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { passedDiff } from '../store/deliverables.ts'
+import { logged } from '../store/events.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
 import type { PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -9,6 +10,7 @@ import { classify } from './delta.ts'
 import type { Outcome } from './kind.ts'
 import { headOf } from './push.ts'
 import { mapOf } from './steps.ts'
+import { firstLine } from './unpolled.ts'
 import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing,
   put, recut, restand, srcDir, theirs, unmerged } from './workspace.ts'
 
@@ -50,8 +52,9 @@ function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string
   const overlap = incoming.some((path) => mine.includes(path))
   try {
     mergeMain(src)
-  } catch {
+  } catch (error) {
     const paths = unmerged(src)
+    if (paths.length === 0) logged(db, { plan: plan.id, kind: 'swallowed', actor: 'takeMain', outcome: 'pass', message: firstLine(error), pointer: main, run: null })
     if (paths.length === 0 || paths.some((path) => path !== 'ratchet.json' && !path.endsWith('/ratchet.json'))) {
       abortMerge(src)
       recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: false })

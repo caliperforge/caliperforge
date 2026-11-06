@@ -26,8 +26,9 @@ export function recipes(path: string): Set<string> | null {
 
 /** Their first `rust-test` or `test-rust` recipe, then `<recipe>-<folder>` for each folder of the `.rs` files that defines one. */
 export function tested(src: string, files: string[]): Gate[] {
-  const dir = home(src, files[0] ?? '', (n, here) => RECIPE_FILE.test(n) && RUST_TESTS.some((r) => recipes(join(here, n))?.has(r) === true))
-  const found = readdirSync(join(src, dir)).filter((n) => RECIPE_FILE.test(n))
+  const defines = (n: string, here: string): boolean => RECIPE_FILE.test(n) && RUST_TESTS.some((r) => recipes(join(here, n))?.has(r) === true)
+  const dir = home(src, files[0] ?? '', defines)
+  const found = readdirSync(join(src, dir)).filter((n) => defines(n, join(src, dir)))
   const name = found.find((n) => /^justfile$/i.test(n)) ?? found[0]
   if (name === undefined) return []
   const defined = recipes(join(src, dir, name)) ?? new Set<string>()

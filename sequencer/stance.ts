@@ -4,6 +4,7 @@ import { logins } from '../cli/measure.ts'
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { held, needsCeo, type PlanRow } from '../store/plans.ts'
+import type { Profile } from '../store/profile.ts'
 import { setTargetState } from '../store/targets.ts'
 import type { Check, Row } from './card.ts'
 import type { Outcome } from './kind.ts'
@@ -29,6 +30,10 @@ const OPTION = /^[-*+] \[[ xX]\]/
 const DISCLOSED = /co-authored-by: (?:claude|copilot)|generated with \[?claude code|\b(?:AI|LLM)[- ](?:assisted|generated)\b/i
 const DAYS = 90
 const LINE = /^- ai stance: (open|closed|unstated) — (.*)$/gm
+const CONTRIBUTING = /^contributing/i
+const FIXES = /\bFixes #/i
+const DISCLOSE = /\bdisclos(?:e|ed|ure)\b/i
+const DISCLOSURE = 'This change was written with AI assistance and reviewed by a person before it was opened.'
 
 type Stance = 'open' | 'closed' | 'unstated'
 interface Said { line: string; link: string }
@@ -53,8 +58,19 @@ export function stanceOf(repo: string, no: number, read: Read, now = new Date())
     + `${String(outside.length)} outside merges in ${String(DAYS)} days` }
 }
 
+export function contributed(repo: string, read: Read): Profile {
+  const lines = Tree.parse(read(['api', `repos/${repo}/git/trees/HEAD?recursive=1`])).tree
+    .filter((t) => t.type === 'blob' && CONTRIBUTING.test(t.path.slice(t.path.lastIndexOf('/') + 1)))
+    .flatMap((f) => Buffer.from(Blob.parse(read(['api', `repos/${repo}/git/blobs/${f.sha}`])).content, 'base64').toString('utf8').split('\n'))
+  return {
+    ...(lines.some((l) => FIXES.test(l)) ? { issue_ref: 'Fixes' as const } : {}),
+    ...(lines.some((l) => ABOUT.test(l) && DISCLOSE.test(l)) ? { disclosure: DISCLOSURE } : {}),
+  }
+}
+
 export function stood(db: Db, root: string, plan: PlanRow, { repo, issue_no }: Target, read: Read, span: string, pulse: string): Outcome {
   const { stance, says } = stanceOf(repo, issue_no, read)
+  put(root, plan.id, 'profile.yml', `${JSON.stringify(contributed(repo, read))}\n`)
   const said = `ai stance: ${stance} — ${says}`
   const asking = stance === 'unstated' && !eventsOf(db, plan.id, 'return').some((e) => e.actor === 'ceo')
   const first = `\n## Ask first\n\nDraft for the CEO to post on https://github.com/${repo}/issues/${String(issue_no)}; nothing is built until a maintainer says yes:\n\n`

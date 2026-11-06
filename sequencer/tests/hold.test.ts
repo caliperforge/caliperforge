@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Command } from 'commander'
@@ -106,10 +106,12 @@ test('unhold at step 1 drops a stale checkout', () => {
   db.exec('UPDATE plans SET step = 1 WHERE id = 7')
   writeFileSync(join(srcDir(home, 7), 'old.ts'), 'x\n')
   put(home, 7, 'base.sha', `${'c'.repeat(40)}\n`)
+  put(home, 7, 'base.merged', `${'c'.repeat(40)}\n`)
   hold(db, home, 7, 'x', new Date(), null, LATER)
   unhold(db, home, 7, 'ceo')
   expect(existsSync(join(home, '.cf/work/7/src'))).toBe(false)
   expect(maybe(home, 7, 'base.sha')).toBeNull()
+  expect(maybe(home, 7, 'base.merged')).toBeNull()
 })
 
 function stoppedAtCheck(why: keyof typeof WHY) {
@@ -441,6 +443,85 @@ test.each([
   expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 1 → 2: w' }])
   expect(existsSync(join(home, '.cf/work/7/src/kept.ts'))).toBe(true)
   expect(maybe(home, 7, 'base.sha')).not.toBeNull()
+})
+
+const HANDOFF = 'src/test/fizz/fizz_data/handoff'
+const TEMPLATES = 'seats/fizz_lean_generator/skill/phases/handoff/templates.md'
+const STOPPED = join('.cf/work/7', HANDOFF, 'stopped.json')
+
+function graded(phase: string | null) {
+  const seed = heldAt('bench', 2)
+  mkdirSync(dirname(join(seed.home, TEMPLATES)), { recursive: true })
+  cpSync(join(repo, TEMPLATES), join(seed.home, TEMPLATES))
+  inputs(seed.home, ['src/test/fizz/Properties.sol', `${HANDOFF}/scaffold.md`])
+  if (phase !== null) writeFileSync(join(seed.home, STOPPED), JSON.stringify({ phase, sum: { tokens: 5 }, smoked: 'smoked' }))
+  return seed
+}
+
+function said(db: ReturnType<typeof open>, home: string, args: string[]): string[] {
+  const printed: string[] = []
+  const cf = new Command().exitOverride()
+  registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
+  cf.parse(args, { from: 'user' })
+  return printed
+}
+
+const stopped = (home: string): unknown => existsSync(join(home, STOPPED)) ? JSON.parse(readFileSync(join(home, STOPPED), 'utf8')) : null
+
+test('unhold to step 1 keeps a bench plan\'s checkout', () => {
+  const { db, home } = graded('scaffold')
+  expect(unhold(db, home, 7, 'ceo', 1)).toBe(1)
+  expect(stopped(home)).toEqual({ phase: 'scaffold', sum: { tokens: 5 }, smoked: 'smoked' })
+  expect(existsSync(join(home, '.cf/work/7/src/test/fizz/Properties.sol'))).toBe(true)
+})
+
+test('cf return --to 1 prints the lean phase it resumes at', () => {
+  const { db, home } = graded('scaffold')
+  expect(said(db, home, ['return', '7', '--to', '1', '--by', 'ceo'])).toEqual(['plan 7 queued at step 1\n', '  resumes at coverage\n'])
+})
+
+test.each([
+  ['context', null],
+  ['scaffold', { phase: 'context', sum: { tokens: 5 }, smoked: 'smoked' }],
+])('--from-phase %s rewrites what the run resumes after', (phase, kept) => {
+  const { db, home } = graded('scaffold')
+  expect(said(db, home, ['return', '7', '--to', '1', '--from-phase', phase, '--by', 'ceo'])).toEqual(['plan 7 queued at step 1\n', `  resumes at ${phase}\n`])
+  expect(stopped(home)).toEqual(kept)
+})
+
+test.each([
+  ['scaffold', ['--from-phase', 'context'], '--from-phase needs --to 1'],
+  ['scaffold', ['--to', '2', '--from-phase', 'context'], '--from-phase needs --to 1'],
+  ['scaffold', ['--to', '1', '--from-phase', 'campaigns'], 'no lean phase campaigns: context, scaffold, coverage, invariants'],
+  ['context', ['--to', '1', '--from-phase', 'coverage'], 'plan 7 resumes at scaffold, before coverage'],
+])('a stopped.json at %s refuses %j, writes nothing', (phase, args, error) => {
+  const { db, home } = graded(phase)
+  const before = [plan7(db), stopped(home)]
+  expect(() => said(db, home, ['return', '7', ...args, '--by', 'ceo'])).toThrow(error)
+  expect([plan7(db), stopped(home)]).toEqual(before)
+  expect(isHeld(home, 7)).toBe(true)
+})
+
+test('--from-phase with no handoff folder writes nothing', () => {
+  const { db, home } = heldAt('bench', 2)
+  const before = plan7(db)
+  expect(() => said(db, home, ['return', '7', '--to', '1', '--from-phase', 'context', '--by', 'ceo'])).toThrow('plan 7 has no lean handoff to restart')
+  expect(plan7(db)).toEqual(before)
+  expect(isHeld(home, 7)).toBe(true)
+})
+
+test.each([
+  ['scaffold', ['  resumes at coverage\n']],
+  ['invariants', ['  resumes at end\n']],
+  [null, ['  resumes at context\n']],
+])('cf plan after %s prints where the lean run resumes', (phase, line) => {
+  const { db, home } = graded(phase)
+  expect(said(db, home, ['plan', '7']).filter((l) => l.includes('resumes at'))).toEqual(line)
+})
+
+test('cf plan with no handoff folder prints no resume line', () => {
+  const { db, home } = seeded()
+  expect(said(db, home, ['plan', '7']).filter((l) => l.includes('resumes at'))).toEqual([])
 })
 
 test('D3 return --at with an input missing writes nothing', () => {

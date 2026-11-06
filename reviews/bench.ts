@@ -17,6 +17,7 @@ import { addReview } from '../store/verdict.ts'
 import { subdirs } from '../checks/tree.ts'
 import { inContext } from './package.ts'
 import { packs } from './packs.ts'
+import { again } from './refire.ts'
 import { read, unfilled, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
@@ -59,8 +60,8 @@ export async function judge(
   const rules = packs(root, built.bench.diff, target === null ? null : targetRow(db, target).repo)
   const packet = { ...chosen, prompt: `${map(built.bench.repo)}\n\n${chosen.prompt}${rules}` }
   const first = await ran(db, root, name, plan, manifest, provider, packet, lead, staffed)
-  const refired = first.capped && first.outcome === null
-    ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] }, lead, staffed)
+  const refired = first.outcome === null
+    ? await ran(db, root, name, plan, manifest, provider, again(db, plan, name, packet, first), lead, staffed)
     : null
   const last = refired ?? first
   if (last.outcome === null) throw new Error(last.reason === null ? 'reviewers.verdict_fence' : `reviewers.verdict_fence: ${last.reason}`)
@@ -72,6 +73,7 @@ export async function judge(
 
 interface Ran {
   run: number
+  text: string
   outcome: Judged | null
   reason: string | null
   capped: boolean
@@ -91,6 +93,7 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
   observed(db, fired.limits)
   return {
     run,
+    text: fired.text,
     outcome,
     reason,
     capped: fired.stop_reason === CAPPED,

@@ -10,10 +10,12 @@ import { headOf, type Wire } from '../push.ts'
 import { ASKED, CREDITS, proved, SKIPPED } from '../ready.ts'
 import { mapOf } from '../steps.ts'
 import { cloned, get, headSha, put, srcDir } from '../workspace.ts'
-import { approve, built, CARRIED, plan, scored, stub, watched, world, type World } from './world.ts'
+import { TEMPLATED } from './bases.ts'
+import { approve, built, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
-const atReady = async (log: string[], over: Partial<Wire> = {}, handback = (): string => CARRIED): Promise<[World, () => Promise<Fired | undefined>]> => {
-  const w = world()
+const atReady = async (log: string[], over: Partial<Wire> = {}, handback = (): string => CARRIED,
+  files = TYPESCRIPT): Promise<[World, () => Promise<Fired | undefined>]> => {
+  const w = world('warm', undefined, files)
   approve(w.db, w.target)
   const wire = { ...watched(log, w.root, 1), ...over }
   const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(handback()), undefined, undefined, wire))[0]
@@ -90,6 +92,29 @@ test('D1 a spent month passes ready without asking Greptile', async () => {
   expect(log.filter((l) => l.startsWith('review '))).toEqual([])
   expect(plan(w.db, 1).step).toBe(7)
   expect(get(w.root, 1, SKIPPED)).toBe(`${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
+})
+
+const fixes = (w: World): void => {
+  mkdirSync(join(w.root, 'profiles/acme'), { recursive: true })
+  writeFileSync(join(w.root, 'profiles/acme/widget.yml'), 'issue_ref: Fixes\n')
+}
+
+test('an empty template heading in pr.md is refused at ready', async () => {
+  const [w, lap] = await atReady([], {}, undefined, TEMPLATED)
+  fixes(w)
+  put(w.root, 1, 'pr.md', '## Linked issue\n\nFixes #12.\n\n## Testing\n\n<!-- commands run -->\n')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['body:5 ready.template_empty'] })
+  put(w.root, 1, 'pr.md', '## Linked issue\n\nFixes #12.\n\n## Testing\n\n`npm test`\n')
+  for (let at = 0; plan(w.db, 1).step !== 6 && at < 4; at += 1) await lap()
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('a repo with no template is not held to one', async () => {
+  const [w, lap] = await atReady([])
+  fixes(w)
+  put(w.root, 1, 'pr.md', '## Testing\n\n<!-- commands run -->\n\nAddresses #12.\n')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: [] })
 })
 
 const UNSCORED = { rehearse: (): void => undefined }

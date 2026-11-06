@@ -80,6 +80,29 @@ test('a slow or unmeasured repo holds no green deliverable back', () => {
   expect(ready({ ...proof('green.proof.json', 'pass'), repo: 'never-org/project' }).spans).toEqual([])
 })
 
+const TEMPLATE = '## What and why\n\n### Why\n\n<!-- the reason -->\n\n## Testing\n\n<!-- commands run -->\n'
+const FILLED = 'Fixes #307.\n\n## What and why\n\n### Why\n\nWallets ask for it.\n\n## Testing\n\n`npm test`\n'
+
+const templated = (body: string): Proof => ({ ...proof('green.proof.json', 'pass'), body, template: TEMPLATE, closes: 'Fixes #307' })
+
+test('refuses a template heading holding only a comment', () => {
+  expect(ready(templated(FILLED.replace('`npm test`', '<!-- commands run -->'))).spans).toEqual(['body:9 ready.template_empty'])
+})
+
+test('refuses a body that drops a template heading', () => {
+  expect(ready(templated(FILLED.replace('### Why\n\n', ''))).spans).toEqual(['template:3 ready.template_missing'])
+})
+
+test('refuses a body without the closing line it requires', () => {
+  expect(ready(templated(FILLED.replace('Fixes', 'Addresses'))).spans).toEqual(['body:1 ready.closing'])
+  expect(ready(templated(FILLED.replace('#307', '#3070'))).spans).toEqual(['body:1 ready.closing'])
+})
+
+test('passes a filled body, and any body with no template', () => {
+  expect(ready(templated(FILLED)).spans).toEqual([])
+  expect(ready({ ...proof('green.proof.json', 'pass'), body: '## Testing\n' }).spans).toEqual([])
+})
+
 test('writes the ready verdict that lets a plan reach batch', () => {
   const db = seeded()
   const plan = planRow(db)

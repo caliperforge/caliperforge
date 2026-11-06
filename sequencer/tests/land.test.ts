@@ -224,7 +224,7 @@ test('a merge git refuses with no unmerged path logs it',async () => {
 
   const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(refused).toMatchObject({ step: 7, outcome: 'pass', spans: ['base:conflict'] })
-  expect(conflicted(src)).toBe(false)
+  expect(git(src, ['status', '--porcelain'])).toBe('')
   expect(ofKind(w.db, 'swallowed')).toMatchObject([{ plan: ID, actor: 'takeMain' }])
 })
 

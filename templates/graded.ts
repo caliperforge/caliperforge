@@ -84,7 +84,7 @@ function halves(phase: Phase, dir: string, { functions, state }: Touched): Half[
   const properties = read(join(dir, 'test/fizz/Properties.sol'))
   const getters = texts.flatMap((text) => [...text.matchAll(GETTER)]).filter(([, name = '']) => named(properties, [name]).length > 0).map(([, , body = '']) => body)
   const stripped = texts.map((text) => text.replace(INERT, ''))
-  return [['functions', names, names.filter((name) => stripped.some((text) => called(text, name)))],['state', state, named([properties, ...getters].join('\n'), state)]]
+  return [['functions', names, names.filter((name) => stripped.some((text) => called(text, name)))], ['state', state, named([properties, ...getters].join('\n'), state)]]
 }
 
 export function graded(phase: Phase, dir: string, t: Touched): string {

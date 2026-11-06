@@ -1,0 +1,6 @@
+- name: review_fence_refused
+  table: events
+  column: at
+  where: "kind = 'review' AND outcome = 'refuse' AND message GLOB '* reviewers.verdict_fence*'"
+  gap: 7d
+  expected: 0

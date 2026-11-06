@@ -242,12 +242,17 @@ export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
 
+export const STOPPED = 'stopped.json'
+
+export const stoppedAt = (handoffs: string): { phase: string; sum: Sum; smoked: string } | null =>
+  existsSync(join(handoffs, STOPPED)) ? JSON.parse(read(join(handoffs, STOPPED))) as { phase: string; sum: Sum; smoked: string } : null
+
 export async function phased(bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> {
   const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
-  const stopped = join(handoffs, 'stopped.json')
+  const stopped = join(handoffs, STOPPED)
   const [map, cut] = [join(handoffs, MAP), join(handoffs, EXCERPTS)]
-  const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum; smoked: string } : null
+  const resumed = stoppedAt(handoffs)
   const refused = resumed === null ? null : rechecked(skill, root, handoffs, resumed.phase)
   if (refused !== null) return refused
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)

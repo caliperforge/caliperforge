@@ -325,6 +325,15 @@ test('an unread issue or two P labels keep the priority',async () => {
   }
 })
 
+test('an unread issue logs a swallowed reprice', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, undefined, 34, 2)
+  const unread: Read = () => { throw new Error('gh: could not resolve to an issue') }
+  reprice(w.db, unread)
+  expect(plan(w.db, 2).priority).toBe(2)
+  expect(ofKind(w.db, 'swallowed')).toEqual([{ plan: 2, kind: 'swallowed', actor: 'reprice', outcome: 'pass', message: 'gh: could not resolve to an issue' }])
+})
+
 const HAND = { actor: 'ceo', why: 'first' }
 const never = (): never => { throw new Error('called') }
 

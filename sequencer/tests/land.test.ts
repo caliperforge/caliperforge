@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { gatesSigned, headApproved } from '../../store/approvals.ts'
 import { deliverablesOf, newest } from '../../store/deliverables.ts'
+import { ofKind } from '../../store/events.ts'
 import { last as lastMerge } from '../../store/merges.ts'
 import { dropPlan, relane } from '../../store/plans.ts'
 import { refusalsOf } from '../../store/refusals.ts'
@@ -211,6 +212,20 @@ test('conflict at batch: back to rails, aborted, nothing closed',async () => {
   expect(sent).toEqual([FORKED])
   expect(gatesSigned(w.db)).toBe(0)
   expect(newest(w.db, ID)?.state).not.toBe('pushed')
+})
+
+test('a merge git refuses with no unmerged path logs it',async () => {
+  const { w, sent } = await AT_BATCH()
+  const wire = watched(sent, w.root, ID)
+  const src = srcDir(w.root, ID)
+  mkdirSync(join(w.root, 'hooks'), { recursive: true })
+  writeFileSync(join(w.root, 'hooks', 'pre-merge-commit'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+  moveMain(w.root, 'late.ts')
+
+  const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(refused).toMatchObject({ step: 7, outcome: 'pass', spans: ['base:conflict'] })
+  expect(conflicted(src)).toBe(false)
+  expect(ofKind(w.db, 'swallowed')).toMatchObject([{ plan: ID, actor: 'takeMain' }])
 })
 
 test('main moving mid-tick refuses the land, no merge commit',async () => {

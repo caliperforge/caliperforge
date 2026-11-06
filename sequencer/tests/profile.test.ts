@@ -161,6 +161,34 @@ test('D2 a green ci.json ends the check paragraph with CI', () => {
   expect(prBody(35, root, 1)).toBe('Fixes #35.\n\nCarry a memo.\n\nCI is green on our fork at this head.\n\nAddresses #35.\n')
 })
 
+const TEMPLATE = '## Linked issue\n\nFixes #<!-- an accepted issue -->\n\n## What and why\n\n<!-- what changes and why -->\n\n'
+  + '## Testing\n\n<!-- commands run -->\n\n## AI disclosure\n\nCheck exactly one. See [CONTRIBUTING.md](CONTRIBUTING.md#ai-use).\n\n'
+  + '- [ ] No AI tooling was used beyond editor autocomplete.\n- [ ] AI tooling was used. Tool and extent: <!-- e.g. tests -->\n'
+
+function templated(): string {
+  const root = memo()
+  put(root, 1, 'issue.md', '# fix: sign a memo\n\n**What:** Sign the memo.\n**Why:** Wallets ask for it.\n')
+  put(root, 1, 'ci.json', run('completed', 'success'))
+  mkdirSync(join(srcDir(root, 1), '.github'), { recursive: true })
+  writeFileSync(join(srcDir(root, 1), '.github/PULL_REQUEST_TEMPLATE.md'), TEMPLATE)
+  return root
+}
+
+const FILLED = '## Linked issue\n\nREF #307.\n\n## What and why\n\nWallets ask for it.\n\nSign the memo.\n\n'
+  + '## Testing\n\nCI is green on our fork at this head.\n\n## AI disclosure'
+
+test('a PR template is filled with Fixes and one checked box', () => {
+  expect(prBody(307, templated(), 1, profile(REPO, 'solana-foundation/solana-keychain'))).toBe(`${FILLED.replace('REF', 'Fixes')}\n`
+    + '- [x] AI tooling was used. Tool and extent: the change and its tests were written by Claude-based agents in the '
+    + 'CaliperForge pipeline and passed our automated code review and the checks above before I opened it.\n')
+})
+
+test('a template without a profile addresses and checks no box', () => {
+  expect(prBody(307, templated(), 1)).toBe(`${FILLED.replace('REF', 'Addresses')}\n\n`
+    + 'Check exactly one. See [CONTRIBUTING.md](CONTRIBUTING.md#ai-use).\n\n'
+    + '- [ ] No AI tooling was used beyond editor autocomplete.\n- [ ] AI tooling was used. Tool and extent: <!-- e.g. tests -->\n')
+})
+
 test('D4 prTitle drops feat(mcp): on a plain history', () => {
   expect(prTitle(memo(), 1)).toBe('Add a memo')
 })

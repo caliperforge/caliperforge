@@ -1,1 +1,7 @@
 greptile_files: [go/core/txutil.go, rust/src/transaction_util.rs, python/src/solana_keychain/core/transaction_util.py]
+issue_ref: Fixes
+disclosure: >-
+  ## AI disclosure
+
+  - [x] AI tooling was used. Tool and extent: the change and its tests were written by Claude-based agents in
+  the CaliperForge pipeline and passed our automated code review and the checks above before I opened it.

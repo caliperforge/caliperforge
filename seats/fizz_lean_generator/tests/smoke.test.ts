@@ -2,8 +2,9 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } fro
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { alive } from '../../../store/leases.ts'
 import { selected } from '../../../templates/map.ts'
-import { packed, smoke, smoked, unrun } from '../../../templates/smoke.ts'
+import { packed, smoke, type Smoked, smoked, unrun } from '../../../templates/smoke.ts'
 
 const fixtures = join(import.meta.dirname, 'fixtures')
 const REPORT = join(fixtures, 'revert_report.json')
@@ -32,6 +33,35 @@ test('6/9 D5: unrun flags only an Unclamped row with no success', () => {
   expect(unrun(MAP, smoked(MAP, report))).toEqual([])
 })
 
+function medusa(script: string): { root: string; fizz: string; config: string } {
+  const [root, fizz] = [mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-')), mkdtempSync(join(tmpdir(), 'cf-fizz-skill-'))]
+  mkdirSync(join(fizz, 'scripts'))
+  writeFileSync(join(fizz, 'scripts/run_medusa.js'), script)
+  const config = JSON.stringify(MEDUSA)
+  writeFileSync(join(root, 'medusa.json'), config)
+  return { root, fizz, config }
+}
+
+const HANGS = "const { spawn } = require('node:child_process')\nconst { writeFileSync } = require('node:fs')\n"
+  + 'for (let i = 1; i <= 50; i++) console.log(`line ${i}`)\n'
+  + "writeFileSync('pid', String(spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'inherit' }).pid))\n"
+  + 'setInterval(() => {}, 1000)\n'
+
+test('a never-exiting medusa is killed and refused as smoke.hung', async () => {
+  const { root, fizz, config } = medusa(HANGS)
+  const lines = [...Array(40).keys()].map((i) => `line ${String(i + 11)}`).join('\n')
+  expect(smoke(root, fizz, META, MAP, 2)).toEqual({ rule: 'smoke.hung',
+    note: `smoke: medusa ran past --timeout 120 + 60 s and its process group was killed; last 40 lines:\n${lines}` })
+  const pid = Number(readFileSync(join(root, 'pid'), 'utf8'))
+  await expect.poll(() => alive(pid)).toBe(false)
+  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+}, 10_000)
+
+test('a medusa that exits without a report still throws', () => {
+  const { root, fizz } = medusa('process.exit(3)\n')
+  expect(() => smoke(root, fizz, META, MAP, 2)).toThrow('run_medusa.js exited 3 and wrote no ')
+})
+
 test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restores medusa.json', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-'))
   for (const dir of ['src', META]) mkdirSync(join(root, dir), { recursive: true })
@@ -40,7 +70,7 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restor
   writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n')
   const config = JSON.stringify(MEDUSA)
   writeFileSync(join(root, 'medusa.json'), config)
-  const results = smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP)
+  const results = smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP) as Smoked[]
   expect(results.map((r) => [r.name, r.calls > 0, r.successes > 0])).toEqual([[DEPOSIT, true, true], [WITHDRAW, true, true], [CONVERT, false, false]])
   expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
 }, 300_000)

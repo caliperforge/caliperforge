@@ -316,6 +316,15 @@ test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {
   ])
 })
 
+test('a hung smoke refuses without a fix turn', async () => {
+  const hung = { rule: 'smoke.hung', note: 'smoke: medusa ran past --timeout 120 + 60 s and its process group was killed; last 40 lines:\nline 50' }
+  vi.mocked(smoke).mockReturnValueOnce(hung)
+  const { db, fires, sum } = await mapped()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold'])
+  expect(sum).toEqual({ outcome: 'refuse', spans: ['smoke.hung'], note: hung.note })
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'smoke.hung').map((e) => [e.outcome, e.message])).toEqual([['refuse', hung.note]])
+})
+
 test('a missing out/ is rebuilt before the scaffold check reads it', async () => {
   vi.clearAllMocks()
   vi.mocked(compiled).mockImplementationOnce((dir) => {

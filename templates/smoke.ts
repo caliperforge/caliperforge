@@ -28,7 +28,7 @@ export function unrun(map: string, results: Smoked[]): Refused[] {
     note: `smoke: ${r.name} is raw-only and made 0 successful calls in ${String(r.calls)}; it needs a clamped handler` }))
 }
 
-export function smoke(root: string, fizz: string, meta: string, map: string): Smoked[] {
+export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60): Smoked[] | Refused {
   const [path, report] = [join(root, 'medusa.json'), join(root, meta, REPORT)]
   const kept = readFileSync(path, 'utf8')
   const config = JSON.parse(kept) as { fuzzing?: object }
@@ -36,11 +36,13 @@ export function smoke(root: string, fizz: string, meta: string, map: string): Sm
   writeFileSync(path, JSON.stringify({ ...config, fuzzing: { ...config.fuzzing, revertReporterEnabled: true } }, null, 2))
   let ran: SpawnSyncReturns<string>
   try {
-    ran = spawnSync('node', [join(fizz, 'scripts/run_medusa.js'), root, '--meta-dir', meta, '--timeout', SECONDS],
+    ran = spawnSync(process.execPath, [join(import.meta.dirname, 'walled.ts'), String(wall), 'node', join(fizz, 'scripts/run_medusa.js'), root, '--meta-dir', meta, '--timeout', SECONDS],
       { cwd: root, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'] })
   } finally {
     writeFileSync(path, kept)
   }
+  if (ran.status === 124) return { rule: 'smoke.hung',
+    note: `smoke: medusa ran past --timeout ${SECONDS} + 60 s and its process group was killed; last 40 lines:\n${ran.stderr.trimEnd().split('\n').slice(-40).join('\n')}` }
   if (!existsSync(report)) throw new Error(`run_medusa.js exited ${String(ran.status)} and wrote no ${report}: ${ran.stderr.slice(-TAIL)}`)
   return smoked(map, report)
 }

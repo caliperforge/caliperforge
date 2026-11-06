@@ -147,8 +147,18 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   }) })
   if (!('turns' in built)) return built
   for (const line of lines) log('suite.unsourced', 'pass', line)
-  const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => rebuilt(root, 'smoke', () => unrun(read(map), last = smoke(root, fizz, 'test/fizz/fizz_data', read(map)))) }) : built
+  let hung = null as Refused | null
+  const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => rebuilt(root, 'smoke', () => {
+    const got = smoke(root, fizz, 'test/fizz/fizz_data', read(map))
+    if (!('rule' in got)) return unrun(read(map), last = got)
+    hung = got
+    return []
+  }) }) : built
   if (!('turns' in ran)) return ran
+  if (hung !== null) {
+    log('smoke.hung', 'refuse', hung.note)
+    return { outcome: 'refuse', spans: [hung.rule], note: hung.note }
+  }
   const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, 'critic.stand_in', read(map)))
   return 'turns' in stood ? { sum: fixes.sum, smoked: packed(last) } : stood
 }

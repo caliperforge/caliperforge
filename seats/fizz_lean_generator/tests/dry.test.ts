@@ -11,6 +11,7 @@ import { dried } from '../../../templates/dry.ts'
 import { compiled } from '../../../templates/extract.ts'
 import { trackers } from '../../../templates/probes.ts'
 import { reach } from '../../../templates/reach.ts'
+import { smoke } from '../../../templates/smoke.ts'
 import type { Suite } from '../../../templates/suite.ts'
 
 const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [], standIns: [], probes: [], trackers: [], build: { command: null, via_ir: null, optimizer: null } }))
@@ -82,6 +83,14 @@ test('a throwing check refuses and every later row still prints', () => {
   const rows = ROWS.map((row) => row[1] === 'probe readings' ? [...row.slice(0, 2), 'refuse throw | forge inspect Harness exited 1: boom'] : row)
   expect(dried(db, root, 1, fizz())).toBe(table(rows))
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'swallowed').map((e) => [e.actor, e.message])).toEqual([['bench', 'forge inspect Harness exited 1: boom']])
+})
+
+test('a hung smoke prints a refusal row', () => {
+  const { db, root } = planted()
+  const note = 'smoke: medusa ran past --timeout 120 + 60 s and its process group was killed; last 40 lines:\nline 50'
+  vi.mocked(smoke).mockReturnValueOnce({ rule: 'smoke.hung', note })
+  const rows = ROWS.map((row) => row[1] === 'smoke' ? [...row.slice(0, 2), `refuse smoke.hung | ${note}`] : row)
+  expect(dried(db, root, 1, fizz())).toBe(table(rows))
 })
 
 test('an unlocated item refuses the reach and boundary rows', () => {

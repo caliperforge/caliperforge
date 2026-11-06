@@ -78,7 +78,10 @@ function scaffold(at: Copy): Row[] {
       return [...harnessed(found, read(map)), ...probed(found, read(map))]
     })],
     grade(at, 'scaffold', 'suite', [join(dir, 'test/fizz/handlers'), join(dir, 'test/fizz/Properties.sol')]),
-    ['scaffold', 'smoke', checked(at, [], () => unrun(read(map), smoke(dir, fizz, META, read(map))))],
+    ['scaffold', 'smoke', checked(at, [], () => {
+      const got = smoke(dir, fizz, META, read(map))
+      return 'rule' in got ? [got] : unrun(read(map), got)
+    })],
     ['scaffold', 'critic.stand_in', checked(at, [], () => critic(join(fizz, 'references/critic-pass.md'), dir, 'critic.stand_in'))]]
 }
 

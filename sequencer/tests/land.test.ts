@@ -113,6 +113,22 @@ test('past ready, the next tick lands, pushes and closes',async () => {
   expect(sent).toHaveLength(3)
 })
 
+test('a branch changing nothing stops for the director', async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID)
+  for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, ID).step).toBe(7)
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(fired).toMatchObject({ step: 7, outcome: 'needs_ceo', spans: ['base:empty'] })
+  expect(plan(w.db, ID)).toMatchObject({ step: 7, state: 'blocked_on_ceo' })
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, ID).state).toBe('blocked_on_ceo')
+  expect(sent.filter((s) => s === 'send src main' || s.startsWith('close'))).toEqual([])
+  expect(deliverablesOf(w.db, ID).filter((d) => d.state === 'pushed')).toEqual([])
+})
+
 test('landed commits carry title, what, why, closes, plan',async () => {
   const { w } = await AT_BATCH()
   const wire = watched([], w.root, ID)

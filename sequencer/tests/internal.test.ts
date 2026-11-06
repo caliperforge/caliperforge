@@ -258,7 +258,9 @@ test('D3 an unpushed step-6 plan re-cut fresh is unproven', async () => {
 test('step 7 signs on the gates and shows a batch read-out',async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
-  for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  built(w.root, ID, 'export const hey = (): string => "hey"')
+  for (let at = 3; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, ID).step).toBe(7)
   expect(blocked(w.db, plan(w.db, ID))).toBeNull()
 

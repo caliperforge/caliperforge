@@ -154,7 +154,7 @@ function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Deliver
 /** The body step 8 posts, their PR template, and the closing line their profile requires. */
 function posted(root: string, plan: number, no: number, repo: string): Pick<Proof, 'body' | 'template' | 'closes'> {
   const theirs = template(srcDir(root, plan))
-  const rules = profile(root, repo)
+  const rules = profile(root, repo, plan)
   return {
     body: maybe(root, plan, 'pr.md') ?? prBody(no, root, plan, rules),
     template: theirs ?? null,

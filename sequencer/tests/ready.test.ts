@@ -110,6 +110,13 @@ test('an empty template heading in pr.md is refused at ready', async () => {
   expect(plan(w.db, 1).step).toBe(7)
 })
 
+test('the plan profile alone requires the closing line', async () => {
+  const [w, lap] = await atReady([], {}, undefined, TEMPLATED)
+  put(w.root, 1, 'profile.yml', 'issue_ref: Fixes\n')
+  put(w.root, 1, 'pr.md', '## Linked issue\n\nAddresses #12.\n\n## Testing\n\n`npm test`\n')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['body:1 ready.closing'] })
+})
+
 test('a repo with no template is not held to one', async () => {
   const [w, lap] = await atReady([])
   fixes(w)

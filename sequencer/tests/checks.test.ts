@@ -1503,6 +1503,15 @@ test('a ledger file adds rust-test-ledger, and lib.rs does not', () => {
   expect(lib.calls.join('\n')).not.toContain('rust-test-ledger')
 })
 
+test('a module justfile without rust-test defers to the root', () => {
+  const src = recipe('justfile', KEYCHAIN_JUST)
+  mkdirSync(join(src, 'rust/src/ledger'), { recursive: true })
+  writeFileSync(join(src, 'rust/src/ledger/justfile'), 'test:\n    cargo test --features ledger\n')
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['rust/src/ledger/mod.rs'] })).toBeNull()
+  expect(calls.slice(1)).toEqual([`just --justfile justfile rust-test @${src}`, `just --justfile justfile rust-test-ledger @${src}`])
+})
+
 test('a Makefile test-rust runs through make', () => {
   const src = recipe('Makefile', '.PHONY: test-rust\n\ntest-rust:\n\tcargo test --features sdk-v2\n')
   const { run, calls } = heard()

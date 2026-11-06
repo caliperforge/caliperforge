@@ -175,6 +175,12 @@ test('kora parses Conventional subjects, Fixes and claim_first', () => {
   expect(kora?.notes?.[6]).toMatch(/^A mutation proof/)
 })
 
+test('keychain parses Fixes and a checked AI disclosure', () => {
+  const keychain = profile(REPO, 'solana-foundation/solana-keychain')
+  expect(keychain?.issue_ref).toBe('Fixes')
+  expect(keychain?.disclosure).toMatch(/^## AI disclosure\n- \[x\] AI tooling was used\. Tool and extent: \S/)
+})
+
 test('914 D4 greptile_files not a string list is refused', () => {
   const dir = root({ 'widget.yml': 'greptile_files: 3\n' })
   expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))

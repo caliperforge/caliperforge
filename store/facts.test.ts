@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -7,10 +7,12 @@ import type { Issue, Read } from '../cli/gh.ts'
 import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
+import { prBody } from '../sequencer/pr.ts'
 import { MAIN, OPERATOR, put, srcDir } from '../sequencer/workspace.ts'
 import { logged, runAt } from './events.ts'
 import { ciFacts, diffFacts, facts, greptileFacts, ruleFacts, testFacts, type Fact } from './facts.ts'
 import type { Db } from './index.ts'
+import { profile } from './profile.ts'
 import { record } from './signals.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -238,6 +240,20 @@ test('D3 a template section missing from the body is named', () => {
   const root = rooted(null, { '.github/PULL_REQUEST_TEMPLATE.md': '## Linked issue\n\nsay which\n\n## Testing\n' })
   expect(rule(root, 'template', '## Linked issue\n\nCloses #12\n'))
     .toEqual({ name: 'template', ok: false, says: 'missing ## Testing' })
+})
+
+const KEYCHAIN = readFileSync(join(root, 'profiles/solana-foundation/solana-keychain.yml'), 'utf8')
+const HEADINGS = '## Linked issue\n\nFixes #\n\n## What and why\n\n## Testing\n\n## AI disclosure\n\n'
+  + '- [ ] No AI tooling was used beyond editor autocomplete.\n- [ ] AI tooling was used. Tool and extent:\n'
+
+test('a filled template passes; the default body misses it', () => {
+  const dir = rooted(KEYCHAIN, { '.github/PULL_REQUEST_TEMPLATE.md': HEADINGS })
+  put(dir, PLAN, 'issue.md', '**What:** Sign the memo.\n')
+  const body = prBody(12, dir, PLAN, profile(dir, 'acme/widget'))
+  expect(rule(dir, 'template', body)).toEqual({ name: 'template', ok: true, says: '4 sections present' })
+  expect(rule(dir, 'disclosure', body)).toEqual({ name: 'disclosure', ok: true, says: 'present' })
+  expect(rule(dir, 'template', 'Sign the memo.\n\nAddresses #12.\n')).toEqual({ name: 'template', ok: false,
+    says: 'missing ## Linked issue, ## What and why, ## Testing, ## AI disclosure' })
 })
 
 test('D4 an unlinked body and an unassigned issue are no', () => {

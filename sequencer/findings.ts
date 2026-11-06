@@ -12,15 +12,23 @@ export interface Rehearsal { root: string; list: Read }
 /** A finding is named by GitHub's comment id: a row the audit carries from an earlier hand-back then answers the same finding, never a renumbered one. */
 export function rehearsed({ root, list }: Rehearsal, plan: number, fork: string, pr: number, all: Signal[]): Signal[] {
   const bots = all.filter((s) => s.kind === 'bot_review')
-  const comments = bots.length === 0 ? [] : inline(fork, pr, list)
+  const comments = bots.length === 0 ? [] : kept(root, plan, fork, pr, bots, list)
   const paths = comments.filter((c) => BOT.test(c.user.login)).map((c) => `G${String(c.id)} ${c.path}\n`).join('')
   if (paths !== '') put(root, plan, 'findings.paths', paths)
-  return bots.map((s) => {
-    const head = typeof s.head === 'string' ? carried(root, plan, s.head) : null
-    const found = comments.filter((c) => BOT.test(c.user.login) && c.original_commit_id === s.head)
-    if (head !== null && found.length > 0) put(root, plan, `findings-${head}.md`, found.map((c) => `- G${String(c.id)} ${said(c)}\n`).join(''))
-    return { ...s, head, external_id: `${s.external_id}@${String(s.head)}` }
-  })
+  return bots.map((s) => ({ ...s, head: typeof s.head === 'string' ? carried(root, plan, s.head) : null, external_id: `${s.external_id}@${String(s.head)}` }))
+}
+
+export function kept(root: string, plan: number, repo: string, pr: number, bots: Pick<Signal, 'head'>[], list: Read): ReturnType<typeof inline> {
+  const comments = inline(repo, pr, list)
+  for (const { head } of bots) {
+    const found = comments.filter((c) => BOT.test(c.user.login) && c.original_commit_id === head)
+    if (typeof head === 'string' && found.length > 0) put(root, plan, `findings-${carried(root, plan, head)}.md`, found.map((c) => `- G${String(c.id)} ${said(c)}\n`).join(''))
+  }
+  return comments
+}
+
+export function rowsAt(root: string, plan: number, head: string | null): string[] {
+  return head === null ? [] : (maybe(root, plan, `findings-${head}.md`) ?? '').split('\n').filter((l) => l.startsWith('- G'))
 }
 
 /** `findings.md` is what the completion audit reads, so a head Greptile passed leaves none behind. */

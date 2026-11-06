@@ -1509,7 +1509,24 @@ test('a module justfile without rust-test defers to the root', () => {
   writeFileSync(join(src, 'rust/src/ledger/justfile'), 'test:\n    cargo test --features ledger\n')
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['rust/src/ledger/mod.rs'] })).toBeNull()
-  expect(calls.slice(1)).toEqual([`just --justfile justfile rust-test @${src}`, `just --justfile justfile rust-test-ledger @${src}`])
+  expect(calls).toEqual([`${FMT} @${src}`, `just --justfile justfile rust-test @${src}`, `just --justfile justfile rust-test-ledger @${src}`])
+})
+
+test('a nearer recipe file defining rust-test wins over the root\'s', () => {
+  const src = recipe('justfile', KEYCHAIN_JUST)
+  mkdirSync(join(src, 'rust/src/ledger'), { recursive: true })
+  writeFileSync(join(src, 'rust/src/ledger/justfile'), 'rust-test:\n    cargo test\n')
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['rust/src/ledger/mod.rs'] })).toBeNull()
+  expect(calls.slice(1)).toEqual([`just --justfile justfile rust-test @${join(src, 'rust/src/ledger')}`])
+})
+
+test('a Makefile test-rust beats a justfile without one', () => {
+  const src = recipe('Makefile', '.PHONY: test-rust\n\ntest-rust:\n\tcargo test --features sdk-v2\n')
+  writeFileSync(join(src, 'justfile'), 'lint:\n    cargo clippy\n')
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] })).toBeNull()
+  expect(calls.slice(1)).toEqual([`make test-rust @${src}`])
 })
 
 test('a Makefile test-rust runs through make', () => {

@@ -119,11 +119,36 @@ test('D3 testFacts reads local checks and gating fork runs', () => {
     { workflow: 'Build', status: 'completed', conclusion: 'failure', gates: true, url: run(2) },
     { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false, url: run(3) },
   ]
-  const tests = { name: 'tests changed', ok: true, says: '1 test files added or changed' }
+  const tests = { name: 'tests changed', ok: true, says: '1 test files added or changed; 0 tests added' }
   const local = { name: 'local', ok: true, says: 'pass' }
   expect(testFacts(db, plan, DIFF, board)).toEqual([tests, local, { name: 'fork', ok: false, says: `${run(1)}, ${run(2)}` }])
   const none = { name: 'fork', ok: true, says: "no fork CI; step 3's checks stand as it" }
   expect(testFacts(db, plan, DIFF, null)).toEqual([tests, local, none])
+})
+
+const changedTests = (diff: string[]): string | undefined => {
+  const { db, plan } = passing()
+  return testFacts(db, plan, diff.join('\n'), null)[0]?.says
+}
+
+test('testFacts counts inline Rust tests', () => {
+  expect(changedTests([
+    '--- a/rust/src/ledger/mod.rs', '+++ b/rust/src/ledger/mod.rs', '@@ -1 +1,13 @@',
+    '+#[cfg(test)]', '+mod tests {',
+    '+    #[test]', '+    fn a() {}', '+    #[test]', '+    fn b() {}', '+    #[test]', '+    fn c() {}',
+    '+    #[tokio::test(flavor = "multi_thread")]', '+    async fn d() {}', '+}',
+  ])).toBe('0 test files added or changed; 4 tests added in 1 file (inline)')
+})
+
+test('testFacts counts test functions by language', () => {
+  expect(changedTests([
+    '--- a/src/test/kotlin/AT.kt', '+++ b/src/test/kotlin/AT.kt', '@@ -1 +1,2 @@', '+    @Test', '+    fun a() {}',
+    '--- a/src/test/java/BT.java', '+++ b/src/test/java/BT.java', '@@ -1 +1,2 @@', '+    @Test', '+    void b() {}',
+    '--- a/tool/test_x.py', '+++ b/tool/test_x.py', '@@ -1 +1,2 @@', '+def test_a():', '+async def test_b():',
+    '--- a/src/a.test.ts', '+++ b/src/a.test.ts', '@@ -1 +1 @@', "+it('adds', () => {})",
+    '--- a/src/lib.rs', '+++ b/src/lib.rs', '@@ -1,2 +1 @@', '-#[test]', '-fn gone() {}', '+#[cfg(test)]',
+    '--- a/tool/b.py', '+++ b/tool/b.py', '@@ -1 +1 @@', '+x = test_value()',
+  ])).toBe('4 test files added or changed; 5 tests added in 4 files')
 })
 
 test('D4 D5 D6 ciFacts gives one row per workflow', () => {

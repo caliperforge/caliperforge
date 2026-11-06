@@ -23,7 +23,7 @@ import { readings, trackers } from './probes.ts'
 import { met, reach, unlocated, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
 import { callee, rows, slices } from './slices.ts'
-import { packed, smoke, type Smoked, unrun } from './smoke.ts'
+import { packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
 import { harnessed, probed, suite, unsourced } from './suite.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
@@ -167,6 +167,11 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   return 'turns' in stood ? { sum: fixes.sum, smoked: packed(last) } : stood
 }
 
+function slithering({ db, plan, name }: Bench, root: string): void {
+  const off = primed(root)
+  if (off !== null) logged(db, { plan: plan.id, kind: 'coverage.slither_off', actor: name, outcome: 'pass', message: off, pointer: null, run: null })
+}
+
 async function reached(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<Sum | Outcome> {
   const [map, corpus] = [join(handoffs, MAP), join(handoffs, '../corpus_medusa')]
   const [broken] = compiled(root, 'coverage')
@@ -264,13 +269,13 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
   const grade = grader(bench, root)
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue
-    const path = join(handoffs, `${phase}.md`)
-    const start = at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]
+    const [path, start] = [join(handoffs, `${phase}.md`), at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]]
     const later = phase !== 'context' && existsSync(cut)
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
     const fire = firing(bench, manifest, hash, later ? ranges(read(map)) : undefined)
     const stage: Phase = { phase, skill, root, path, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
       issue: [issue, ending({ path, phase, skill }), ...start, ...named, ...(phase === 'coverage' && smoked !== '' ? [smoked] : [])].join('\n') }
+    if (phase === 'coverage' && later) slithering(bench, root)
     const ran = phase === 'invariants' && later ? await invariant(bench, manifest, hash, skill, root, handoffs, stage, sum) : await checked(fire, stage, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran

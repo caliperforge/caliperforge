@@ -84,7 +84,7 @@ function scaffold(at: Copy): Row[] {
       const row = checked(at, [], () => {
         const got = smoke(dir, fizz, META, read(map))
         if ('rule' in got) return [got]
-        note = got.note
+        note = got.cache === null ? got.note : `slither cache ${got.cache}`
         return unrun(read(map), got.results)
       })()
       return note === null ? row : `${row} | ${note}`

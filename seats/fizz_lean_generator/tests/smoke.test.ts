@@ -54,13 +54,13 @@ const HANGS = "const { spawn } = require('node:child_process')\nconst { writeFil
   + 'setInterval(() => {}, 1000)\n'
 
 test('a never-exiting medusa is killed and refused as smoke.hung', async () => {
-  const { root, fizz, config } = medusa(HANGS)
+  const { root, fizz } = medusa(HANGS)
   const lines = [...Array(40).keys()].map((i) => `line ${String(i + 11)}`).join('\n')
   expect(smoke(root, fizz, META, MAP, 2)).toEqual({ rule: 'smoke.hung',
     note: `smoke: medusa ran past --timeout 120 + 60 s and its process group was killed; last 40 lines:\n${lines}` })
   const pid = Number(readFileSync(join(root, 'pid'), 'utf8'))
   await expect.poll(() => alive(pid)).toBe(false)
-  expect(JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8'))).toMatchObject(JSON.parse(config) as object)
+  expect(restored(root)).toEqual({ ...MEDUSA, slither: { useSlither: true, cachePath: CACHE } })
 }, 10_000)
 
 const SEES = "const { copyFileSync, mkdirSync } = require('node:fs')\ncopyFileSync('medusa.json', 'seen.json')\n"

@@ -1,9 +1,9 @@
-import { readdirSync, statSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { join } from 'node:path'
-import { carried } from '../rails/completion-audit/index.ts'
 import { parse } from '../rails/diff.ts'
+import { pointers, replies } from './handled.ts'
 import { BLOCK } from './learn.ts'
-import { diffOf, maybe, planDir, srcDir, tried } from './workspace.ts'
+import { diffOf, maybe, srcDir } from './workspace.ts'
 
 const OVERRULED = /\b((?:G\d+[ \t,]*)+)overruled:(?=[ \t]*\S)(.*?)(?=\b(?:G\d+[ \t,]*)+overruled:|$)/gm
 
@@ -32,44 +32,18 @@ export function settled(root: string, plan: number, sha: string): Map<string, st
   }))
 }
 
-/** Each finding at `head` or at a head before it on its line, with the ruling or the later commit that answers it. */
-export function handled(root: string, plan: number, head: string): { id: string; text: string; how: string | null; holds: boolean }[] {
-  const [src, reply, pointer] = [srcDir(root, plan), replies(root, plan), pointers(root, plan)]
-  return readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? [])
-    .filter((sha) => tried(src, ['merge-base', '--is-ancestor', sha, head]) !== null)
-    .flatMap((sha) => {
-      const { open } = unruled(root, plan, sha)
-      return listed(root, plan, sha).map(({ id, text }) => {
-        const at = pointer(id)
-        const fix = at === '' ? '' : tried(src, ['log', '-1', '--format=%H', `${sha}..${head}`, '--', at.split(':')[0] ?? ''])?.trim() ?? ''
-        const how = reply(id) ?? (fix === '' ? null : `fixed in ${fix.slice(0, 12)} at ${at}`)
-        return { id, text, how, holds: how === null && open.includes(id) }
-      })
-    })
-}
-
-function replies(root: string, plan: number): (id: string) => string | undefined {
-  const [ok, over] = [accepted(maybe(root, plan, 'rulings.md') ?? ''), overruled(root, plan)]
-  return (id) => ok.has(id) ? `accepted: ${ok.get(id) ?? ''}` : over.find((o) => o.id === id)?.line
-}
-
-function pointers(root: string, plan: number): (id: string) => string {
-  const rows = carried(maybe(root, plan, 'step-2.handback.md') ?? '')
-  return (id) => typeof rows === 'string' || rows.get(id)?.status !== 'done' ? '' : rows.get(id)?.pointer?.trim() ?? ''
-}
-
 export function listed(root: string, plan: number, sha: string): { id: string; text: string }[] {
   return (maybe(root, plan, `findings-${sha}.md`) ?? '').split(/^(?=- G\d+ )/m)
     .filter((text) => /^- G\d+ /.test(text)).map((text) => ({ id: text.split(' ')[1] ?? '', text }))
 }
 
-function accepted(rulings: string): Map<string, string> {
+export function accepted(rulings: string): Map<string, string> {
   const field = (body: string, key: string): string => new RegExp(`^[ \\t]+${key}:(.*)$`, 'm').exec(body)?.[1]?.trim() ?? ''
   return new Map([...rulings.matchAll(BLOCK)].flatMap(([, body = '']) => /^[0-9a-f]{7,40}$/.test(field(body, 'head')) && field(body, 'reason') !== ''
     ? (field(body, 'ids').match(/G\d+/g) ?? []).map((id) => [id, field(body, 'reason')] as const) : []))
 }
 
-function overruled(root: string, plan: number): { id: string; reason: string; line: string }[] {
+export function overruled(root: string, plan: number): { id: string; reason: string; line: string }[] {
   return [maybe(root, plan, 'rulings.md') ?? '', maybe(root, plan, 'issue.md') ?? ''].flatMap((text) => text.split('\n')).flatMap((line) =>
     [...line.matchAll(OVERRULED)].flatMap(([, ids = '', reason = '']) => (ids.match(/G\d+/g) ?? []).map((id) => ({ id, reason, line: line.trim() }))))
 }

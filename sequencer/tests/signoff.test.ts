@@ -626,9 +626,9 @@ test('the card lists each bot finding and how it was handled', async () => {
   put(w.root, 1, `findings-${before}.md`, '- G1 src/hello.ts:1 fixed\n- G2 src/hello.ts:2 overruled\n- G3 src/hello.ts:3 neither\n')
   put(w.root, 1, `findings-${side}.md`, '- G4 src/hello.ts:4 elsewhere\n')
   put(w.root, 1, 'rulings.md', 'G2 overruled: src/hello.ts:1 refuses it\n')
-  const fixed = CARRIED.replace(/---\n$/, '  - id: G1\n    status: done\n    pointer: src/hello.ts:1\n---\n')
+  put(w.root, 1, 'step-2.handback.prev.md', CARRIED.replace(/---\n$/, '  - id: G1\n    status: done\n    pointer: src/hello.ts:1\n---\n'))
   const fix = git(src, ['log', '-1', '--format=%H', `${before}..${head}`, '--', 'src/hello.ts']).trim().slice(0, 12)
-  expect(cardWith(w, fixed)).toContain(`**Bot findings on the pull request**\n\n- \`G1\` \`src/hello.ts:1 fixed\` — \`fixed in ${fix} at src/hello.ts:1\`\n`
+  expect(cardWith(w, CARRIED)).toContain(`**Bot findings on the pull request**\n\n- \`G1\` \`src/hello.ts:1 fixed\` — \`fixed in ${fix} at src/hello.ts:1\`\n`
     + '- `G2` `src/hello.ts:2 overruled` — `G2 overruled: src/hello.ts:1 refuses it`\n- `G3` `src/hello.ts:3 neither` — open\n\n')
 })
 

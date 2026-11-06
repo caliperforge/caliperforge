@@ -175,7 +175,8 @@ function languageHint(path: string, language: OutsideLanguage): boolean {
  * once per `cargo test` line in their CI, with that line's features where the crate declares them:
  * surfpool's `ignore_tests_ci`
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
- * (surfpool's `postgres`) is left off, as this host runs no such service. Their own `rust-test` recipe replaces those lines.
+ * (surfpool's `postgres`) is left off, as this host runs no such service, and so is a `--no-default-features` line
+ * naming no feature the crate declares. Their own `rust-test` recipe replaces those lines.
  */
 function rust(src: string, outside: Outside, excused: string[]): Gate[] {
   const own = outside.files.filter((f) => f.endsWith('.rs'))
@@ -193,7 +194,7 @@ function rust(src: string, outside: Outside, excused: string[]): Gate[] {
 function featureArgs(crates: Crate[], sets: FeatureSet[]): string[][] {
   const args = sets.map(({ features, bare }) => {
     const named = crates.flatMap((c) => features.filter((f) => c.features.has(f)).map((f) => `${c.name}/${f}`))
-    return [...(bare ? ['--no-default-features'] : []), ...(named.length === 0 ? [] : ['--features', named.join(',')])]
+    return named.length === 0 ? [] : [...(bare ? ['--no-default-features'] : []), '--features', named.join(',')]
   }).filter((a) => a.length > 0)
   return args.length === 0 ? [[]] : args.filter((a, at) => args.findIndex((b) => b.join(' ') === a.join(' ')) === at)
 }

@@ -56,9 +56,10 @@ export const TEX = { ...TYPESCRIPT, [WORKFLOW]: "on:\n  pull_request:\n    paths
 export const THEIR_RULE = { rule: 'keep it short', scope: ['src/**'] }
 export const GREPTILED = { ...TYPESCRIPT, '.greptile/config.json': JSON.stringify({ strictness: 2, rules: [THEIR_RULE] }) }
 export const RULED = { ...TYPESCRIPT, '.greptile/rules.md': '- keep it short\n' }
+export const TEMPLATED = { ...TYPESCRIPT, '.github/pull_request_template.md': '## Linked issue\n\nFixes #<!-- an accepted issue -->\n\n## Testing\n\n<!-- commands run -->\n' }
 
 export const WORLDS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [KOTLIN, true], [HANDOUT, true], [RED, true],
-  [MANUAL, false], [TEX, false], [SCHEDULED, false], [GREPTILED, true], [RULED, true]]
+  [MANUAL, false], [TEX, false], [SCHEDULED, false], [GREPTILED, true], [RULED, true], [TEMPLATED, true]]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
   [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false], [GREETED, true]]
 

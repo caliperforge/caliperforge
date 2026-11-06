@@ -357,6 +357,16 @@ test('a clamped balance logs smoke.clamped and coverage.clamped', async () => {
   expect(clamps((await mapped()).db)).toEqual([])
 })
 
+test('a clamp from a smoke before its fix turn is still logged', async () => {
+  const over = '0xffffffffffffffffffffffffffffffffffffffffffffffff'
+  vi.mocked(suite).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
+  vi.mocked(smoke).mockReturnValueOnce({ results: [{ name: 'V.deposit(uint256 assets)', calls: 10, successes: 0 }], note: null, cache: null, clamped: [over] })
+  const { db, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
+  expect(fires.map((f) => f.phase)).toContain('scaffold-fix-smoke-1')
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'smoke.clamped').map((e) => [e.outcome, e.message]))
+    .toEqual([['pass', `targetContractsBalances ${over} clamped to 1e24 wei`]])
+})
+
 test('a missing out/ is rebuilt before the scaffold check reads it', async () => {
   vi.clearAllMocks()
   vi.mocked(compiled).mockImplementationOnce((dir) => {

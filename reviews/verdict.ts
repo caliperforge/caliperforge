@@ -141,7 +141,7 @@ function yaml(body: string): unknown {
 }
 
 /** `parseDocument` leaves an alias with no anchor, such as `*emphasis*`, out of `errors`; `toJS()` throws on it. */
-function resolved(doc: Document): boolean {
+export function resolved(doc: Document): boolean {
   let unresolved = false
   visit(doc, { Alias: (...[, alias]) => { unresolved ||= alias.resolve(doc) === undefined } })
   return !unresolved

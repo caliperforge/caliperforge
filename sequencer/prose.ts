@@ -1,4 +1,5 @@
-import { parse } from 'yaml'
+import { parseDocument } from 'yaml'
+import { resolved } from '../reviews/verdict.ts'
 
 /**
  * Each prose key's value is read as one quoted string first, as `brief.ts` reads the brief writer's fence.
@@ -9,11 +10,8 @@ export function prose(fence: string, keys: readonly string[]): unknown {
   const key = new RegExp(`^(\\s*(?:${keys.join('|')}):[ \\t]+)(?!["'|>\\[{])(.+)$`, 'gm')
   const quoted = fence.replace(key, (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
   for (const each of [quoted, fence]) {
-    try {
-      return parse(each) as unknown
-    } catch {
-      continue
-    }
+    const doc = parseDocument(each)
+    if (doc.errors.length === 0 && resolved(doc)) return doc.toJS() as unknown
   }
   return null
 }

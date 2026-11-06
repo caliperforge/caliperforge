@@ -99,15 +99,13 @@
     "silent-catch": 1
   },
   "prose.ts": {
-    "lines": 19,
-    "silent-catch": 1
+    "lines": 17
   },
   "push.ts": {
     "lines": 655
   },
   "rails.ts": {
-    "lines": 242,
-    "silent-catch": 1
+    "lines": 242
   },
   "reach.ts": {
     "lines": 23

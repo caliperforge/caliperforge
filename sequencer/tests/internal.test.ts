@@ -9,7 +9,7 @@ import { digest, listed } from '../../runner/rules.ts'
 import { gates, gatesSigned, headApproved, headDigest, signedHead } from '../../store/approvals.ts'
 import { approved, deliverablesOf } from '../../store/deliverables.ts'
 import { record as recordFiles } from '../../store/files.ts'
-import { runRows } from '../../store/events.ts'
+import { eventsOf, runRows } from '../../store/events.ts'
 import { width } from '../../store/lanes.ts'
 import { advance, dropPlan } from '../../store/plans.ts'
 import { verdictRows } from '../../store/verdict.ts'
@@ -182,6 +182,7 @@ test('D2 a cli/cf.ts digests that exits non-zero refuses its plan', async () => 
   const rails = (await tick(w.db, w.root, built))[0]
   expect(rails).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster'], note: 'digests: the checkout could not be filled' })
   expect(get(w.root, ID, 'refusal.md')).toContain('roster broke')
+  expect(eventsOf(w.db, ID, 'digests')).toMatchObject([{ actor: 'pre_review', outcome: 'refuse', message: expect.stringContaining('roster broke') as string }])
   expect(plan(w.db, ID).step).toBe(2)
 })
 

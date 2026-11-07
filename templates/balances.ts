@@ -25,7 +25,7 @@ export function quieted(config: unknown): unknown {
   if (typeof config !== 'object' || config === null) return config
   const { fuzzing, slither } = config as Record<string, unknown>
   if (typeof fuzzing === 'object' && fuzzing !== null) {
-    Object.assign(fuzzing, { testing: { ...((fuzzing as Record<string, unknown>).testing as object | undefined), shrinkLimit: SHRINK } })
+    Object.assign(fuzzing, { shrinkLimit: SHRINK })
   }
   return Object.assign(config, { slither: { ...(slither as object | undefined), useSlither: false } })
 }

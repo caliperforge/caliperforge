@@ -975,7 +975,7 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 3600, workers: 4, testing: { shrinkLimit: 500 } },
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 3600, workers: 4, shrinkLimit: 500 },
     compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } }, slither: { useSlither: false } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
@@ -992,9 +992,9 @@ function installed(config: string, ...files: string[]): unknown {
 }
 
 test('D1 D2 the copy turns slither off and caps shrinking', () => {
-  expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0, testing: { shrinkLimit: 5000, stopOnFailedTest: false } },
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0, shrinkLimit: 5000, testing: { stopOnFailedTest: false } },
     slither: { useSlither: true, cachePath: 'test/fizz/fizz_data/slither_results.json' } }))).toEqual({
-    fuzzing: { timeout: 3600, workers: 4, testLimit: 0, testing: { shrinkLimit: 500, stopOnFailedTest: false } },
+    fuzzing: { timeout: 3600, workers: 4, testLimit: 0, shrinkLimit: 500, testing: { stopOnFailedTest: false } },
     slither: { useSlither: false, cachePath: 'fizz_data/slither_results.json' } })
 })
 
@@ -1177,7 +1177,7 @@ test('a walled, reaped plan rescores its partial suite', () => {
 
 test('D3 a set timeout and workers at most 4 are kept', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({
-    fuzzing: { timeout: 600, workers: 2, testing: { shrinkLimit: 500 } }, slither: { useSlither: false } })
+    fuzzing: { timeout: 600, workers: 2, shrinkLimit: 500 }, slither: { useSlither: false } })
 })
 
 test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
@@ -1190,7 +1190,7 @@ test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
   expect(done.note).not.toContain('0x21e19e0c9bab2400000')
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'],
-      testing: { shrinkLimit: 500 } }, slither: { useSlither: false } })
+      shrinkLimit: 500 }, slither: { useSlither: false } })
 })
 
 test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
@@ -1201,7 +1201,7 @@ test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
   expect(scored(db, root, planById(db, 1)).note).toContain(balances[0])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 3600, workers: 4,
-      testing: { shrinkLimit: 500 } }, compilation: { platformConfig: { target: '../..' } }, slither: { useSlither: false } })
+      shrinkLimit: 500 }, compilation: { platformConfig: { target: '../..' } }, slither: { useSlither: false } })
 })
 
 test('rescore D1 D2 a done plan scores again on its suite', () => {
@@ -1628,7 +1628,7 @@ test('refuzz D4 the medusa.json runs hours long on one corpus', () => {
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { timeout: 600, workers: 10, testLimit: 500000 } }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), testing: { shrinkLimit: 500 } },
+    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), shrinkLimit: 500 },
     slither: { useSlither: false } })
   expect(get(root, 1, 'target.yml')).toBe('repo: euler-xyz/euler-earn\nfiles:\n  - src/EulerEarn.sol\nmode: refuzz\ntarget: euler-earn-m01\ngenerator: fizz\nrefuzz: 7\nhours: 4\nseeds: 2\n')
   expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).toMatch(/mode: refuzz\n$/)
@@ -1639,7 +1639,7 @@ test('refuzz D4 a medusa.json with no fuzzing still gets them', () => {
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), '{}')
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), testing: { shrinkLimit: 500 } },
+    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), shrinkLimit: 500 },
     slither: { useSlither: false } })
 })
 

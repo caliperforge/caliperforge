@@ -3,7 +3,7 @@ import type { Score } from '../store/bench.ts'
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { spend } from '../store/runs.ts'
-import type { Row } from './paired.ts'
+import { classOf, union, type Class, type Row } from './paired.ts'
 import { counted } from './powered.ts'
 
 export const KINDS = { map_miss: 'read.map_miss', slice_miss: 'read.slice_miss', map_unused: 'map.unused', reach: 'reach.boundary', checks: 'check.hit',
@@ -25,7 +25,7 @@ export interface Phase { phase: string; tokens: number; usd: number }
 
 const TITLES = { result: 'Result', cost: 'Cost', map: 'Map health', reach: 'Reach', checks: 'Checks', counted: 'Counted' }
 
-const SAID: Record<string, string> = { catch: 'catch', fp_candidate: 'false alarm', silent: 'silent' }
+const SAID: Record<Class, string> = { catch: 'catch', false_positive: 'false alarm', broken: 'broken', silent: 'silent', not_run: 'not run' }
 
 const TOP = 5
 
@@ -58,9 +58,9 @@ function or<T>(list: T[]): T[] | '-' {
 function result(runs: Row[][]): Section {
   const said: Record<string, string[]> = {}
   runs.forEach((pairs, at) => {
-    for (const r of pairs) (said[r.property ?? '-'] ??= runs.map(() => '-'))[at] = SAID[r.verdict ?? ''] ?? r.verdict ?? '-'
+    for (const r of pairs) (said[r.property ?? '-'] ??= runs.map(() => '-'))[at] = SAID[classOf(r)]
   })
-  return runs.length === 0 ? '-' : said
+  return runs.length === 0 ? '-' : { ...union(runs), ...said }
 }
 
 function missed(name: string, misses: Miss[]): Record<string, unknown> {

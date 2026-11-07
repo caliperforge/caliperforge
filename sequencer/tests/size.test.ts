@@ -2,6 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from 'vitest'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { setLimit } from '../../store/limits.ts'
 import { limitOf, sized } from '../size.ts'
 
 const lines = (n: number): string[] => [...Array(n).keys()].map((i) => `x${String(i)}`)
@@ -40,14 +41,13 @@ const migrated = (): Db => {
   return db
 }
 
-const insert = (db: Db, repo: string, n: number): unknown =>
-  db.prepare("INSERT INTO size_limits (repo, lines, origin_kind, origin_ref, set_at) VALUES (?, ?, 'ruling', 't', '2026-09-26')").run(repo, n)
+const insert = (db: Db, repo: string, n: number): void => { setLimit(db, { repo, lines: n, origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-26' }) }
 
 test('D5 limitOf reads the repo row, else card.size_limit', () => {
   const db = migrated()
   expect(limitOf(db, 'acme/widget')).toBe(400)
   insert(db, 'acme/widget', 250)
   expect(limitOf(db, 'acme/widget')).toBe(250)
-  expect(() => insert(db, 'acme/zero', 0)).toThrow(/CHECK/)
-  expect(() => insert(db, 'widget', 100)).toThrow(/CHECK/)
+  expect(() => { insert(db, 'acme/zero', 0) }).toThrow(/CHECK/)
+  expect(() => { insert(db, 'widget', 100) }).toThrow(/CHECK/)
 })

@@ -7,6 +7,7 @@ import { fresh } from '../../checks/sqlite.ts'
 import { newest, pushedRow } from '../../store/deliverables.ts'
 import { allEvents } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
+import { dropPlan } from '../../store/plans.ts'
 import { last, receipt, type Receipt } from '../../store/ticks.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { tick } from '../index.ts'
@@ -27,7 +28,7 @@ const version = (db: Db): number => Number(db.pragma('user_version', { simple: t
 /** The lap of `sequencer/tests/land.test.ts`, with `sql` on the main it lands over and the live tree cloned before it. */
 async function lands(sql: string, detached = false): Promise<{ w: World; live: string; sha: string }> {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   const live = mkdtempSync(join(tmpdir(), 'cf-live-'))

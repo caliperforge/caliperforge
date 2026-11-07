@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { dropPlan } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { get, MAIN } from '../workspace.ts'
 import { built, CARRIED, internalPlan, ours, stub, watched, world } from './world.ts'
@@ -10,7 +11,7 @@ const ID = 2
 
 test('D4 a step-3 tick spawns 14 git processes, 3 the live diff', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   const wire = watched([], w.root, ID)

@@ -24,7 +24,7 @@ import { met, misread, reach, unlocated, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
 import { callee, rows, slices } from './slices.ts'
 import { funding, packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
-import { harnessed, probed, suite, unsourced } from './suite.ts'
+import { harnessed, misaimed, probed, suite, unsourced } from './suite.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; machine: number; runs: number[]; transcripts: string[]; wall: string | null }
 
@@ -138,14 +138,14 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   const { log, fix } = fixes
   const rules = machine(skill, 'scaffold')
   const facts = sections(read(map)).filter(([section]) => FACTS.includes(section)).map(([, s]) => s.trimEnd()).join('\n\n')
-  let [lines, last]: [string[], Smoked[]] = [[], []]
+  let [lines, last, lost]: [string[], Smoked[], Refused[]] = [[], [], []]
   const built = await fix({ name: 'suite', rules, facts, run: () => rebuilt(root, 'scaffold', () => {
     const found = suite(root)
     writeFileSync(map, suited(found, read(map)))
-    lines = unsourced(found, read(map))
-    return [...harnessed(found, read(map)), ...probed(found, read(map))]
+    ;[lines, lost] = [unsourced(found, read(map)), misaimed(found, read(map), read(join(handoffs, '../corpus_medusa/coverage/lcov.info')))]
+    return lost.length > 0 ? [] : [...harnessed(found, read(map)), ...probed(found, read(map))]
   }) })
-  if (!('turns' in built)) return built
+  if (!('turns' in built) || lost.length > 0) return 'turns' in built ? { outcome: 'needs_coo', spans: ['machine_fault', 'suite.misread'], note: lost.map((r) => r.note).join('; ') } : built
   for (const line of lines) log('suite.unsourced', 'pass', line)
   let [hung, note] = [null as Refused | null, null as string | null]
   const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => rebuilt(root, 'smoke', () => {

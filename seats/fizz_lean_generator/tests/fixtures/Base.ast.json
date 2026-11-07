@@ -1,0 +1,200 @@
+{
+  "ast": {
+    "absolutePath": "test/fizz/Base.sol",
+    "id": 200,
+    "nodeType": "SourceUnit",
+    "src": "0:808:0",
+    "nodes": [
+      {
+        "id": 199,
+        "name": "Base",
+        "nodeType": "ContractDefinition",
+        "src": "128:679:0",
+        "nodes": [
+          { "constant": false, "id": 201, "name": "admin", "nodeType": "VariableDeclaration", "src": "148:13:0", "stateVariable": true, "typeDescriptions": { "typeString": "address" } },
+          { "constant": false, "id": 202, "name": "evc", "nodeType": "VariableDeclaration", "src": "167:11:0", "stateVariable": true, "typeDescriptions": { "typeString": "address" } },
+          { "constant": false, "id": 203, "name": "perspective", "nodeType": "VariableDeclaration", "src": "184:19:0", "stateVariable": true, "typeDescriptions": { "typeString": "address" } },
+          { "constant": false, "id": 204, "name": "asset", "nodeType": "VariableDeclaration", "src": "209:13:0", "stateVariable": true, "typeDescriptions": { "typeString": "address" } },
+          { "constant": false, "id": 205, "name": "factory", "nodeType": "VariableDeclaration", "src": "228:24:0", "stateVariable": true, "typeDescriptions": { "typeString": "contract EulerEarnFactory" } },
+          { "constant": false, "id": 206, "name": "vault", "nodeType": "VariableDeclaration", "src": "258:15:0", "stateVariable": true, "typeDescriptions": { "typeString": "contract EulerEarn" } },
+          {
+            "body": { "id": 211, "nodeType": "Block", "src": "304:207:0", "statements": [
+              { "id": 212, "nodeType": "ExpressionStatement", "src": "314:63:0", "expression": {
+                "id": 213,
+                "leftHandSide": { "id": 214, "name": "factory", "nodeType": "Identifier", "referencedDeclaration": 205, "src": "314:7:0", "typeDescriptions": { "typeString": "contract EulerEarnFactory" } },
+                "nodeType": "Assignment",
+                "operator": "=",
+                "rightHandSide": {
+                  "arguments": [
+                    { "id": 217, "name": "admin", "nodeType": "Identifier", "referencedDeclaration": 201, "src": "345:5:0", "typeDescriptions": { "typeString": "address" } },
+                    { "id": 218, "name": "evc", "nodeType": "Identifier", "referencedDeclaration": 202, "src": "352:3:0", "typeDescriptions": { "typeString": "address" } },
+                    { "id": 219, "name": "perspective", "nodeType": "Identifier", "referencedDeclaration": 203, "src": "357:11:0", "typeDescriptions": { "typeString": "address" } },
+                    { "id": 220, "name": "asset", "nodeType": "Identifier", "referencedDeclaration": 204, "src": "370:5:0", "typeDescriptions": { "typeString": "address" } }
+                  ],
+                  "expression": { "id": 216, "nodeType": "NewExpression", "src": "324:20:0" },
+                  "id": 215,
+                  "kind": "functionCall",
+                  "nodeType": "FunctionCall",
+                  "src": "324:52:0",
+                  "typeDescriptions": { "typeString": "contract EulerEarnFactory" }
+                },
+                "src": "314:62:0"
+              } },
+              { "id": 221, "nodeType": "ExpressionStatement", "src": "386:119:0", "expression": {
+                "id": 222,
+                "leftHandSide": { "id": 223, "name": "vault", "nodeType": "Identifier", "referencedDeclaration": 206, "src": "386:5:0", "typeDescriptions": { "typeString": "contract EulerEarn" } },
+                "nodeType": "Assignment",
+                "operator": "=",
+                "rightHandSide": {
+                  "arguments": [
+                    {
+                      "arguments": [
+                        {
+                          "arguments": [
+                            { "id": 231, "name": "admin", "nodeType": "Identifier", "referencedDeclaration": 201, "src": "436:5:0", "typeDescriptions": { "typeString": "address" } },
+                            { "id": 232, "kind": "number", "nodeType": "Literal", "src": "443:1:0", "value": "0" },
+                            {
+                              "arguments": [{ "id": 235, "name": "asset", "nodeType": "Identifier", "referencedDeclaration": 204, "src": "454:5:0", "typeDescriptions": { "typeString": "address" } }],
+                              "expression": { "id": 234, "nodeType": "ElementaryTypeNameExpression", "src": "446:7:0" },
+                              "id": 233,
+                              "kind": "typeConversion",
+                              "nodeType": "FunctionCall",
+                              "src": "446:14:0",
+                              "typeDescriptions": { "typeString": "address" }
+                            },
+                            { "id": 236, "kind": "string", "nodeType": "Literal", "src": "462:18:0", "value": "Euler Earn Asset" },
+                            { "id": 237, "kind": "string", "nodeType": "Literal", "src": "482:7:0", "value": "eeAST" },
+                            {
+                              "arguments": [{ "id": 240, "kind": "number", "nodeType": "Literal", "src": "499:1:0", "value": "0" }],
+                              "expression": { "id": 239, "nodeType": "ElementaryTypeNameExpression", "src": "491:7:0" },
+                              "id": 238,
+                              "kind": "typeConversion",
+                              "nodeType": "FunctionCall",
+                              "src": "491:10:0",
+                              "typeDescriptions": { "typeString": "bytes32" }
+                            }
+                          ],
+                          "expression": {
+                            "expression": { "id": 230, "name": "factory", "nodeType": "Identifier", "referencedDeclaration": 205, "src": "412:7:0", "typeDescriptions": { "typeString": "contract EulerEarnFactory" } },
+                            "id": 229,
+                            "memberName": "createEulerEarn",
+                            "nodeType": "MemberAccess",
+                            "src": "412:23:0"
+                          },
+                          "id": 228,
+                          "kind": "functionCall",
+                          "nodeType": "FunctionCall",
+                          "src": "412:90:0",
+                          "typeDescriptions": { "typeString": "address" }
+                        }
+                      ],
+                      "expression": { "id": 227, "nodeType": "ElementaryTypeNameExpression", "src": "404:7:0" },
+                      "id": 226,
+                      "kind": "typeConversion",
+                      "nodeType": "FunctionCall",
+                      "src": "404:99:0",
+                      "typeDescriptions": { "typeString": "address" }
+                    }
+                  ],
+                  "expression": { "id": 225, "name": "EulerEarn", "nodeType": "Identifier", "src": "394:9:0", "typeDescriptions": { "typeString": "type(contract EulerEarn)" } },
+                  "id": 224,
+                  "kind": "typeConversion",
+                  "nodeType": "FunctionCall",
+                  "src": "394:110:0",
+                  "typeDescriptions": { "typeString": "contract EulerEarn" }
+                },
+                "src": "386:118:0"
+              } }
+            ] },
+            "id": 210,
+            "implemented": true,
+            "kind": "function",
+            "name": "setup",
+            "nodeType": "FunctionDefinition",
+            "src": "280:231:0",
+            "visibility": "public"
+          },
+          {
+            "body": { "id": 253, "nodeType": "Block", "src": "565:41:0", "statements": [
+              { "id": 254, "nodeType": "ExpressionStatement", "src": "575:25:0", "expression": {
+                "arguments": [{ "id": 257, "name": "id", "nodeType": "Identifier", "referencedDeclaration": 252, "src": "596:2:0" }],
+                "expression": { "id": 256, "name": "_eulerEarn_acceptCap", "nodeType": "Identifier", "referencedDeclaration": 270, "src": "575:20:0" },
+                "id": 255,
+                "kind": "functionCall",
+                "nodeType": "FunctionCall",
+                "src": "575:24:0"
+              } }
+            ] },
+            "id": 250,
+            "implemented": true,
+            "kind": "function",
+            "name": "eulerEarn_acceptCap",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 251, "nodeType": "ParameterList", "src": "545:12:0", "parameters": [
+              { "id": 252, "name": "id", "nodeType": "VariableDeclaration", "src": "546:10:0", "stateVariable": false, "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "src": "517:89:0",
+            "visibility": "public"
+          },
+          {
+            "body": { "id": 263, "nodeType": "Block", "src": "668:44:0", "statements": [
+              { "id": 264, "nodeType": "ExpressionStatement", "src": "678:28:0", "expression": {
+                "arguments": [{
+                  "id": 267,
+                  "leftExpression": { "id": 268, "name": "id", "nodeType": "Identifier", "referencedDeclaration": 262, "src": "698:2:0" },
+                  "nodeType": "BinaryOperation",
+                  "operator": "%",
+                  "rightExpression": { "id": 269, "kind": "number", "nodeType": "Literal", "src": "703:1:0", "value": "4" },
+                  "src": "698:6:0"
+                }],
+                "expression": { "id": 266, "name": "eulerEarn_acceptCap", "nodeType": "Identifier", "referencedDeclaration": 250, "src": "678:19:0" },
+                "id": 265,
+                "kind": "functionCall",
+                "nodeType": "FunctionCall",
+                "src": "678:27:0"
+              } }
+            ] },
+            "id": 260,
+            "implemented": true,
+            "kind": "function",
+            "name": "eulerEarn_acceptCap_clamped",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 261, "nodeType": "ParameterList", "src": "648:12:0", "parameters": [
+              { "id": 262, "name": "id", "nodeType": "VariableDeclaration", "src": "649:10:0", "stateVariable": false, "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "src": "612:100:0",
+            "visibility": "public"
+          },
+          {
+            "body": { "id": 273, "nodeType": "Block", "src": "769:36:0", "statements": [
+              { "id": 274, "nodeType": "ExpressionStatement", "src": "779:20:0", "expression": {
+                "arguments": [{ "id": 278, "name": "id", "nodeType": "Identifier", "referencedDeclaration": 272, "src": "795:2:0" }],
+                "expression": {
+                  "expression": { "id": 277, "name": "vault", "nodeType": "Identifier", "referencedDeclaration": 206, "src": "779:5:0", "typeDescriptions": { "typeString": "contract EulerEarn" } },
+                  "id": 276,
+                  "memberName": "acceptCap",
+                  "nodeType": "MemberAccess",
+                  "src": "779:15:0"
+                },
+                "id": 275,
+                "kind": "functionCall",
+                "nodeType": "FunctionCall",
+                "src": "779:19:0"
+              } }
+            ] },
+            "id": 270,
+            "implemented": true,
+            "kind": "function",
+            "name": "_eulerEarn_acceptCap",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 271, "nodeType": "ParameterList", "src": "747:12:0", "parameters": [
+              { "id": 272, "name": "id", "nodeType": "VariableDeclaration", "src": "748:10:0", "stateVariable": false, "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "src": "718:87:0",
+            "visibility": "internal"
+          }
+        ]
+      }
+    ]
+  }
+}

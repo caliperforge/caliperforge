@@ -2,9 +2,12 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type At, below, called, entries, type Member, membersOf, type Node } from './extract.ts'
 import { FIELD, filled, parsed, type Refused } from './handoff.ts'
+import { RANGE } from './map.ts'
+import { covered } from './reach.ts'
+import { rows } from './slices.ts'
 
 export interface Suite {
-  deployed: (At & { contract: string; args: string[] })[]
+  deployed: (At & { contract: string; args: string[]; via?: 'factory' })[]
   actors: (At & { name: string; roles: string[] })[]
   handlers: (At & { name: string; clamped: boolean; target: string | null; clamps: { text: string; range: string }[] })[]
   standIns: (At & { name: string; replaces: string; limits: { limit: string; map: string | null }[] })[]
@@ -13,7 +16,7 @@ export interface Suite {
   build: { command: string | null; via_ir: string | null; optimizer: string | null }
 }
 
-interface Solc extends Node { arguments?: Node[]; stateMutability?: string; rightExpression?: Node }
+interface Solc extends Node { arguments?: Node[]; stateMutability?: string; rightExpression?: Node; rightHandSide?: Node }
 
 interface Part extends Member { bytes: (node: Node) => string }
 
@@ -64,8 +67,18 @@ function harness(root: string): Contract[] {
   return [...units].flatMap(([file, unit]) => contracts(root, file, unit))
 }
 
-const deploys = (setup: Part): Suite['deployed'] => calls(setup.node).filter((n) => n.expression?.nodeType === 'NewExpression' && contractOf(n) !== '')
-  .map((n) => ({ ...setup.at(n), contract: contractOf(n), args: (n.arguments ?? []).map(setup.bytes) }))
+function made(setup: Part, n: Solc): Suite['deployed'] {
+  const [contract, cast] = [contractOf(n.leftHandSide), n.rightHandSide]
+  const call = cast?.kind === 'typeConversion' && contract !== '' && contractOf(cast) === contract
+    ? calls(cast).find((c) => c.kind === 'functionCall' && c.expression?.nodeType !== 'NewExpression') : undefined
+  return call === undefined ? [] : [{ ...setup.at(n), contract, args: (call.arguments ?? []).map(setup.bytes), via: 'factory' }]
+}
+
+const deploys = (setup: Part): Suite['deployed'] => [
+  ...calls(setup.node).filter((n) => n.expression?.nodeType === 'NewExpression' && contractOf(n) !== '')
+    .map((n) => ({ ...setup.at(n), contract: contractOf(n), args: (n.arguments ?? []).map(setup.bytes) })),
+  ...below(setup.node).filter((n) => n.nodeType === 'Assignment').flatMap((n) => made(setup, n)),
+]
 
 const roles = (setup: Part, who: string): string[] => calls(setup.node).filter((n) => called(n) === 'grantRole')
   .flatMap(({ arguments: [role, holder] = [] }) => role !== undefined && holder !== undefined && setup.bytes(holder) === who ? [setup.bytes(role)] : [])
@@ -153,20 +166,33 @@ const named = (map: string, section: string): string[] => listed(map, section).m
 const excused = (map: string, section: string): string[] => listed(map, section).map((r) => r.split(' | '))
   .filter(([, ...cells]) => cells.some((c) => { const m = FIELD.exec(c); return m?.[1] === 'reason' && filled(m[2]) })).map(([name = '']) => name)
 
+const entered = (map: string): string[] => named(map, 'Selected entry points').map((row) => row.split('(')[0] ?? '')
+  .filter((name) => !excused(map, 'Skipped entry points').includes(name))
+
+const aims = (found: Suite, name: string, clamped: boolean): boolean => found.handlers.some((h) => h.target === name && h.clamped === clamped)
+
 export function harnessed(found: Suite, map: string): Refused[] {
-  const [skipped, unclamped, outside] = [excused(map, 'Skipped entry points'), excused(map, 'Unclamped'), named(map, 'Outside dependencies')]
+  const [unclamped, outside] = [excused(map, 'Unclamped'), named(map, 'Outside dependencies')]
   const cited = [...named(map, 'Limits'), ...outside]
-  const aimed = (name: string, clamped: boolean): boolean => found.handlers.some((h) => h.target === name && h.clamped === clamped)
   return [
-    ...named(map, 'Selected entry points').map((row) => row.split('(')[0] ?? '').filter((name) => !skipped.includes(name)).flatMap((name) => [
-      ...(aimed(name, false) ? [] : [`scaffold: ${name} has no raw handler`]),
-      ...(aimed(name, true) || unclamped.includes(name) ? [] : [`scaffold: ${name} has no clamped handler and no ## Unclamped row`]),
+    ...entered(map).flatMap((name) => [
+      ...(aims(found, name, false) ? [] : [`scaffold: ${name} has no raw handler`]),
+      ...(aims(found, name, true) || unclamped.includes(name) ? [] : [`scaffold: ${name} has no clamped handler and no ## Unclamped row`]),
     ]).map((note) => ({ rule: 'suite.clamped', note })),
     ...outside.filter((name) => !found.standIns.some((s) => s.replaces === name) && !found.deployed.some((d) => d.contract === name))
       .map((name) => ({ rule: 'suite.outside', note: `scaffold: ${name} under ## Outside dependencies has no stand-in and is not deployed in setup()` })),
     ...found.standIns.flatMap((s) => s.limits.filter((l) => l.map === null || !cited.includes(l.map))
       .map((l) => ({ rule: 'suite.stand_in', note: `scaffold: ${s.name} limit "${l.limit}" cites no ## Limits or ## Outside dependencies row` }))),
   ]
+}
+
+export function misaimed(found: Suite, map: string, lcov: string): Refused[] {
+  const [signatures, hits] = [rows(map).get('Signatures') ?? [], covered(lcov)]
+  return entered(map).filter((name) => !aims(found, name, false)).flatMap((name) => {
+    const [, file = '', start = '', end = ''] = RANGE.exec(signatures.find((s) => s.name.startsWith(`${name}(`))?.cells.get('at') ?? '') ?? []
+    return file !== '' && [...hits(file)].some(([line, n]) => line >= Number(start) && line <= Number(end) && n > 0)
+      ? [{ rule: 'suite.misread', note: `scaffold: ${name} has no raw handler, yet lcov.info hits ${file} L${start}-L${end}` }] : []
+  })
 }
 
 export function probed(found: Suite, map: string): Refused[] {

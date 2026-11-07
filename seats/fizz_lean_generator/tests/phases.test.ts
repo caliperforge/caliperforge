@@ -15,12 +15,12 @@ import { packets } from '../../../templates/plan.ts'
 import { type Item, reach } from '../../../templates/reach.ts'
 import { report } from '../../../templates/report.ts'
 import { packed, primed, smoke, type Smoked } from '../../../templates/smoke.ts'
-import { suite, type Suite } from '../../../templates/suite.ts'
+import { misaimed, suite, type Suite } from '../../../templates/suite.ts'
 import { benched, transcripts } from './benched.ts'
 
 const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [], standIns: [], probes: [], trackers: [], build: { command: null, via_ir: null, optimizer: null } }))
 
-vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY) }))
+vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY), misaimed: vi.fn(() => []) }))
 
 vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => ({ results: [], note: null, cache: null, clamped: [] })), primed: vi.fn(() => ({ off: null, clamped: [] })) }))
 
@@ -383,6 +383,16 @@ test('a missing out/ is rebuilt before the scaffold check reads it', async () =>
   const { handoffs, fires } = await mapped()
   expect(fires.map((f) => f.phase)).not.toContain('scaffold-fix-suite-1')
   expect(vi.mocked(compiled)).toHaveBeenCalledWith(join(handoffs, '../../../..'), 'scaffold')
+})
+
+test('a misaimed suite needs the COO and fires no fix turn', async () => {
+  const [note, lcov] = ['scaffold: V.deposit has no raw handler, yet lcov.info hits src/V.sol L9-L9', 'SF:/repo/src/V.sol\nDA:9,1\nend_of_record\n']
+  vi.mocked(misaimed).mockReturnValueOnce([{ rule: 'suite.misread', note }])
+  const { fires, sum } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n', {},
+    { scaffold: { '../corpus_medusa/coverage/lcov.info': lcov } })
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold'])
+  expect(sum).toEqual({ outcome: 'needs_coo', spans: ['machine_fault', 'suite.misread'], note })
+  expect(vi.mocked(misaimed).mock.lastCall?.[2]).toBe(lcov)
 })
 
 test("a broken build is the scaffold fix turn's hit", async () => {

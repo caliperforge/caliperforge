@@ -2,10 +2,10 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { compiled } from '../../../templates/extract.ts'
+import { below, compiled, type Node } from '../../../templates/extract.ts'
 import { layered } from '../../../templates/handoff.ts'
 import { selected, suited } from '../../../templates/map.ts'
-import { harnessed, probed, type Suite, suite, unsourced } from '../../../templates/suite.ts'
+import { harnessed, misaimed, probed, type Suite, suite, unsourced } from '../../../templates/suite.ts'
 
 const fixtures = join(import.meta.dirname, 'fixtures')
 const SELECTION = readFileSync(join(fixtures, 'entry-point-selection.json'), 'utf8')
@@ -118,6 +118,75 @@ test('6/9 D3: a probe that makes a call is refused', () => {
     { rule: 'suite.probe_call', note: 'scaffold: ProbeCalls calls v.convertToAssets(x); a probe makes no external call' },
   ])
 })
+
+const BASE = 'test/fizz/Base.sol'
+const BASE_AST = readFileSync(join(fixtures, 'Base.ast.json'), 'utf8')
+const lines = (start: number, end = start): { file: string; start: number; end: number } => ({ file: BASE, start, end })
+const FACTORY = { ...lines(15), contract: 'EulerEarnFactory', args: ['admin', 'evc', 'perspective', 'asset'] }
+const EULER: Suite = {
+  deployed: [FACTORY, { ...lines(16), contract: 'EulerEarn', args: ['admin', '0', 'address(asset)', '"Euler Earn Asset"', '"eeAST"', 'bytes32(0)'], via: 'factory' }],
+  actors: ['admin', 'evc', 'perspective', 'asset'].map((name, i) => ({ ...lines(7 + i), name: `Base.${name}`, roles: [] })),
+  handlers: [
+    { ...lines(19, 21), name: 'Base.eulerEarn_acceptCap', clamped: false, target: 'EulerEarn.acceptCap', clamps: [] },
+    { ...lines(23, 25), name: 'Base.eulerEarn_acceptCap_clamped', clamped: true, target: 'EulerEarn.acceptCap', clamps: [{ text: 'id % 4', range: '4' }] },
+  ],
+  standIns: [],
+  probes: [],
+  trackers: [],
+  build: FOUND.build,
+}
+const ACCEPT = '## Selected entry points\n\n- EulerEarn.acceptCap(uint256 newSupplyCap) | tier: 1\n\n'
+  + '## Signatures\n\n- EulerEarn.acceptCap(uint256 newSupplyCap) | at: src/EulerEarn.sol L7-L9\n'
+const lcov = (line: number, hits: number): string => `SF:/repo/src/EulerEarn.sol\nDA:${String(line)},${String(hits)}\nend_of_record\n`
+
+type Loose = Node & { rightHandSide: Loose; arguments: [Loose, ...Loose[]] }
+
+function based(ast: string | null = BASE_AST): string {
+  const root = mkdtempSync(join(tmpdir(), 'cf-fizz-base-'))
+  for (const dir of ['out/Base.sol', 'src', 'test/fizz']) mkdirSync(join(root, dir), { recursive: true })
+  copyFileSync(join(fixtures, 'EulerEarn.sol'), join(root, 'src/EulerEarn.sol'))
+  copyFileSync(join(fixtures, 'Base.sol'), join(root, BASE))
+  if (ast !== null) writeFileSync(join(root, 'out/Base.sol/Base.json'), ast)
+  writeFileSync(join(root, 'medusa.json'), JSON.stringify(MEDUSA))
+  writeFileSync(join(root, 'foundry.toml'), TOML)
+  return root
+}
+
+function recast(change: (nodes: { vault: Loose; address: Loose; create: Loose }) => void): string {
+  const built = JSON.parse(BASE_AST) as { ast: Node }
+  const vault = below(built.ast).find((n) => n.leftHandSide?.name === 'vault') as Loose
+  const address = vault.rightHandSide.arguments[0]
+  change({ vault, address, create: address.arguments[0] })
+  return JSON.stringify(built)
+}
+
+test('a factory-cast target is deployed and its handlers aimed', () => {
+  const found = suite(based())
+  expect(found).toEqual(EULER)
+  expect(harnessed(found, ACCEPT)).toEqual([])
+})
+
+test.each([
+  { name: 'a cast with no call', change: ({ address, create }) => { address.arguments = [create.arguments[0]] } },
+  { name: 'a cast of a new', change: ({ create }) => { create.expression = { id: 990, nodeType: 'NewExpression', src: '412:23:0' } } },
+  { name: 'an uncast call', change: ({ vault, create }) => { vault.rightHandSide = create } },
+] satisfies { name: string; change: Parameters<typeof recast>[0] }[])('$name adds no factory row', ({ change }) => {
+  expect(suite(based(recast(change))).deployed).toEqual([FACTORY])
+})
+
+test('an unaimed entry point lcov hits is misread', () => {
+  const unaimed = { ...EULER, handlers: [] }
+  expect(misaimed(unaimed, ACCEPT, lcov(8, 3))).toEqual([
+    { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },
+  ])
+  expect([misaimed(unaimed, ACCEPT, ''), misaimed(unaimed, ACCEPT, lcov(8, 0) + lcov(10, 4)), misaimed(EULER, ACCEPT, lcov(8, 3))]).toEqual([[], [], []])
+})
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('a fresh forge build of Base reads as its fixture', () => {
+  const root = based(null)
+  expect(compiled(root)).toEqual([])
+  expect(suite(root)).toEqual(EULER)
+}, 300_000)
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D7: a fresh forge build reads each probe', () => {
   const root = project(false)

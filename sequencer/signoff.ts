@@ -18,6 +18,7 @@ import { targetRef } from '../store/targets.ts'
 import { verdictMessage } from '../store/trail.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
+import { handled } from './handled.ts'
 import { prTitle } from './pr.ts'
 import { BOARD, headOf, opened, rehearsalBranch, reviewedWith, rulesOn, title } from './push.ts'
 import { ASKED, GRADING, SKIPPED } from './ready.ts'
@@ -191,7 +192,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk, read: Read): stri
     fence,
     '',
     ...unsaid(root, card.id, open === null ? text : null),
-    ...answers(db, root, card.id),
+    ...answers(db, root, card.id), ...found(handled(root, card.id, head.sha)),
     ...decided(asked(db, card.id)),
     '**Answer with one label.** `go` sends it. `no` refuses it: comment on the card or on a line of the diff first and the builder reworks against your words. `talk` hands it to the COO.',
     '',
@@ -256,6 +257,10 @@ function answers(db: Db, root: string, plan: number): string[] {
     const pointer = row?.pointer?.trim() ?? ''
     return `- \`R${String(s.id)}\` ${s.author}: ${code(flat(s.body ?? ''))} — ${row === undefined || pointer === '' ? 'open' : `${row.status} at ${code(pointer)}`}`
   }), '']
+}
+
+function found(all: { id: string; text: string; how: string | null }[]): string[] {
+  return all.length === 0 ? [] : ['**Bot findings on the pull request**', '', ...all.map((f) => `- \`${f.id}\` ${code(flat(f.text.replace(`- ${f.id} `, '').trim()))} — ${f.how === null ? 'open' : code(f.how)}`), '']
 }
 
 /** The valid decision block on the plan's newest `director` event; null when that event is anything but `needs_coo` or `needs_ceo`. */

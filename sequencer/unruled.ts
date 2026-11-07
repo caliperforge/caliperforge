@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
-import { carried } from '../rails/completion-audit/index.ts'
 import { parse } from '../rails/diff.ts'
+import { pointers, replies } from './handled.ts'
 import { BLOCK } from './learn.ts'
 import { diffOf, maybe, srcDir } from './workspace.ts'
 
@@ -25,11 +25,9 @@ export function unruled(root: string, plan: number, sha: string, summary = ''): 
 }
 
 export function settled(root: string, plan: number, sha: string): Map<string, string> {
-  const [ok, over] = [accepted(maybe(root, plan, 'rulings.md') ?? ''), overruled(root, plan)]
-  const rows = carried(maybe(root, plan, 'step-2.handback.md') ?? '')
+  const [reply, pointer] = [replies(root, plan), pointers(root, plan)]
   return new Map(listed(root, plan, sha).flatMap(({ id }) => {
-    const pointer = typeof rows === 'string' || rows.get(id)?.status !== 'done' ? '' : rows.get(id)?.pointer?.trim() ?? ''
-    const line = ok.has(id) ? `accepted: ${ok.get(id) ?? ''}` : over.find((o) => o.id === id)?.line ?? (pointer === '' ? '' : `fixed: ${pointer}`)
+    const line = reply(id) ?? (pointer(id) === '' ? '' : `fixed: ${pointer(id)}`)
     return line === '' ? [] : [[id, line] as const]
   }))
 }
@@ -39,13 +37,13 @@ export function listed(root: string, plan: number, sha: string): { id: string; t
     .filter((text) => /^- G\d+ /.test(text)).map((text) => ({ id: text.split(' ')[1] ?? '', text }))
 }
 
-function accepted(rulings: string): Map<string, string> {
+export function accepted(rulings: string): Map<string, string> {
   const field = (body: string, key: string): string => new RegExp(`^[ \\t]+${key}:(.*)$`, 'm').exec(body)?.[1]?.trim() ?? ''
   return new Map([...rulings.matchAll(BLOCK)].flatMap(([, body = '']) => /^[0-9a-f]{7,40}$/.test(field(body, 'head')) && field(body, 'reason') !== ''
     ? (field(body, 'ids').match(/G\d+/g) ?? []).map((id) => [id, field(body, 'reason')] as const) : []))
 }
 
-function overruled(root: string, plan: number): { id: string; reason: string; line: string }[] {
+export function overruled(root: string, plan: number): { id: string; reason: string; line: string }[] {
   return [maybe(root, plan, 'rulings.md') ?? '', maybe(root, plan, 'issue.md') ?? ''].flatMap((text) => text.split('\n')).flatMap((line) =>
     [...line.matchAll(OVERRULED)].flatMap(([, ids = '', reason = '']) => (ids.match(/G\d+/g) ?? []).map((id) => ({ id, reason, line: line.trim() }))))
 }

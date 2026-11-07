@@ -20,6 +20,7 @@ import type { Outcome } from './kind.ts'
 import { prBody, refOf } from './pr.ts'
 import { forkCi, GRADES, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, git, headSha, MAIN, maybe, put, repoName, srcDir, tried } from './workspace.ts'
+import { unhandled } from './handled.ts'
 import { forkOf, homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
@@ -65,7 +66,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const fork = forkOf(root, plan)
   const waiting = forkCi(db, root, plan, fork ?? repo, wire)
   if (waiting !== null) return waiting
-  const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)
+  const bot = internal(plan) ? '' : unhandled(root, plan.id, greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest))
   if (typeof bot !== 'string') return bot
   const fresh = clean(db, root, plan)
   botClean(db, plan.id, fresh)

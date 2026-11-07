@@ -470,7 +470,7 @@ test('a rerun after a throw credits only the resumed phase', async () => {
   expect(existsSync(join(handoffs, 'refire.txt'))).toBe(false)
 })
 
-test('D5: a stopped.json sum without runs resumes from []', async () => {
+test('a stopped.json sum without runs resumes from []', async () => {
   const { handoffs, run } = legs()
   writeFileSync(join(handoffs, 'context.md'), FILLED.context ?? '')
   writeFileSync(join(handoffs, 'stopped.json'), JSON.stringify({ phase: 'context', sum: { tokens: 10, seconds: 2, usd: 0, transcripts: [], wall: null }, smoked: '' }))

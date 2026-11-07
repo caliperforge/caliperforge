@@ -42,8 +42,7 @@ const REFIRE = 'refire.txt'
 
 const MACHINE = ['machine_fault', 'coverage.no_revert_report']
 
-/** Hands `run` the spans the last machine-caused stop left beside the handoffs at `args[4]`, then leaves this stop's spans there, or none. */
-export const refiring = <A extends [Bench, Seat, string, string, string, ...unknown[]]>(run: (refire: string | undefined, ...args: A) => Promise<Sum | Outcome>) =>
+export const refiring = <A extends [bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, ...rest: unknown[]]>(run: (refire: string | undefined, ...args: A) => Promise<Sum | Outcome>) =>
   async (...args: A): Promise<Sum | Outcome> => {
     const path = join(args[4], REFIRE)
     const got = await run(existsSync(path) ? readFileSync(path, 'utf8') : undefined, ...args)

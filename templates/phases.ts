@@ -13,7 +13,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import { criticCheck } from './critic.ts'
 import { compiled, extract } from './extract.ts'
 import { type Check, FIX, fixed, type Fixed } from './fixturn.ts'
-import { costWalled, faulted } from './generated.ts'
+import { costWalled, faulted, net, refired, refiring, tallied } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
 import { grader } from './missed.ts'
@@ -26,11 +26,11 @@ import { callee, rows, slices } from './slices.ts'
 import { funding, packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
 import { harnessed, probed, suite, unsourced } from './suite.ts'
 
-export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
+export interface Sum { tokens: number; seconds: number; usd: number; machine: number; runs: number[]; transcripts: string[]; wall: string | null }
 
 export type Fire = (prompt: string, issue: string, sum: Sum, phase?: string) => Promise<Sum | Outcome>
 
-export const START: Sum = { tokens: 0, seconds: 0, usd: 0, transcripts: [], wall: null }
+export const START: Sum = { tokens: 0, seconds: 0, usd: 0, machine: 0, runs: [], transcripts: [], wall: null }
 
 const SETUP = 60
 
@@ -46,26 +46,26 @@ const MAP = 'map.md'
 
 const EXCERPTS = 'excerpts'
 
-export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number }
+export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number; refire?: string }
 
-export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling }: Bench, manifest: Seat, hash: string, map?: Range[]): Fire {
+export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling, refire }: Bench, manifest: Seat, hash: string, map?: Range[]): Fire {
   return async (prompt, issue, sum, phase) => {
     const built = packet(manifest, prompt, '', issue, dir,
       pending(planDir(root, plan.id), `step-${String(step.step)}${phase === undefined ? '' : `-${phase}`}`), false, [...manifest.write_paths, tmp])
     const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: ceiling - sum.tokens,
-      cost_wall: { ...walls, usd: walls.usd - sum.usd }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], offline: true, ...(map !== undefined ? { map: { ranges: map, slice: map } } : name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
+      cost_wall: { ...walls, usd: walls.usd - net(db, plan.id, sum) }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], offline: true, ...(map !== undefined ? { map: { ranges: map, slice: map } } : name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
     const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
       effort: manifest.effort, exit: fired.exit, fired, staffed: name, phase })
     for (const command of fired.offline ?? []) logged(db, { plan: plan.id, kind: 'run.offline', actor: name, outcome: 'refuse', message: command, pointer: null, run })
     for (const { kind, file, lines } of fired.misses ?? []) logged(db, { plan: plan.id, kind, actor: name, outcome: 'pass', message: JSON.stringify({ file, line: parseInt(lines.slice(1), 10) }), pointer: null, run })
     const transcript = byRun(db, run, fired.transcript_path)
     observed(db, fired.limits)
-    return added(sum, fired, transcript, phase === undefined ? name : `${name} ${phase}`, ceiling)
+    return added(tallied(db, plan.id, refire, sum, run), fired, transcript, phase === undefined ? name : `${name} ${phase}`, ceiling)
   }
 }
 
 function added(sum: Sum, fired: Fired, transcript: string, who: string, ceiling: number): Sum | Outcome {
-  const next = { tokens: sum.tokens + fired.usage.input + fired.usage.output, seconds: sum.seconds + fired.seconds, usd: sum.usd + (fired.usage.cost ?? 0),
+  const next = { ...sum, tokens: sum.tokens + fired.usage.input + fired.usage.output, seconds: sum.seconds + fired.seconds, usd: sum.usd + (fired.usage.cost ?? 0),
     transcripts: [...sum.transcripts, transcript], wall: costWalled(fired.stop_reason) }
   if (next.tokens >= ceiling) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${who} hit the ${String(ceiling)}-token ceiling at ${String(next.tokens)} tokens` }
   if (next.wall === null && fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${who} ${fired.ended}` }
@@ -256,9 +256,9 @@ export function phasesOf(skill: string): string[] {
 export const STOPPED = 'stopped.json'
 
 export const stoppedAt = (handoffs: string): { phase: string; sum: Sum; smoked: string } | null =>
-  existsSync(join(handoffs, STOPPED)) ? JSON.parse(read(join(handoffs, STOPPED))) as { phase: string; sum: Sum; smoked: string } : null
+  existsSync(join(handoffs, STOPPED)) ? JSON.parse(read(join(handoffs, STOPPED)), (key, value: unknown) => key === 'sum' ? { ...START, ...value as Partial<Sum> } : value) as { phase: string; sum: Sum; smoked: string } : null
 
-export const phased = faulted(async (bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> => {
+export const phased = refiring(faulted(async (refire: string | undefined, bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> => {
   const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, STOPPED)
@@ -271,23 +271,23 @@ export const phased = faulted(async (bench: Bench, manifest: Seat, hash: string,
   const grade = grader(bench, root)
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue
-    const [path, start] = [join(handoffs, `${phase}.md`), at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]]
+    const [own, path, start] = [refired(bench, refire, at === done + 1), join(handoffs, `${phase}.md`), at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]]
     const later = phase !== 'context' && existsSync(cut)
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
-    const fire = firing(bench, manifest, hash, later ? ranges(read(map)) : undefined)
+    const fire = firing(own, manifest, hash, later ? ranges(read(map)) : undefined)
     const stage: Phase = { phase, skill, root, path, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
       issue: [issue, ending({ path, phase, skill }), ...start, ...named, ...(phase === 'coverage' && smoked !== '' ? [smoked] : [])].join('\n') }
     if (phase === 'coverage' && later) slithering(bench, root)
-    const ran = phase === 'invariants' && later ? await invariant(bench, manifest, hash, skill, root, handoffs, stage, sum) : await checked(fire, stage, sum)
+    const ran = phase === 'invariants' && later ? await invariant(own, manifest, hash, skill, root, handoffs, stage, sum) : await checked(fire, stage, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran
     if (phase === 'scaffold' && later) {
-      const repaired = await scaffolded(bench, manifest, hash, skill, root, handoffs, sum)
+      const repaired = await scaffolded(own, manifest, hash, skill, root, handoffs, sum)
       if (!('smoked' in repaired)) return repaired
       ;({ sum, smoked } = repaired)
     }
     if ((phase === 'coverage' && later) || phase === 'invariants') {
-      const got = phase === 'coverage' ? await reached(bench, manifest, hash, skill, root, handoffs, sum) : await criticised(bench, manifest, hash, handoffs, phase, 'critic.share_converted', sum)
+      const got = phase === 'coverage' ? await reached(own, manifest, hash, skill, root, handoffs, sum) : await criticised(own, manifest, hash, handoffs, phase, 'critic.share_converted', sum)
       if ('outcome' in got || got.wall !== null) return got
       sum = got
     }
@@ -296,5 +296,5 @@ export const phased = faulted(async (bench: Bench, manifest: Seat, hash: string,
     writeFileSync(stopped, JSON.stringify({ phase, sum, smoked }))
     if (phase === stop) return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
   }
-  return ended(bench, manifest, hash, handoffs, stopped, sum)
-})
+  return ended(refired(bench, refire, done + 1 === phases.length), manifest, hash, handoffs, stopped, sum)
+}))

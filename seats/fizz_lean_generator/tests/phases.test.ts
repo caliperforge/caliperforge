@@ -7,6 +7,7 @@ import { get, put } from '../../../sequencer/workspace.ts'
 import { scores, underpowered } from '../../../store/bench.ts'
 import { eventsAfter } from '../../../store/events.ts'
 import type { Db } from '../../../store/index.ts'
+import { generated } from '../../../store/runs.ts'
 import { critic, criticCheck } from '../../../templates/critic.ts'
 import { compiled } from '../../../templates/extract.ts'
 import type { fixed } from '../../../templates/graded.ts'
@@ -445,6 +446,7 @@ test('no revert report refuses before reach or any fix turn', async () => {
   expect(sum).toEqual({ outcome: 'refuse', spans: ['coverage.no_revert_report'],
     note: `coverage: medusa wrote no ${join(handoffs, '../corpus_medusa/coverage/revert_report.json')}; the machine's coverage medusa.json does not set fuzzing.revertReporterEnabled` })
   expect(reach).not.toHaveBeenCalled()
+  expect(readFileSync(join(handoffs, 'refire.txt'), 'utf8')).toBe('coverage.no_revert_report')
 })
 
 test('a grading throw needs the COO and fires no seat again', async () => {
@@ -454,6 +456,25 @@ test('a grading throw needs the COO and fires no seat again', async () => {
   expect(fires.map((f) => f.phase)).toEqual(LEAN)
   const first = "ENOENT: no such file or directory, open 'revert_report.json'"
   expect(sum).toEqual({ outcome: 'needs_coo', spans: ['machine_fault', `threw: ${first}`], note: `phase grading threw: ${first}`, message })
+})
+
+test('a rerun after a throw credits only the resumed phase', async () => {
+  vi.mocked(reach).mockImplementationOnce(() => { throw new Error('boom') }).mockReturnValueOnce([UNMET])
+  const { db, handoffs, rerun } = await mapped(undefined, { 'coverage-fix-reach-1': UNREACHABLE('only the bridge calls it') })
+  const before = generated(db, 1).length
+  await rerun()
+  const runs = generated(db, 1).slice(before)
+  expect(runs.map((r) => r.phase)).toEqual(['coverage', 'coverage-fix-reach-1', 'invariants-plan', 'invariants'])
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'bench.credit').map((e) => [e.actor, e.message, e.run]))
+    .toEqual(runs.slice(0, 2).map((r) => ['machine', 'machine_fault, threw: boom', r.id]))
+  expect(existsSync(join(handoffs, 'refire.txt'))).toBe(false)
+})
+
+test('D5: a stopped.json sum without runs resumes from []', async () => {
+  const { handoffs, run } = legs()
+  writeFileSync(join(handoffs, 'context.md'), FILLED.context ?? '')
+  writeFileSync(join(handoffs, 'stopped.json'), JSON.stringify({ phase: 'context', sum: { tokens: 10, seconds: 2, usd: 0, transcripts: [], wall: null }, smoked: '' }))
+  expect(await run()).toMatchObject({ tokens: 40, machine: 0, runs: [1, 2, 3] })
 })
 
 test('a database is locked throw is not caught', async () => {

@@ -9,6 +9,11 @@ export function runTokens(db: Db, plan: number): RunTokens[] {
     FROM runs WHERE plan = ? ORDER BY id`).all(plan) as RunTokens[]
 }
 
+export function credited(db: Db, plan: number, runs: number[]): number {
+  return (db.prepare(`SELECT coalesce(sum(cost_usd), 0) AS usd FROM runs WHERE plan = ? AND id IN (SELECT value FROM json_each(?))
+    AND EXISTS (SELECT 1 FROM events WHERE events.run = runs.id AND events.kind = 'bench.credit')`).get(plan, JSON.stringify(runs)) as { usd: number }).usd
+}
+
 export interface Generated {
   id: number; transcript_path: string; session: string | null; phase: string | null
   input_tokens: number; cache_write_tokens: number; cache_read_tokens: number; output_tokens: number

@@ -26,5 +26,5 @@ export function benched(fire: (packet: Packet, phase: string) => Partial<Fired>,
   const provider: Provider = { name: 'claude-agent-sdk', fire: (packet) => Promise.resolve({ text: '', transcript_path: packet.transcript, usage: { input: 0, cache: 0, output: 1 },
     seconds: 0, ended: 'completed', exit: 0, stop_reason: null, denials: 0, ...fire(packet, PHASE.exec(packet.transcript)?.[1] ?? '') }) }
   const bench = { db, root: ROOT, plan: planById(db, 1), step: mapOf('bench').at(1), provider, name: 'fizz_lean_generator', dir: ROOT, tmp: ROOT, granted, walls: WALLS, ceiling: CEILING }
-  return { db, root: ROOT, run: (skill: string, handoffs: string, stop?: string) => phased(bench, manifest, hash, skill, handoffs, 'Generate.', stop) }
+  return { db, root: ROOT, bench, run: (skill: string, handoffs: string, stop?: string) => phased(bench, manifest, hash, skill, handoffs, 'Generate.', stop) }
 }

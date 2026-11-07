@@ -256,7 +256,7 @@ export function phasesOf(skill: string): string[] {
 export const STOPPED = 'stopped.json'
 
 export const stoppedAt = (handoffs: string): { phase: string; sum: Sum; smoked: string } | null =>
-  existsSync(join(handoffs, STOPPED)) ? JSON.parse(read(join(handoffs, STOPPED)), (key, value: unknown) => key === 'sum' ? { ...START, ...value as Partial<Sum> } : value) as { phase: string; sum: Sum; smoked: string } : null
+  existsSync(join(handoffs, STOPPED)) ? JSON.parse(read(join(handoffs, STOPPED))) as { phase: string; sum: Sum; smoked: string } : null
 
 export const phased = refiring(faulted(async (refire: string | undefined, bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> => {
   const phases = phasesOf(skill)
@@ -267,7 +267,7 @@ export const phased = refiring(faulted(async (refire: string | undefined, bench:
   const refused = resumed === null ? null : rechecked(skill, root, handoffs, resumed.phase)
   if (refused !== null) return refused
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
-  let [sum, smoked] = [resumed?.sum ?? START, resumed?.smoked ?? '']
+  let [sum, smoked] = [{ ...START, ...resumed?.sum }, resumed?.smoked ?? '']
   const grade = grader(bench, root)
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue

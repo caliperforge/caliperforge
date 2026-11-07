@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { handoff } from '../../../templates/handoff.ts'
 import { excerpts, LAYERS } from '../../../templates/map.ts'
 import { phasesOf } from '../../../templates/phases.ts'
-import { duplicated, packets, planned } from '../../../templates/plan.ts'
+import { batches, collided, duplicated, packets, planned } from '../../../templates/plan.ts'
 import { slices } from '../../../templates/slices.ts'
 
 const skill = join(import.meta.dirname, '../skill')
@@ -109,6 +109,38 @@ test('D8: a function declared by both implementers is refused', () => {
   expect(duplicated('function ghost() {}\nfunction a() {}', 'function ghost() {}\nfunction b() {}'))
     .toEqual([{ rule: 'plan.duplicate', note: 'plan: function ghost is declared by both implementers' }])
   expect(duplicated('function a() {}', 'function b() {}')).toEqual([])
+})
+
+test('rows batch by contract, 10 to 15 each, a contract unsplit', () => {
+  const map = `## Signatures\n\n${[...Array(12).keys()].map(String).map((c) => `- C${c}.f() | at: src/C${c}.sol L1-L1\n`).join('')}`
+  const relying = (ids: string[]): string => plan(ids.map((id, i) => row(`p${String(i)}`, { relies: `signatures-${id}` })))
+  const contracts = (packet: string): string[] => [...packet.matchAll(/relies: signatures-(\d+)/g)].map((m) => m[1] ?? '')
+  const spread = batches(relying([...Array(60).keys()].map((i) => String((i % 12) + 1))), map, cut(), '', '').map(contracts)
+  expect(spread.length).toBeGreaterThanOrEqual(5)
+  expect(spread.length).toBeLessThanOrEqual(6)
+  for (const ids of spread) expect(ids.length).toBeGreaterThanOrEqual(10)
+  for (const ids of spread) expect(ids.length).toBeLessThanOrEqual(15)
+  for (const id of new Set(spread.flat())) expect(spread.filter((ids) => ids.includes(id))).toHaveLength(1)
+  const whole = batches(relying([...Array<string>(20).fill('1'), '2', '3', '2', '3']), map, cut(), '', '').map(contracts)
+  expect(whole).toEqual([Array<string>(20).fill('1'), ['2', '2', '3', '3']])
+})
+
+test('a batch holds its rows, excerpts, skeleton and helpers only', () => {
+  const own = [...Array(10).keys()].map((i) => row(`p${String(i)}`, { relies: 'aggregates-1' }))
+  const handled = row('h', { relies: '', reads: 'handler_deposit' })
+  const [first = '', second = '', ...rest] = batches(plan([...own, handled]), MAP, cut(), '## Skeleton\n', '## Helpers\n')
+  expect(rest).toEqual([])
+  for (const held of [...own, excerpt(6, 6), '## Skeleton\n\n## Helpers\n']) expect(first).toContain(held)
+  expect(first).not.toContain('- h |')
+  expect(second).toBe(`## Rows\n\n${handled}\n\n## Skeleton\n\n## Helpers\n`)
+})
+
+test('two batch files declaring the same function are refused', () => {
+  const [a, b] = ['test/fizz/PropertiesBatch1.sol', 'test/fizz/PropertiesBatch2.sol']
+  expect(collided({ [a]: 'function f() {}\nfunction g() {}', [b]: 'function f() {}' }))
+    .toEqual([{ rule: 'plan.duplicate', note: `plan: function f is declared by ${a}, ${b}` }])
+  expect(collided({ [a]: 'function f() {}', [b]: 'function g() {}' })).toEqual([])
+  expect(collided({ [a]: 'function f() {}\nfunction f(uint256 x) {}', [b]: 'function g() {}' })).toEqual([])
 })
 
 test('D9: the new blocks add no handoff phase', () => {

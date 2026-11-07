@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { git, gitBase, maybe, planDir, remote } from '../sequencer/workspace.ts'
+import { git, gitBase, maybe, planDir, put, remote } from '../sequencer/workspace.ts'
 import { fields } from './bench.ts'
 import { type At, type Extracted, extract } from './extract.ts'
 import { inBare } from './listed.ts'
@@ -63,13 +63,17 @@ export function listed(yml: string): string[] {
 }
 
 export function fixed(root: string, plan: number, dir: string): Touched | string {
+  const kept = maybe(root, plan, 'touched.json')
+  if (kept !== null) return JSON.parse(kept) as Touched
   const yml = maybe(root, plan, 'target.yml') ?? ''
   const { repo = '', fix = '', pre_fix: preFix = '' } = fields(yml)
   if (fix === '' || preFix === '') return 'cannot run: target.yml has no fix'
   const files = listed(yml)
   if (repo === '') return 'cannot run: target.yml has no repo'
   if (files.length === 0) return 'cannot run: target.yml has no files'
-  return touched(inBare(planDir(root, plan), remote(gitBase(root), repo), [preFix, fix], (bare) => git(bare, ['diff', '-U0', preFix, fix, '--', ...files])), extract(dir))
+  const t = touched(inBare(planDir(root, plan), remote(gitBase(root), repo), [preFix, fix], (bare) => git(bare, ['diff', '-U0', preFix, fix, '--', ...files])), extract(dir))
+  put(root, plan, 'touched.json', JSON.stringify(t))
+  return t
 }
 
 function halves(phase: Phase, dir: string, { functions, state }: Touched): Half[] {

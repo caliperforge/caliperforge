@@ -59,6 +59,7 @@ const Id = z.object({ id: Block.shape.id })
 
 export const FENCE = /^(?:```\w*\r?\n)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n```)?\s*$/m
 const LOOSE = /(?<=^[ \t]*(?:- )?\w+: )(["']).*?\1[ \t]+[^\s#].*$/gm
+const CODE = /(?<=^[ \t]*(?:- )?(?:file|rule|required_change|verify|span): )(?!["'|>])\S.*$/gm
 
 /** A verdict as the reviewer wrote it: the row, its findings, and the new fact it names for each span it re-opens. */
 export interface Judged extends Verdict {
@@ -134,10 +135,22 @@ function passed(notes: Written[], prose: string, subject_digest: string): Judged
   }
 }
 
-function yaml(body: string): unknown {
+function parsed(body: string): Document {
   const doc = parseDocument(body)
-  const loose = doc.errors.length === 0 ? doc : parseDocument(body.replace(LOOSE, (value) => JSON.stringify(value)))
-  return loose.errors.length === 0 && resolved(loose) ? loose.toJS() : null
+  if (doc.errors.length === 0) return doc
+  const loose = body.replace(LOOSE, (value) => JSON.stringify(value))
+  const repaired = parseDocument(loose)
+  return repaired.errors.length === 0 ? repaired : parseDocument(loose.replace(CODE, (value) => JSON.stringify(value)))
+}
+
+function yaml(body: string): unknown {
+  const doc = parsed(body)
+  return doc.errors.length === 0 && resolved(doc) ? doc.toJS() : null
+}
+
+export function broken(reply: string): string | null {
+  const found = FENCE.exec(reply)
+  return found === null ? null : parsed(found[1] ?? '').errors[0]?.message.split('\n')[0] ?? null
 }
 
 /** `parseDocument` leaves an alias with no anchor, such as `*emphasis*`, out of `errors`; `toJS()` throws on it. */

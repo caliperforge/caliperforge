@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Read } from '../../cli/gh.ts'
 import { migrate, open } from '../../store/index.ts'
+import { planEvents } from '../../store/trail.ts'
 import { CAP, pinned, vendored } from '../upstream.ts'
 import { put, srcDir } from '../workspace.ts'
 
@@ -27,7 +28,7 @@ function reader(answer: unknown) {
 }
 
 const rows = (db: ReturnType<typeof seeded>): unknown[] =>
-  db.prepare("SELECT kind, actor, outcome, run, message, pointer FROM events WHERE kind = 'github_read'").all()
+  planEvents(db, 7).filter((e) => e.kind === 'github_read')
 
 const hex = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex')
 

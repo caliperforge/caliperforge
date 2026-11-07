@@ -557,3 +557,9 @@
   where: "kind = 'review' AND outcome = 'refuse' AND message GLOB '* reviewers.verdict_fence*'"
   gap: 7d
   expected: 0
+- name: bench_grade_cannot_run
+  table: events
+  column: at
+  where: "kind = 'bench.grade' AND message GLOB '*cannot run: the fix touches no*'"
+  gap: 7d
+  expected: 0

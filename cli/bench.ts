@@ -10,7 +10,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type Holder } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
-import { generated, lastTranscript } from '../store/runs.ts'
+import { generated, lastTranscript, runTokens } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
 import { dried } from '../templates/dry.ts'
 import { phasesOf } from '../templates/phases.ts'
@@ -112,6 +112,16 @@ export function refuzz(db: Db, root: string, source: number, hours: number, seed
   return id
 }
 
+export function credit(db: Db, plan: number, runs: number[], why: string): void {
+  if (planById(db, plan).template !== 'bench') throw new Error(`plan ${String(plan)} is not a bench plan`)
+  const own = new Set(runTokens(db, plan).map(({ id }) => id))
+  const stray = runs.find((run) => !own.has(run))
+  if (stray !== undefined) throw new Error(`run ${String(stray)} is not a run of plan ${String(plan)}`)
+  db.transaction(() => {
+    for (const run of runs) logged(db, { plan, kind: 'bench.credit', actor: 'coo', outcome: 'pass', message: why, pointer: null, run })
+  })()
+}
+
 export function profile(db: Db, root: string, id: number): string {
   if (planById(db, id).template !== 'bench') throw new Error(`plan ${String(id)} is not a bench plan`)
   const ran = lastTranscript(db, id, 1)
@@ -149,6 +159,11 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
     .action((plan: string, options: { hours: string; seeds: string; by: string; why: string }) => {
       const id = refuzz(db(), root, Number(plan), Number(options.hours), Number(options.seeds), holderOf(options.by), options.why, new Date().toISOString())
       out(`plan ${String(id)} queued at step 2 on the refuzz pipe\n`)
+    })
+  bench.command('credit').argument('<plan>').argument('<runs...>').requiredOption('--why <text>')
+    .action((plan: string, runs: string[], options: { why: string }) => {
+      credit(db(), Number(plan), runs.map(Number), options.why)
+      for (const run of runs) out(`run ${run} credited to plan ${plan}\n`)
     })
   bench.command('profile').argument('<plan>')
     .action((plan: string) => { out(profile(db(), root, Number(plan))) })

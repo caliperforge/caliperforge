@@ -1,16 +1,19 @@
 {
   "contractRevertMetrics": {
-    "V": {
+    "DecimalPrinter": { "functionRevertMetrics": {} },
+    "FuzzTester": {
       "functionRevertMetrics": {
-        "deposit(uint256)": { "totalCalls": 40, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
-        "withdraw(uint256)": {
+        "v_deposit": { "totalCalls": 30, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
+        "v_deposit_clamped": { "totalCalls": 10, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
+        "v_withdraw": {
           "totalCalls": 30,
           "totalReverts": 28,
           "pct": 93.33,
           "revertReasonMetrics": { "panic: arithmetic underflow/overflow": { "count": 28, "pct": 100 } }
         },
-        "convertToAssets(uint256)": { "totalCalls": 10, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} }
+        "v_convertToAssets": { "totalCalls": 10, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} }
       }
-    }
+    },
+    "stdError": { "functionRevertMetrics": {} }
   }
 }

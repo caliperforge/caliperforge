@@ -13,7 +13,7 @@ import { handoff, ranged, type Refused } from './handoff.ts'
 import { drawn, suited } from './map.ts'
 import { duplicated, planned } from './plan.ts'
 import { readings, trackers } from './probes.ts'
-import { type Item, met, type ProbeReadings, reach, unlocated, unmet, written } from './reach.ts'
+import { type Item, met, misread, type ProbeReadings, reach, unlocated, unmet, written } from './reach.ts'
 import { callee, rows } from './slices.ts'
 import { smoke, unrun } from './smoke.ts'
 import { harnessed, probed, suite } from './suite.ts'
@@ -102,9 +102,9 @@ function coverage(at: Copy): Row[] {
   return [handed(at, 'coverage'), ['coverage', 'probe readings', checked(at, [sequences], () => { probing(); return [] })],
     ['coverage', 'reach', checked(at, [lcov, report, sequences], () => {
       writeFileSync(map, written(read(map), reached()))
-      return [...unlocated(reached()), ...unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))]
+      return [...unlocated(reached()), ...misread(reached()), ...unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))]
     })],
-    ['coverage', 'boundary', checked(at, [lcov, report, sequences], () => [...unlocated(reached()),
+    ['coverage', 'boundary', checked(at, [lcov, report, sequences], () => [...unlocated(reached()), ...misread(reached()),
       ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))])],
     grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), lcov])]
 }

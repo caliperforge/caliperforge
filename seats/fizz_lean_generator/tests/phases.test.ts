@@ -391,7 +391,7 @@ test("a broken build is the scaffold fix turn's hit", async () => {
   expect(fires[2]?.issue).toContain('suite found:\n- scaffold: forge build --ast failed: boom')
 })
 
-const UNMET: Item = { key: 'Guards V.deposit', met: false, cells: ['passing: no', 'reverting: yes'], note: 'Guards V.deposit: passing never seen', reverts: [], located: true }
+const UNMET: Item = { key: 'Guards V.deposit', met: false, cells: ['passing: no', 'reverting: yes'], note: 'Guards V.deposit: passing never seen', reverts: [], located: true, misread: false }
 const UNREACHABLE = (reason: string): string => `\n## Unreachable\n\n- Guards V.deposit | reason: ${reason}\n`
 const LEAN = ['context', 'scaffold', 'coverage']
 
@@ -427,6 +427,15 @@ test('an unlocated reach item refuses before any fix turn', async () => {
   const { fires, sum } = await mapped()
   expect(fires.map((f) => f.phase)).toEqual(LEAN)
   expect(sum).toEqual({ outcome: 'refuse', spans: ['reach.unlocated'], note: '1 row(s) have no at: <file> L<start>-L<end> in map.md: Guards V.deposit' })
+})
+
+test('a misread reach item needs the COO and fires no fix turn', async () => {
+  const key = 'Selected entry points V.deposit(uint256 assets)'
+  vi.mocked(reach).mockReturnValueOnce([{ ...UNMET, key, misread: true }])
+  const { fires, sum } = await mapped()
+  expect(fires.map((f) => f.phase)).toEqual(LEAN)
+  expect(sum).toEqual({ outcome: 'needs_coo', spans: ['machine_fault', 'reach.misread'],
+    note: `1 entry point(s) read 0 calls through ## Handlers on lines lcov.info hit: ${key}` })
 })
 
 test('no revert report refuses before reach or any fix turn', async () => {

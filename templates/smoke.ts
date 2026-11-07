@@ -5,7 +5,7 @@ import { join, resolve, sep } from 'node:path'
 import { funded } from './balances.ts'
 import { BUILD } from './extract.ts'
 import type { Refused } from './handoff.ts'
-import { measured, type Revert } from './reach.ts'
+import { handled, type Revert } from './reach.ts'
 import { callee, NONE, rows } from './slices.ts'
 
 export interface Smoked { name: string; calls: number; successes: number }
@@ -27,13 +27,11 @@ const SCOPED = ['build', '--build-info', '--out', OUT, '--cache-path', 'cache/fi
 const SLITHER = ['.', '--ignore-compile', '--foundry-out-directory', OUT, '--print', 'echidna', '--json', '-']
 
 export function smoked(map: string, report: string): Smoked[] {
-  const metrics = measured(JSON.parse(readFileSync(report, 'utf8')) as Revert)
   const mapped = rows(map)
-  const handlers = mapped.get('Handlers') ?? []
+  const metrics = handled(JSON.parse(readFileSync(report, 'utf8')) as Revert, mapped.get('Handlers') ?? [])
   return (mapped.get('Selected entry points') ?? []).filter((r) => r.name !== NONE).map(({ name }) => {
-    const read = handlers.filter((h) => h.cells.get('target') === callee(name)).map((h) => metrics(h.name))
-    const calls = read.reduce((n, m) => n + m.totalCalls, 0)
-    return { name, calls, successes: calls - read.reduce((n, m) => n + m.totalReverts, 0) }
+    const { totalCalls, totalReverts } = metrics(name)
+    return { name, calls: totalCalls, successes: totalCalls - totalReverts }
   })
 }
 

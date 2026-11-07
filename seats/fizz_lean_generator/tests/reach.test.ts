@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { layered } from '../../../templates/handoff.ts'
 import { sections } from '../../../templates/map.ts'
-import { type Item, met, type ProbeReadings, reach, unlocated, unmet, written } from '../../../templates/reach.ts'
+import { type Item, met, misread, type ProbeReadings, reach, unlocated, unmet, written } from '../../../templates/reach.ts'
 
 const fixtures = join(import.meta.dirname, 'fixtures')
 const REPORT = join(fixtures, 'reach_revert_report.json')
@@ -17,6 +17,8 @@ const MAP = [
   + '- V.withdraw | reverts: assets > totalAssets on underflow | at: src/V.sol L14-L14\n',
   '## Limits\n\n- V.CAP | bound: totalAssets at most 1e24 | at: src/V.sol L5-L5\n',
   '## Conversion points\n\n- V.convertToAssets | converts: shares to assets, rounding down at the division | at: src/V.sol L17-L19\n',
+  '## Handlers\n\n- FuzzTester.v_deposit | target: V.deposit\n- FuzzTester.v_deposit_clamped | target: V.deposit\n- VHandler.v_withdraw | target: V.withdraw\n'
+  + '- FuzzTester.v_convertToAssets | target: V.convertToAssets\n',
 ].join('\n')
 const PROBES: ProbeReadings = { limits: { 'V.CAP': { max: 5n * 10n ** 23n } }, conversions: { 'V.convertToAssets': { min: 0n, max: 2n * 10n ** 24n, saw1Wei: false } } }
 const WITHDRAW = 'Selected entry points V.withdraw(uint256 assets)'
@@ -56,6 +58,23 @@ test('D4: entry rows carry typed reverts, line and success %', () => {
     'reverts: panic: arithmetic underflow/overflow [other] 25, paused [paused] 3'] })
   expect(at(items, 'Selected entry points V.deposit(uint256 assets)')?.cells).toEqual(['calls: 40', 'successes: 40', 'success: 100%', 'lines: 100%', 'reverts: none'])
   expect(keys(unmet(MAP, items))).not.toContain(WITHDRAW)
+})
+
+test('a guard reads passing from the next DA line', () => {
+  const lcov = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'lcov.info')
+  writeFileSync(lcov, readFileSync(join(fixtures, 'lcov.info'), 'utf8').replace('DA:15,0\n', ''))
+  expect(at(judged(PROBES, REPORT, MAP, lcov), 'Guards V.withdraw')).toMatchObject({ met: true, cells: ['passing: yes', 'reverting: yes'] })
+})
+
+test('handlers reading 0 calls on hit lines are reach.misread', () => {
+  const report = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'revert_report.json')
+  writeFileSync(report, JSON.stringify({ contractRevertMetrics: { FuzzTester: { functionRevertMetrics: {} } } }))
+  const items = judged(PROBES, report, MAP.replace('- FuzzTester.v_convertToAssets | target: V.convertToAssets\n', ''))
+  const lost = ['Selected entry points V.deposit(uint256 assets)', WITHDRAW]
+  expect(keys(items.filter((i) => i.misread))).toEqual(lost)
+  expect(at(items, 'Selected entry points V.convertToAssets(uint256 shares)')).toMatchObject({ misread: false, cells: expect.arrayContaining(['lines: 100%']) as string[] })
+  expect(misread(items)).toEqual([{ rule: 'reach.misread', note: `2 entry point(s) read 0 calls through ## Handlers on lines lcov.info hit: ${lost.join(', ')}` }])
+  expect(misread(judged())).toEqual([])
 })
 
 test('an inherited entry point counts its parent file\'s lines', () => {

@@ -3,13 +3,13 @@ import { join } from 'node:path'
 import { filled, type Refused } from './handoff.ts'
 import { laid, RANGE } from './map.ts'
 import type { Reach } from './report.ts'
-import { NONE, type Row, rows } from './slices.ts'
+import { callee, NONE, type Row, rows } from './slices.ts'
 
 export interface ProbeReadings { limits: Record<string, { max: bigint }>; conversions: Record<string, { min: bigint; max: bigint; saw1Wei: boolean }> }
 
-export interface Item { key: string; met: boolean; cells: string[]; note: string; reverts: string[]; located: boolean }
+export interface Item { key: string; met: boolean; cells: string[]; note: string; reverts: string[]; located: boolean; misread: boolean }
 
-type Judged = Pick<Item, 'met' | 'cells' | 'note'>
+type Judged = Pick<Item, 'met' | 'cells' | 'note' | 'misread'>
 
 interface Metrics { totalCalls: number; totalReverts: number; revertReasonMetrics: Record<string, { count: number }> }
 
@@ -26,7 +26,7 @@ const TYPES: [string, RegExp][] = [['allowance/balance', /allowance|balance/i], 
 const FLOORS = { lines: 50, success: 10 }
 const WIDE = 10n ** 24n
 const UNCALLED: Metrics = { totalCalls: 0, totalReverts: 0, revertReasonMetrics: {} }
-const UNLOCATED: Judged = { met: false, cells: ['at: none'], note: 'no at: <file> L<start>-L<end> in map.md' }
+const UNLOCATED: Judged = { met: false, cells: ['at: none'], note: 'no at: <file> L<start>-L<end> in map.md', misread: false }
 
 const yes = (b: boolean): string => b ? 'yes' : 'no'
 
@@ -48,9 +48,14 @@ export const covered = (lcov: string) => (file: string): Map<number, number> => 
   return hits
 }
 
-export const measured = (report: Revert) => (name: string): Metrics => {
-  const [contract = '', fn = ''] = (name.split('(')[0] ?? '').split('.')
-  return Object.entries(report.contractRevertMetrics[contract]?.functionRevertMetrics ?? {}).find(([k]) => k === fn || k.startsWith(`${fn}(`))?.[1] ?? UNCALLED
+export const handled = (report: Revert, handlers: Row[]) => (name: string): Metrics => {
+  const fns = Object.values(report.contractRevertMetrics).flatMap((c) => Object.entries(c?.functionRevertMetrics ?? {}))
+  const read = handlers.filter((h) => h.cells.get('target') === callee(name)).map((h) => h.name.split('.').at(-1) ?? '')
+    .flatMap((fn) => fns.find(([k]) => k === fn || k.startsWith(`${fn}(`))?.[1] ?? [])
+  if (read.length === 0) return UNCALLED
+  const reasons: Metrics['revertReasonMetrics'] = {}
+  for (const [reason, { count }] of read.flatMap((m) => Object.entries(m.revertReasonMetrics))) reasons[reason] = { count: (reasons[reason]?.count ?? 0) + count }
+  return { totalCalls: read.reduce((n, m) => n + m.totalCalls, 0), totalReverts: read.reduce((n, m) => n + m.totalReverts, 0), revertReasonMetrics: reasons }
 }
 
 const reverts = (m: Metrics): string[] => Object.entries(m.revertReasonMetrics).sort(([, a], [, b]) => b.count - a.count)
@@ -70,7 +75,9 @@ function entry({ rows: map, hits, metrics }: Read, { name }: Row): Judged {
   if (at === undefined) return UNLOCATED
   const [file, start, end] = at
   const lines = [...hits(file)].filter(([l]) => l >= start && l <= end)
-  return { met: successes > 0, note: m === UNCALLED ? 'never called' : 'no successful call',
+  const targeted = (map.get('Handlers') ?? []).some((h) => h.cells.get('target') === callee(name))
+  return { met: successes > 0, note: m.totalCalls === 0 ? 'never called' : 'no successful call',
+    misread: targeted && m.totalCalls === 0 && lines.some(([, n]) => n > 0),
     cells: [`calls: ${String(m.totalCalls)}`, `successes: ${String(successes)}`, floored('success', pct(successes, m.totalCalls)),
       floored('lines', pct(lines.filter(([, n]) => n > 0).length, lines.length)), `reverts: ${reverts(m).join(', ') || 'none'}`] }
 }
@@ -82,30 +89,31 @@ function guard({ root, hits, metrics }: Read, row: Row): Judged {
   const source = readFileSync(join(root, file), 'utf8').split('\n').slice(start - 1, end).join('\n')
   const [m, literal, error] = [metrics(row.name), LITERAL.exec(source)?.[1], ERROR.exec(source)?.[1]]
   const seen = (match: (reason: string) => boolean): boolean => Object.entries(m.revertReasonMetrics).some(([r, { count }]) => match(r) && count > 0)
-  const passing = (hits(file).get(end + 1) ?? 0) > 0
+  const passing = ([...hits(file)].filter(([l]) => l > end).sort(([a], [b]) => a - b)[0]?.[1] ?? 0) > 0
   const reverting = literal !== undefined ? seen((r) => r === literal) : error !== undefined ? seen((r) => r.startsWith(error)) : m.totalReverts > 0
-  return { met: passing && reverting, cells: [`passing: ${yes(passing)}`, `reverting: ${yes(reverting)}`],
+  return { met: passing && reverting, cells: [`passing: ${yes(passing)}`, `reverting: ${yes(reverting)}`], misread: false,
     note: [...(passing ? [] : ['passing never seen']), ...(reverting ? [] : ['reverting never seen'])].join(', ') }
 }
 
 function limit({ probes }: Read, { name, cells }: Row): Judged {
   const [probe, bound] = [probes.limits[name], integer(cells.get('bound') ?? '')]
-  if (probe === undefined || bound === undefined) return { met: false, cells: [], note: probe === undefined ? 'no probe reading' : 'bound has no integer literal' }
+  if (probe === undefined || bound === undefined) return { met: false, cells: [], note: probe === undefined ? 'no probe reading' : 'bound has no integer literal', misread: false }
   const met = (probe.max > bound ? probe.max - bound : bound - probe.max) * 100n <= bound
-  return { met, cells: [`bound: ${String(bound)}`, `max: ${String(probe.max)}`], note: `max ${String(probe.max)} is not within 1% of ${String(bound)}` }
+  return { met, cells: [`bound: ${String(bound)}`, `max: ${String(probe.max)}`], note: `max ${String(probe.max)} is not within 1% of ${String(bound)}`, misread: false }
 }
 
 function conversion({ probes }: Read, { name }: Row): Judged {
   const probe = probes.conversions[name]
-  if (probe === undefined) return { met: false, cells: [], note: 'no probe reading' }
+  if (probe === undefined) return { met: false, cells: [], note: 'no probe reading', misread: false }
   const notes = [...(probe.saw1Wei ? [] : ['no 1-wei case']), ...(probe.max >= WIDE ? [] : ['max below 1e24'])]
-  return { met: notes.length === 0, cells: [`min: ${String(probe.min)}`, `max: ${String(probe.max)}`, `1 wei: ${yes(probe.saw1Wei)}`], note: notes.join(', ') }
+  return { met: notes.length === 0, cells: [`min: ${String(probe.min)}`, `max: ${String(probe.max)}`, `1 wei: ${yes(probe.saw1Wei)}`], note: notes.join(', '), misread: false }
 }
 
 const JUDGES: Record<string, (read: Read, row: Row) => Judged> = { 'Selected entry points': entry, Guards: guard, Limits: limit, 'Conversion points': conversion }
 
 export function reach(root: string, map: string, lcov: string, report: string, probes: ProbeReadings): Item[] {
-  const read: Read = { root, rows: rows(map), hits: covered(readFileSync(lcov, 'utf8')), metrics: measured(JSON.parse(readFileSync(report, 'utf8')) as Revert), probes }
+  const mapped = rows(map)
+  const read: Read = { root, rows: mapped, hits: covered(readFileSync(lcov, 'utf8')), metrics: handled(JSON.parse(readFileSync(report, 'utf8')) as Revert, mapped.get('Handlers') ?? []), probes }
   return Object.entries(JUDGES).flatMap(([section, judge]) => (read.rows.get(section) ?? []).filter((row) => row.name !== NONE).map((row) => {
     const [key, judged] = [`${section} ${row.name}`, judge(read, row)]
     return { ...judged, key, note: judged.met ? '' : `${key}: ${judged.note}`, reverts: reverts(read.metrics(row.name)), located: judged !== UNLOCATED }
@@ -115,6 +123,11 @@ export function reach(root: string, map: string, lcov: string, report: string, p
 export function unlocated(items: Item[]): Refused[] {
   const keys = items.filter((i) => !i.located).map((i) => i.key)
   return keys.length === 0 ? [] : [{ rule: 'reach.unlocated', note: `${String(keys.length)} row(s) have no at: <file> L<start>-L<end> in map.md: ${keys.join(', ')}` }]
+}
+
+export function misread(items: Item[]): Refused[] {
+  const keys = items.filter((i) => i.misread).map((i) => i.key)
+  return keys.length === 0 ? [] : [{ rule: 'reach.misread', note: `${String(keys.length)} entry point(s) read 0 calls through ## Handlers on lines lcov.info hit: ${keys.join(', ')}` }]
 }
 
 export function written(map: string, items: Item[]): string {

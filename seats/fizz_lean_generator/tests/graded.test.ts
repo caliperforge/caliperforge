@@ -1,10 +1,18 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
-import { put } from '../../../sequencer/workspace.ts'
+import { fresh } from '../../../checks/sqlite.ts'
+import type { Provider } from '../../../providers/kind.ts'
+import { mapOf } from '../../../sequencer/steps.ts'
+import { git, maybe, put } from '../../../sequencer/workspace.ts'
+import { eventsAfter } from '../../../store/events.ts'
+import { pipeNamed, planById, putPlan } from '../../../store/plans.ts'
+import { CEILING } from '../../../templates/bench.ts'
 import type { Extracted } from '../../../templates/extract.ts'
 import { fixed, graded, listed, type Touched, touched } from '../../../templates/graded.ts'
+import { grader } from '../../../templates/missed.ts'
+import { type Bench, START } from '../../../templates/phases.ts'
 
 const META = 'test/fizz/fizz_data'
 const VAULT = 'src/Vault.sol'
@@ -84,6 +92,53 @@ test('a target.yml with no fix cannot run', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-graded-'))
   put(root, 1, 'target.yml', 'repo: o/r\npre_fix: abc\nfiles: [src/Vault.sol]\n')
   expect(fixed(root, 1, root)).toBe('cannot run: target.yml has no fix')
+  expect(maybe(root, 1, 'touched.json')).toBeNull()
+})
+
+const ALLOCATOR = 'src/PublicAllocator.sol'
+const allocator = (fee: string, body: string): string => `contract PublicAllocator {\n  uint256 public fee${fee};\n  function reallocateTo(uint256 a) public {\n    fee = ${body};\n  }\n}\n`
+
+function commit(repo: string, text: string): string {
+  writeFileSync(join(repo, ALLOCATOR), text)
+  git(repo, ['add', '-A'])
+  git(repo, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'allocator'])
+  return git(repo, ['rev-parse', 'HEAD']).trim()
+}
+
+test('a new grader keeps touched functions after out/ loses src', () => {
+  const home = mkdtempSync(join(tmpdir(), 'cf-graded-'))
+  const repo = join(home, 'remotes/o/r')
+  mkdirSync(join(repo, 'src'), { recursive: true })
+  mkdirSync(join(home, '.cf'))
+  git(repo, ['init', '-q'])
+  const source = allocator('', 'a + 1')
+  const [pre, fix, outside] = [commit(repo, allocator('', 'a')), commit(repo, source), commit(repo, allocator(' = 1', 'a + 1'))]
+  writeFileSync(join(home, '.cf/git-base'), join(home, 'remotes'))
+  const start = source.indexOf('function')
+  const fn = { nodeType: 'FunctionDefinition', id: 3, name: 'reallocateTo', kind: 'function', visibility: 'public', implemented: true, src: `${String(start)}:${String(source.indexOf('}') + 1 - start)}:0`,
+    parameters: { parameters: [] }, returnParameters: { parameters: [] }, modifiers: [] }
+  const ast = { nodeType: 'SourceUnit', id: 1, absolutePath: ALLOCATOR, src: '0:0:0', nodes: [{ nodeType: 'ContractDefinition', id: 2, name: 'PublicAllocator', src: '0:0:0', nodes: [fn] }] }
+  const dir = written({ [ALLOCATOR]: source, 'out/PublicAllocator.sol/PublicAllocator.json': JSON.stringify({ ast }), [`${META}/handoff/coverage.md`]: '',
+    [`${META}/corpus_medusa/coverage/lcov.info`]: `SF:/w/${ALLOCATOR}\nDA:4,3\nend_of_record\n` })
+  const db = fresh(join(import.meta.dirname, '../../../schema'))
+  const provider: Provider = { name: 'claude-agent-sdk', fire: () => Promise.reject(new Error('a grade fires no seat')) }
+  const grade = (plan: number): void => {
+    grader({ db, root: home, plan: planById(db, plan), step: mapOf('bench').at(1), provider, name: 'fizz_lean_generator', dir, tmp: dir, granted: [],
+      walls: { usd: 100, input: 0, cache_write: 0, cache_write_1h: 0, cache_read: 0, output: 0 }, ceiling: CEILING } satisfies Bench, dir)('coverage', START)
+  }
+  for (const [plan, from, to] of [[1, pre, fix], [2, fix, outside]] as const) {
+    putPlan(db, { id: plan, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'queued', queued_at: '2026-11-07T00:00:00.000Z', step: 1, retries: 0 })
+    put(home, plan, 'target.yml', `repo: o/r\npre_fix: ${from}\nfix: ${to}\nfiles: [${ALLOCATOR}]\n`)
+    grade(plan)
+  }
+  rmSync(join(dir, 'out'), { recursive: true })
+  mkdirSync(join(dir, 'out/FuzzTester.sol'), { recursive: true })
+  writeFileSync(join(dir, 'out/FuzzTester.sol/FuzzTester.json'), JSON.stringify({ ast: { nodeType: 'SourceUnit', id: 9, absolutePath: 'test/fizz/FuzzTester.sol', src: '0:0:0', nodes: [] } }))
+  grade(1)
+  grade(2)
+  const hit = 'coverage: hit PublicAllocator.reallocateTo'
+  const none = 'coverage: cannot run: the fix touches no functions'
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'bench.grade').map((e) => e.message)).toEqual([hit, none, hit, none])
 })
 
 test('listed reads scalar, comma, flow and block lists alike', () => {

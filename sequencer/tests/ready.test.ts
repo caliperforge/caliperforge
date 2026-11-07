@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { built as builtRow, newest } from '../../store/deliverables.ts'
+import { rewind } from '../../store/plans.ts'
 import { refusalsOf } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
@@ -189,3 +190,23 @@ test('an earlier finding with no fix or reply goes back', async () => {
   put(w.root, 1, 'rulings.md', 'G11 overruled: src/hello.ts:1 refuses it\n')
   expect(readyGate(w.db, w.root, plan(w.db, 1), { ...watched([], w.root, 1), ...UNSCORED })).toMatchObject({ outcome: 'pass' })
 })
+
+test('a fix two rebuilds back still answers its finding', async () => {
+  let handback = CARRIED
+  const [w, lap] = await atReady([], UNSCORED, () => handback)
+  await lap()
+  finding(w, 4, 'P1')
+  await lap()
+  handback = CARRIED.replace(/---\n$/, '  - id: G11\n    status: done\n    pointer: src/hello.ts:2\n---\n')
+  for (const line of ['export const two = 2', 'export const three = 3']) {
+    rewind(w.db, 1, 2)
+    built(w.root, 1, line)
+    for (let at = 0; plan(w.db, 1).step < 4 && at < 8; at += 1) await lap()
+    handback = CARRIED
+  }
+  rewind(w.db, 1, 2)
+  built(w.root, 1, 'export const four = 4')
+  for (let at = 0; plan(w.db, 1).step !== 6 && at < 8; at += 1) await lap()
+  expect(get(w.root, 1, 'step-2.handback.prev.md')).not.toContain('G11')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass' })
+}, 120_000)

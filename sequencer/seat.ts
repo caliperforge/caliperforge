@@ -50,6 +50,7 @@ import { gates, outsideLanguage } from './gates.ts'
 import { contained, subprojects } from './loose.ts'
 import type { Outcome } from './kind.ts'
 import { landed } from './notes.ts'
+import { fold } from './handled.ts'
 import { COMMIT, commitMessage } from './push.ts'
 import { carried, cloned, diffOf, diffSince, doneIds, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, rulings, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
@@ -68,7 +69,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   if (kernelPlan(plan)) install(srcDir(root, plan.id))
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)
-  if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
+  if (prev !== null) { put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev); if (step.step === 2) fold(root, plan.id, prev) }
   if (step.step === 2 && prev !== null && handedBack(maybe(root, plan.id, 'refusal.md') ?? '') && carried(root, plan.id) === null && !sentRound(db, plan.id)) return repaired(db, root, plan, step, provider, prev)
   const issue = handed(rebuild(db, root, plan, prev), symbolSection(db, root, plan))
   const fired = await ran(db, root, plan, step, provider, issue, kernelPlan(plan))

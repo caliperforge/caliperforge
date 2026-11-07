@@ -3,11 +3,11 @@ import { carried } from '../rails/completion-audit/index.ts'
 import type { Outcome } from './kind.ts'
 import { headOf } from './push.ts'
 import { accepted, listed, overruled, unruled } from './unruled.ts'
-import { maybe, planDir, srcDir, tried } from './workspace.ts'
+import { maybe, planDir, put, srcDir, tried } from './workspace.ts'
 
 /** Each finding at `head` or at a head before it on its line, with the ruling or the later commit that answers it. */
 export function handled(root: string, plan: number, head: string): { id: string; text: string; how: string | null; holds: boolean }[] {
-  const [src, reply, pointer] = [srcDir(root, plan), replies(root, plan), pointers(root, plan, ['step-2.handback.md', 'step-2.handback.prev.md'])]
+  const [src, reply, pointer] = [srcDir(root, plan), replies(root, plan), pointers(root, plan, true)]
   return readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? [])
     .filter((sha) => tried(src, ['merge-base', '--is-ancestor', sha, head]) !== null)
     .flatMap((sha) => {
@@ -33,8 +33,31 @@ export function replies(root: string, plan: number): (id: string) => string | un
   return (id) => ok.has(id) ? `accepted: ${ok.get(id) ?? ''}` : over.find((o) => o.id === id)?.line
 }
 
-/** The first hand-back with a row for the id answers it: a rebuild may leave out a row the one before it called done (`rails/completion-audit/index.ts` `untouched`). */
-export function pointers(root: string, plan: number, kept = ['step-2.handback.md']): (id: string) => string {
-  const all = kept.flatMap((name) => { const rows = carried(maybe(root, plan, name) ?? ''); return typeof rows === 'string' ? [] : [rows] })
-  return (id) => { const row = all.find((rows) => rows.has(id))?.get(id); return row?.status !== 'done' ? '' : row.pointer?.trim() ?? '' }
+/** With `folded`, an id the hand-back has no row for is answered by the newest replaced hand-back that had one. */
+export function pointers(root: string, plan: number, folded = false): (id: string) => string {
+  const [rows, kept] = [carried(maybe(root, plan, 'step-2.handback.md') ?? ''), folded ? fixes(root, plan) : new Map<string, string>()]
+  return (id) => {
+    const row = typeof rows === 'string' ? undefined : rows.get(id)
+    return row === undefined ? kept.get(id) ?? '' : row.status !== 'done' ? '' : row.pointer?.trim() ?? ''
+  }
+}
+
+const FIXED = 'findings.fixed'
+
+/** A rebuild may leave out a row the hand-back before it called done (`rails/completion-audit/index.ts` `untouched`), so each replaced hand-back's G rows fold in here. */
+export function fold(root: string, plan: number, handback: string): void {
+  const rows = carried(handback)
+  if (typeof rows === 'string') return
+  const kept = fixes(root, plan)
+  for (const [id, row] of rows) {
+    if (!/^G\d+$/.test(id)) continue
+    const at = row.status === 'done' ? row.pointer?.trim() ?? '' : ''
+    if (at === '') kept.delete(id)
+    else kept.set(id, at)
+  }
+  put(root, plan, FIXED, [...kept].map(([id, at]) => `${id} ${at}\n`).join(''))
+}
+
+function fixes(root: string, plan: number): Map<string, string> {
+  return new Map([...(maybe(root, plan, FIXED) ?? '').matchAll(/^(G\d+) (.+)$/gm)].map(([, id = '', at = '']) => [id, at]))
 }

@@ -79,16 +79,19 @@ test('targetContracts not naming one is refused before forge', () => {
 })
 
 test('the harness deploys from medusa.json\'s deployer and balance', () => {
-  const setUp = (fuzzing: object): string[] => {
+  const setUp = (fuzzing: object): [string[], string] => {
     const { root, corpus } = project(HARNESS, ['FuzzTester'], fuzzing)
     let text = ''
     faked((cwd) => { text = readFileSync(join(cwd, TEST), 'utf8'); return { status: 0, stdout: '', stderr: '' } })
     trackers(root, corpus)
-    return (/function setUp\(\) public \{ (.*) \}$/m.exec(text)?.[1] ?? '').split('; ').map((s) => s.replace(/;?$/, ';'))
+    return [(/function setUp\(\) public \{ (.*) \}$/m.exec(text)?.[1] ?? '').split('; ').map((s) => s.replace(/;?$/, ';')),
+      /^contract Deployer \{ function deploy\(\) external returns \(FuzzTester h\) \{ h = (.*); \} \}$/m.exec(text)?.[1] ?? '']
   }
-  expect(setUp({ targetContractsBalances: ['0xd3c21bcecceda1000000'] })).toEqual(['vm.deal(address(uint160(196608)), 1000000000000000000000000);',
-    'vm.startPrank(address(uint160(196608)));', 'harness = new FuzzTester{value: 1000000000000000000000000}();'])
-  expect(setUp({})).toEqual(['vm.deal(address(uint160(196608)), 0);', 'vm.startPrank(address(uint160(196608)));', 'harness = new FuzzTester();'])
+  const deployed = (value: string): string[] => [`vm.deal(address(uint160(196608)), ${value});`, 'vm.etch(address(uint160(196608)), type(Deployer).runtimeCode);',
+    'harness = Deployer(address(uint160(196608))).deploy();', 'vm.etch(address(uint160(196608)), "");']
+  expect(setUp({ targetContractsBalances: ['0xd3c21bcecceda1000000'] }))
+    .toEqual([deployed('1000000000000000000000000'), 'new FuzzTester{value: 1000000000000000000000000}()'])
+  expect(setUp({})).toEqual([deployed('0'), 'new FuzzTester()'])
 })
 
 test('a balance that is not an integer throws before forge', () => {
@@ -200,6 +203,19 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('a Medusa-deployed payable harness
 test.runIf(process.env.CF_BENCH_LIVE === '1')('a harness that starts its own prank reads every tracker', () => {
   const pranked = HARNESS.replace('contract FuzzTester {', 'interface Vm { function startPrank(address sender) external; }\ncontract FuzzTester {')
     .replace('constructor() { setup(); }', 'constructor() { Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D).startPrank(address(this)); setup(); }')
+  const { root, corpus } = project(pranked)
+  copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
+  copyFileSync(join(fixtures, 'Probes.sol'), join(root, 'test/fizz/Probes.sol'))
+  expect(compiled(root)).toEqual([])
+  const ids = JSON.parse(spawnSync('forge', ['inspect', 'FuzzTester', 'methodIdentifiers', '--json'], { cwd: root, encoding: 'utf8' }).stdout) as Record<string, string>
+  writeFileSync(join(corpus, 'call_sequences/immutable/0.json'), JSON.stringify([{ call: { from: '0x10000', data: `0x${ids['seen(uint256)'] ?? ''}${5n.toString(16).padStart(64, '0')}` } }]))
+  expect(trackers(root, corpus)).toEqual(new Map([['ProbeCap.maxTotal', 5n]]))
+}, 300_000)
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('a harness whose constructor calls vm.prank reads every tracker', () => {
+  const pranked = HARNESS.replace('contract FuzzTester {', 'interface Vm { function prank(address sender) external; }\ncontract FuzzTester {')
+    .replace('constructor() { setup(); }', 'constructor() { require(msg.sender == address(0x30000)); Vm v = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);'
+      + ' v.prank(address(1)); setup(); v.prank(address(2)); setup(); }')
   const { root, corpus } = project(pranked)
   copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
   copyFileSync(join(fixtures, 'Probes.sol'), join(root, 'test/fizz/Probes.sol'))

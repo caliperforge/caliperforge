@@ -78,31 +78,7 @@ function entry(root: string): Entry {
 
 const replayed = (sequence: Sequence, i: number): string => `    function testSequence${String(i)}() public {\n${sequence.map(({ call }) => `        replay(address(uint160(${BigInt(call.from).toString()})), hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n    }\n`
 
-const source = (replays: string, reads: string, { name, file, deployer, value }: Entry): string => `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import {${name}} from "./${file}";
-
-interface Vm {
-    function load(address target, bytes32 slot) external view returns (bytes32);
-    function startPrank(address sender) external;
-    function deal(address account, uint256 newBalance) external;
-}
-
-contract Readings {
-    Vm constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
-    address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
-    ${name} harness;
-
-    function setUp() public { vm.deal(address(uint160(${String(deployer)})), ${String(value)}); vm.startPrank(address(uint160(${String(deployer)}))); harness = new ${name}${value > 0n ? `{value: ${String(value)}}` : ''}(); }
-
-    function replay(address from, bytes memory data) internal returns (bool ok) { vm.startPrank(from); (ok, ) = address(harness).call(data); }
-
-${replays}
-    function logged(address h) internal view {
-        address p;
-${reads}    }
-
+const READERS = `
     function word(address a, uint256 slot, uint256 offset, uint256 size) internal view returns (uint256) {
         uint256 w = uint256(vm.load(a, bytes32(slot))) >> (offset * 8);
         return size == 32 ? w : w & ((1 << (size * 8)) - 1);
@@ -115,7 +91,36 @@ ${reads}    }
     function log(string memory key, bool value) internal view returns (bool ok) {
         (ok, ) = CONSOLE.staticcall(abi.encodeWithSignature("log(string,bool)", key, value));
     }
+`
+
+const source = (replays: string, reads: string, { name, file, deployer, value }: Entry): string => `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {${name}} from "./${file}";
+
+interface Vm {
+    function load(address target, bytes32 slot) external view returns (bytes32);
+    function startPrank(address sender) external;
+    function deal(address account, uint256 newBalance) external;
+    function etch(address target, bytes calldata newRuntimeBytecode) external;
 }
+
+contract Deployer { function deploy() external returns (${name} h) { h = new ${name}${value > 0n ? `{value: ${String(value)}}` : ''}(); } }
+
+contract Readings {
+    Vm constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+    address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
+    ${name} harness;
+
+    function setUp() public { vm.deal(address(uint160(${String(deployer)})), ${String(value)}); vm.etch(address(uint160(${String(deployer)})), type(Deployer).runtimeCode); harness = Deployer(address(uint160(${String(deployer)}))).deploy(); vm.etch(address(uint160(${String(deployer)})), ""); }
+
+    function replay(address from, bytes memory data) internal returns (bool ok) { vm.startPrank(from); (ok, ) = address(harness).call(data); }
+
+${replays}
+    function logged(address h) internal view {
+        address p;
+${reads}    }
+${READERS}}
 `
 
 const handler = (sequence: Sequence): string => sequence.at(-1)?.call.data.slice(0, 10) ?? ''

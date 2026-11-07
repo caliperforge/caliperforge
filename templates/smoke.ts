@@ -1,6 +1,6 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { funded } from './balances.ts'
 import { BUILD } from './extract.ts'
@@ -23,6 +23,8 @@ const STAMP = 'cache/fizz-build-info.json'
 const INFO = 'out/build-info'
 const SKIPPED = ['out', 'cache', '.git']
 const OUT = 'cache/fizz-slither-out'
+// The V.sol + Harness.sol fixture (solc 0.8.26, via_ir) scans 77,876 bytes in 3.41 s and scoped Euler's 24 MB was killed after 3 h 02 min; 2 MB between them is a ruled choice, not a measured edge, since slither only seeds fuzzing values (bench.ts quieted() sets useSlither false).
+const SLITHER_MAX_BUILD_INFO_BYTES = 2_000_000
 const SCOPED = ['build', '--build-info', '--out', OUT, '--cache-path', 'cache/fizz-slither-cache', 'src', 'test/fizz']
 const SLITHER = ['.', '--ignore-compile', '--foundry-out-directory', OUT, '--print', 'echidna', '--json', '-']
 
@@ -98,6 +100,9 @@ function slithered(root: string, hash: string, compile: number): Slither {
   if (existsSync(slow)) return { note: SKIP }
   const forged = spawnSync('forge', SCOPED, { cwd: root, timeout: compile * 1000, stdio: 'ignore' })
   if (forged.status !== 0) return { note: `smoke: forge ${SCOPED.join(' ')} ${why(forged, compile, slow)}; medusa ran with slither off` }
+  const info = join(root, OUT, 'build-info')
+  const size = existsSync(info) ? readdirSync(info).reduce((sum, file) => sum + statSync(join(info, file)).size, 0) : 0
+  if (size > SLITHER_MAX_BUILD_INFO_BYTES) return { note: `smoke: slither skipped: scoped build-info is ${String(size)} bytes, past the ${String(SLITHER_MAX_BUILD_INFO_BYTES)} byte threshold; medusa ran with slither off` }
   const fd = openSync(`${at}.part`, 'w')
   const ran = spawnSync('slither', SLITHER, { cwd: root, timeout: Math.max(deadline - Date.now(), 1), stdio: ['ignore', fd, 'pipe'], encoding: 'utf8' })
   closeSync(fd)

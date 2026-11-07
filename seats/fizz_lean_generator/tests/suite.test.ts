@@ -174,7 +174,7 @@ test.each([
   expect(suite(based(recast(change))).deployed).toEqual([FACTORY])
 })
 
-test('an unaimed entry point lcov hits is misread', () => {
+test('an unaimed entry point that lcov hits is misread', () => {
   const unaimed = { ...EULER, handlers: [] }
   expect(misaimed(unaimed, ACCEPT, lcov(8, 3))).toEqual([
     { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },

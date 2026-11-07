@@ -14,6 +14,7 @@ import { flag } from '../../store/precedent-findings.ts'
 import { dropSignals, record as signal, type SignalRow } from '../../store/signals.ts'
 import { addReview } from '../../store/verdict.ts'
 import { approve as approvePublish } from '../card.ts'
+import { fold } from '../handled.ts'
 import { tick } from '../index.ts'
 import { sent } from '../push.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
@@ -616,6 +617,21 @@ test('only open and accepted P2s are carried', async () => {
     '- P2s carried to the maintainer: G1 `src/hello.ts:1`: `open`; G2 `src/hello.ts:2`: `accepted: recorded upstream`'])
   put(w.root, 1, `findings-${head}.md`, `- G3 src/hello.ts:3 ${p(2)} overruled\n- G4 src/hello.ts:4 ${p(2)} fixed\n- G5 src/hello.ts:5 ${p(1)} severe\n`)
   expect(cardWith(w, fixed)).not.toContain('P2s carried')
+})
+
+test('the card lists each bot finding and how it was handled', async () => {
+  const w = await AT_BATCH()
+  const src = srcDir(w.root, 1)
+  const [head, before] = [headSha(src), git(src, ['rev-parse', 'HEAD~1']).trim()]
+  const side = git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', 'HEAD^{tree}', '-p', before, '-m', 'side']).trim()
+  put(w.root, 1, `findings-${before}.md`, '- G1 src/hello.ts:1 fixed\n- G2 src/hello.ts:2 overruled\n- G3 src/hello.ts:3 neither\n')
+  put(w.root, 1, `findings-${side}.md`, '- G4 src/hello.ts:4 elsewhere\n')
+  put(w.root, 1, 'rulings.md', 'G2 overruled: src/hello.ts:1 refuses it\n')
+  fold(w.root, 1, CARRIED.replace(/---\n$/, '  - id: G1\n    status: done\n    pointer: src/hello.ts:1\n---\n'))
+  fold(w.root, 1, CARRIED)
+  const fix = git(src, ['log', '-1', '--format=%H', `${before}..${head}`, '--', 'src/hello.ts']).trim().slice(0, 12)
+  expect(cardWith(w, CARRIED)).toContain(`**Bot findings on the pull request**\n\n- \`G1\` \`src/hello.ts:1 fixed\` — \`fixed in ${fix} at src/hello.ts:1\`\n`
+    + '- `G2` `src/hello.ts:2 overruled` — `G2 overruled: src/hello.ts:1 refuses it`\n- `G3` `src/hello.ts:3 neither` — open\n\n')
 })
 
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */

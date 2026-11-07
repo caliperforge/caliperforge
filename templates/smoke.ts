@@ -2,6 +2,7 @@ import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
+import { funded } from './balances.ts'
 import { BUILD } from './extract.ts'
 import type { Refused } from './handoff.ts'
 import { measured, type Revert } from './reach.ts'
@@ -9,7 +10,7 @@ import { callee, NONE, rows } from './slices.ts'
 
 export interface Smoked { name: string; calls: number; successes: number }
 
-export interface Ran { results: Smoked[]; note: string | null; cache: string | null }
+export interface Ran { results: Smoked[]; note: string | null; cache: string | null; clamped: string[] }
 
 const REPORT = 'corpus_medusa/coverage/revert_report.json'
 const SECONDS = '120'
@@ -106,14 +107,17 @@ function slithered(root: string, hash: string, compile: number): Slither {
 const block = (config: Config, slither: Slither): Config['slither'] =>
   'cache' in slither ? { ...config.slither, useSlither: true, cachePath: slither.cache } : { ...config.slither, useSlither: false }
 
-export function primed(root: string, compile = COMPILE): string | null {
+export function primed(root: string, compile = COMPILE): { off: string | null; clamped: string[] } {
   const path = join(root, 'medusa.json')
-  const config = JSON.parse(readFileSync(path, 'utf8')) as Config
+  const { config, clamped } = funded(JSON.parse(readFileSync(path, 'utf8')) as Config)
   const { useSlither, cachePath } = config.slither ?? {}
-  if (useSlither === false || (cachePath !== undefined && existsSync(resolve(root, cachePath)))) return null
+  if (useSlither === false || (cachePath !== undefined && existsSync(resolve(root, cachePath)))) {
+    if (clamped.length > 0) writeFileSync(path, JSON.stringify(config, null, 2))
+    return { off: null, clamped }
+  }
   const slither = slithered(root, sources(root), compile)
   writeFileSync(path, JSON.stringify({ ...config, slither: block(config, slither) }, null, 2))
-  return 'note' in slither ? slither.note : null
+  return { off: 'note' in slither ? slither.note : null, clamped }
 }
 
 export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60, compile = COMPILE): Ran | Refused {
@@ -122,7 +126,7 @@ export function smoke(root: string, fizz: string, meta: string, map: string, wal
   if (refused !== undefined) return refused
   const slither = slithered(root, hash, compile)
   const [path, report] = [join(root, 'medusa.json'), join(root, meta, REPORT)]
-  const config = JSON.parse(readFileSync(path, 'utf8')) as Config
+  const { config, clamped } = funded(JSON.parse(readFileSync(path, 'utf8')) as Config)
   const kept = { ...config, slither: block(config, slither) }
   rmSync(report, { force: true })
   writeFileSync(path, JSON.stringify({ ...kept, fuzzing: { ...config.fuzzing, revertReporterEnabled: true }, compilation: reusing(config) }, null, 2))
@@ -133,11 +137,14 @@ export function smoke(root: string, fizz: string, meta: string, map: string, wal
   } finally {
     writeFileSync(path, JSON.stringify(kept, null, 2))
   }
+  const tail = ran.stderr.trimEnd().split('\n').slice(-40).join('\n')
   if (ran.status === 124) return { rule: 'smoke.hung',
-    note: `smoke: medusa ran past --timeout ${SECONDS} + 60 s and its process group was killed; last 40 lines:\n${ran.stderr.trimEnd().split('\n').slice(-40).join('\n')}` }
-  if (!existsSync(report)) throw new Error(`run_medusa.js exited ${String(ran.status)} and wrote no ${report}: ${ran.stderr.slice(-TAIL)}`)
-  return { results: smoked(map, report), note: 'note' in slither ? slither.note : null, cache: 'cache' in slither ? slither.cache : null }
+    note: `smoke: medusa ran past --timeout ${SECONDS} + 60 s and its process group was killed; last 40 lines:\n${tail}` }
+  if (!existsSync(report)) return { rule: 'smoke.no_report', note: `smoke: run_medusa.js exited ${String(ran.status)} and wrote no ${report}; last 40 lines:\n${tail}` }
+  return { results: smoked(map, report), note: 'note' in slither ? slither.note : null, cache: 'cache' in slither ? slither.cache : null, clamped }
 }
+
+export const funding = (clamped: string[]): string => `targetContractsBalances ${clamped.join(', ')} clamped to 1e24 wei`
 
 export const packed = (results: Smoked[]): string =>
   results.map((r) => `- ${r.name} | calls: ${String(r.calls)} | successes: ${String(r.successes)}\n`).join('')

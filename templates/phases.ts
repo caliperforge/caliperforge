@@ -23,7 +23,7 @@ import { readings, trackers } from './probes.ts'
 import { met, reach, unlocated, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
 import { callee, rows, slices } from './slices.ts'
-import { packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
+import { funding, packed, primed, smoke, type Smoked, unrun } from './smoke.ts'
 import { harnessed, probed, suite, unsourced } from './suite.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
@@ -152,6 +152,7 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
     const got = smoke(root, fizz, 'test/fizz/fizz_data', read(map))
     if (!('rule' in got)) {
       ;({ results: last, note } = got)
+      if (got.clamped.length > 0) log('smoke.clamped', 'pass', funding(got.clamped))
       return unrun(read(map), last)
     }
     hung = got
@@ -168,8 +169,9 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
 }
 
 function slithering({ db, plan, name }: Bench, root: string): void {
-  const off = primed(root)
+  const { off, clamped } = primed(root)
   if (off !== null) logged(db, { plan: plan.id, kind: 'coverage.slither_off', actor: name, outcome: 'pass', message: off, pointer: null, run: null })
+  if (clamped.length > 0) logged(db, { plan: plan.id, kind: 'coverage.clamped', actor: name, outcome: 'pass', message: funding(clamped), pointer: null, run: null })
 }
 
 async function reached(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<Sum | Outcome> {

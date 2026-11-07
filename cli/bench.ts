@@ -81,7 +81,9 @@ export function rescore(db: Db, root: string, id: number, by: Holder, why: strin
     logged(db, { plan: id, kind: 'rescore', actor: by, outcome: 'pass', message: why, pointer: was === null ? null : `bench_scorecard ${String(was)}`, run: null })
     return was
   })()
-  const suite = join(srcDir(root, id), (JSON.parse(made) as { suite: string }).suite)
+  const generated = JSON.parse(made) as { suite: string; wall?: string }
+  put(root, id, 'generate.json', JSON.stringify({ ...generated, wall: undefined }))
+  const suite = join(srcDir(root, id), generated.suite)
   rmSync(suite, { recursive: true, force: true })
   cpSync(suites, suite, { recursive: true })
   return old
@@ -92,8 +94,9 @@ export function refuzz(db: Db, root: string, source: number, hours: number, seed
     if (!Number.isInteger(n) || n < 1) throw new Error(`${flag} takes a positive whole number, not ${String(n)}`)
   }
   const { made, yml, target, generator, suites } = scoredSuite(db, root, source)
-  const generated = JSON.parse(made) as { suite: string; wall?: string }
-  if (generated.wall !== undefined) throw new Error(`plan ${String(source)} stopped at a wall: ${generated.wall}`)
+  const generated = JSON.parse(made) as { suite: string; wall?: string; partial?: string }
+  const wall = generated.wall ?? generated.partial
+  if (wall !== undefined) throw new Error(`plan ${String(source)} stopped at a wall: ${wall}`)
   if (!existsSync(join(suites, 'medusa.json'))) throw new Error(`plan ${String(source)} has no medusa.json in fuzz-bench/suites/${generator}/${target}`)
   const pipe = pipeNamed(db, 'refuzz')
   if (pipe === null) throw new Error('no pipe "refuzz"')

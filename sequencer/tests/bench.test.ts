@@ -1130,6 +1130,29 @@ test('D4 a tracked foundry.toml or no property writes no root', async () => {
   expect(existsSync(join(planDir(unproven.root, 1), CARRIED))).toBe(false)
 })
 
+test('a cost-walled generate archives its suite as partial', async () => {
+  const { root, outcome } = await generated(stub(1000, 'stopped', FORGED, COST_WALLED), { generator: 'fizz', target: 'euler-earn-m01' })
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: `generate.json written: ${COST_WALLED}` })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, wall: COST_WALLED, partial: COST_WALLED, x_ray: 0, agents: 8 })
+  expect(readFileSync(join(planDir(root, 1), CARRIED, '../FizzTest.sol'), 'utf8')).toBe(BODY)
+  expect(readFileSync(join(planDir(root, 1), CARRIED, 'foundry.toml'), 'utf8')).toBe(BODY)
+})
+
+test('a walled, reaped plan rescores its partial suite', () => {
+  const { root, db } = scoring()
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, wall: COST_WALLED, partial: COST_WALLED }))
+  cpSync(join(srcDir(root, 1), 'test/fizz'), join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01'), { recursive: true })
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: expect.stringContaining('unscored') as string })
+  end(db, 1, 'done')
+  expect(reap(root, [1])).toEqual([1])
+  expect(rescore(db, root, 1, 'coo', 'partial suite')).toBe(1)
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, partial: COST_WALLED })
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ catches: 2, false_positives: 1, not_powered: 'wall', partial: COST_WALLED })
+  expect(scores(db)[1]).toMatchObject({ catches: 2, false_positives: 1, not_powered: 'wall' })
+  expect(runRows(db).filter((r) => r.step === 1)).toEqual([])
+})
+
 test('D3 a set timeout and workers at most 4 are kept', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({
     fuzzing: { timeout: 600, workers: 2, testing: { shrinkLimit: 500 } }, slither: { useSlither: false } })

@@ -46,7 +46,7 @@ export function floored(name: string, tokens: number, transcripts: string[], pro
 }
 
 export function written(root: string, plan: number, dir: string, transcripts: string[],
-  made: { suite: string; tokens: number; seconds: number; wall?: string; properties?: number }, note: string): Outcome {
+  made: { suite: string; tokens: number; seconds: number; wall?: string; partial?: string; properties?: number }, note: string): Outcome {
   put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: agentsOf(transcripts) }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${note}` }
 }

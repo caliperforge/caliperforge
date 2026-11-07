@@ -10,6 +10,14 @@ export function rooted(src: string, into: string): void {
   if (existsSync(join(src, 'lib/forge-std'))) cpSync(join(src, 'lib/forge-std'), join(into, 'root/lib/forge-std'), { recursive: true })
 }
 
+/** Copies `src`'s `suite` and its `root/` into `into`, or returns false when `src` holds no suite. */
+export function archived(src: string, suite: string, into: string): boolean {
+  if (!existsSync(join(src, suite))) return false
+  cpSync(join(src, suite), into, { recursive: true })
+  rooted(src, into)
+  return true
+}
+
 /** Checks plan `id`'s repo out afresh into `into` at its pre_fix with its submodules, and installs `suites` as run_pair does: at `test/<target>/`, its `root/` onto the checkout's root. */
 export function planted(root: string, id: number, into: string, { suites, target }: { suites: string; target: string }): void {
   const made = maybe(root, id, 'checkout.json')

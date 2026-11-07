@@ -244,6 +244,8 @@ test('refuzz D2 a walled generate is refused, nothing filed', () => {
   const { dir, d } = refuzzable()
   put(dir, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1, wall: 'the token wall' }))
   unfiled(dir, d, 'plan 1 stopped at a wall: the token wall')
+  put(dir, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1, partial: 'the cost wall' }))
+  unfiled(dir, d, 'plan 1 stopped at a wall: the cost wall')
 })
 
 test('refuzz D2 no suites or no medusa.json is refused', () => {

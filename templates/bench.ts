@@ -24,7 +24,7 @@ import { firing, phased, START } from './phases.ts'
 import { buildError, FEWEST, fewer, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { report } from './report.ts'
-import { placed, recloned, rooted, scrapped } from './rooted.ts'
+import { archived, placed, recloned, rooted, scrapped } from './rooted.ts'
 import { unstopped } from './stopped.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
@@ -146,7 +146,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   }
   if ('outcome' in sum) return sum
   const { tokens, seconds, transcripts, wall } = sum
-  if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall }, wall)
+  if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall, ...(target !== '' && archived(dir, SUITE, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target)) ? { partial: wall } : {}) }, wall)
   const properties = floored(name, tokens, transcripts, unproven(join(dir, SUITE), `${name} (completed, ${String(tokens)} tokens)`))
   if (typeof properties !== 'number' || properties < FEWEST) return fewer(properties, name, tokens, SUITE)
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
@@ -160,7 +160,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const { target = '', generator = '' } = keys
   const made = maybe(root, plan.id, 'generate.json')
   if (made === null) return { outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' }
-  const { suite, tokens, seconds, x_ray, agents, wall, properties } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1; agents?: number; wall?: string; properties?: number }
+  const { suite, tokens, seconds, x_ray, agents, wall, partial, properties } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1; agents?: number; wall?: string; partial?: string; properties?: number }
   const stop = wall?.replace(/^ruling:/, '') ?? (tokens >= CEILING ? `the token wall after ${String(tokens)} tokens` : null)
   const proven = stop !== null ? walled(db, root, plan.id, { target, generator }, { tokens, seconds, x_ray: x_ray ?? null }, stop) : unproven(join(srcDir(root, plan.id), suite), generator)
   if (stop !== null) report(db, root, plan.id, [], 'wall')
@@ -186,8 +186,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const seeded = seedsOf(ran.runs, ran.seconds)
   const calls = keys.refuzz === undefined ? seeded.least : seeded.calls
   const score = { catches: seeded.union.catch, false_positives: seeded.union.fp_candidate,
-    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }
-  kept(db, root, plan.id, { target, generator }, score, sha, { ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
+    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }
+  kept(db, root, plan.id, { target, generator }, score, sha, { partial, ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
     ...(keys.refuzz === undefined ? {} : { mode: 'refuzz', source: Number(keys.refuzz) }), seeds: seeded.seeds, union: seeded.union, ...(ran.retried ? { via_ir_retry: true } : {}) })
   report(db, root, plan.id, ran.runs, score.not_powered)
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0

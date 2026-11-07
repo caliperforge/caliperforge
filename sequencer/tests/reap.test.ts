@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { type PlanRow, putPlan, terminal } from '../../store/plans.ts'
@@ -32,6 +32,18 @@ test('a plan still in play keeps its checkout', () => {
   const live = (['queued', 'running', 'blocked_on_ceo'] as const).map((state, at) => laid(w, 30 + at, state))
   expect(reap(w.root, terminal(w.db))).toEqual([])
   expect(live.map((dir) => existsSync(dir))).toEqual([true, true, true])
+})
+
+test('a walled plan keeps src/ until its suite is archived', () => {
+  const w = world()
+  const src = laid(w, 24, 'done')
+  mkdirSync(join(src, 'test/fizz'), { recursive: true })
+  put(w.root, 24, 'generate.json', JSON.stringify({ suite: 'test/fizz', wall: 'the cost wall' }))
+  expect(reap(w.root, terminal(w.db))).toEqual([])
+  expect(existsSync(join(src, 'test/fizz'))).toBe(true)
+  put(w.root, 24, 'generate.json', JSON.stringify({ suite: 'test/fizz', wall: 'the cost wall', partial: 'the cost wall' }))
+  expect(reap(w.root, terminal(w.db))).toEqual([24])
+  expect(existsSync(src)).toBe(false)
 })
 
 test('a second pass over the same plans removes nothing', () => {

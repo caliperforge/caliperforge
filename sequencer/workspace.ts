@@ -54,10 +54,18 @@ export function drop(root: string, plan: number, name: string): void {
 export function reap(root: string, plans: number[]): number[] {
   return plans.filter((plan) => {
     const dir = join(planDir(root, plan), 'src')
-    if (!existsSync(dir)) return false
+    if (!existsSync(dir) || unarchived(root, plan, dir)) return false
     rmSync(dir, { recursive: true, force: true })
     return true
   })
+}
+
+/** A plan stopped at a wall whose suite never reached `fuzz-bench/suites/`, so `src/` holds its only copy. */
+function unarchived(root: string, plan: number, src: string): boolean {
+  const made = maybe(root, plan, 'generate.json')
+  if (made === null) return false
+  const { suite, wall, partial } = JSON.parse(made) as { suite: string; wall?: string; partial?: string }
+  return wall !== undefined && partial === undefined && existsSync(join(src, suite))
 }
 
 export function move(root: string, plan: number, from: string, to: string): string {

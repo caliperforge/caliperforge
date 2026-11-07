@@ -165,6 +165,15 @@ test('a slow scoped forge build is skipped on the next smoke', () => {
   expect(existsSync(join(root, 'slither.log'))).toBe(false)
 }, 10_000)
 
+test('a scoped build-info past the threshold skips slither', () => {
+  const { root, fizz } = medusa(SEES, 'case "$*" in *fizz-slither-out*) mkdir -p cache/fizz-slither-out/build-info && head -c 2000001 /dev/zero > cache/fizz-slither-out/build-info/a.json;; *) mkdir -p out/build-info;; esac')
+  expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT),
+    note: 'smoke: slither skipped: scoped build-info is 2000001 bytes, past the 2000000 byte threshold; medusa ran with slither off', cache: null, clamped: [] })
+  expect(slither(root)).toEqual({ useSlither: false })
+  expect(existsSync(join(root, 'slither.log'))).toBe(false)
+  expect(readdirSync(join(root, 'cache')).sort()).toEqual(['fizz-build-info.json', 'fizz-slither-out'])
+})
+
 test('a failing slither runs medusa with slither off', () => {
   const { root, fizz } = medusa(SEES, undefined, undefined, "echo '{'\nexit 2")
   expect(smoke(root, fizz, META, MAP, 30)).toEqual({ results: smoked(MAP, REPORT),

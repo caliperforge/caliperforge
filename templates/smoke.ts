@@ -50,8 +50,9 @@ function reusing({ compilation }: Config): Config['compilation'] {
   return { ...compilation, platformConfig: { ...compilation?.platformConfig, args: args.includes(IGNORE) ? args : [...args, IGNORE] } }
 }
 
-function sources(root: string): string {
-  const paths = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter((path) => path.endsWith('.sol') && !SKIPPED.some((dir) => path.startsWith(`${dir}${sep}`)))
+function sources(root: string, scoped = false): string {
+  const paths = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter((path) => path.endsWith('.sol')
+    && (scoped ? path.startsWith(`src${sep}`) : !SKIPPED.some((dir) => path.startsWith(`${dir}${sep}`))))
   if (existsSync(join(root, 'foundry.toml'))) paths.push('foundry.toml')
   const hash = createHash('sha256')
   for (const path of paths.sort()) hash.update(`${path}\n`).update(readFileSync(join(root, path)))
@@ -84,15 +85,21 @@ function built(root: string, hash: string, compile: number): Refused | undefined
 
 type Slither = { cache: string } | { note: string }
 
-const why = (ran: { error?: Error; status: number | null }, compile: number): string =>
-  (ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ? `ran past its ${String(compile)} s limit` : `exited ${String(ran.status)}`
+const SKIP = 'smoke: slither skipped: src/ and foundry.toml are unchanged since its scan ran past its limit; medusa ran with slither off'
+
+function why(ran: { error?: Error; status: number | null }, compile: number, slow: string): string {
+  if ((ran.error as NodeJS.ErrnoException | undefined)?.code !== 'ETIMEDOUT') return `exited ${String(ran.status)}`
+  writeFileSync(slow, '')
+  return `ran past its ${String(compile)} s limit`
+}
 
 function slithered(root: string, hash: string, compile: number): Slither {
   const cache = `cache/fizz-slither-${hash}.json`
-  const [at, deadline] = [join(root, cache), Date.now() + compile * 1000]
+  const [at, slow, deadline] = [join(root, cache), join(root, `cache/fizz-slither-${hash}.slow`), Date.now() + compile * 1000]
   if (existsSync(at)) return { cache }
+  if (existsSync(slow)) return { note: SKIP }
   const forged = spawnSync('forge', SCOPED, { cwd: root, timeout: compile * 1000, stdio: 'ignore' })
-  if (forged.status !== 0) return { note: `smoke: forge ${SCOPED.join(' ')} ${why(forged, compile)}; medusa ran with slither off` }
+  if (forged.status !== 0) return { note: `smoke: forge ${SCOPED.join(' ')} ${why(forged, compile, slow)}; medusa ran with slither off` }
   const fd = openSync(`${at}.part`, 'w')
   const ran = spawnSync('slither', SLITHER, { cwd: root, timeout: Math.max(deadline - Date.now(), 1), stdio: ['ignore', fd, 'pipe'], encoding: 'utf8' })
   closeSync(fd)
@@ -101,7 +108,7 @@ function slithered(root: string, hash: string, compile: number): Slither {
     return { cache }
   }
   rmSync(`${at}.part`)
-  return { note: `smoke: slither ${SLITHER.join(' ')} ${why(ran, compile)}; medusa ran with slither off` }
+  return { note: `smoke: slither ${SLITHER.join(' ')} ${why(ran, compile, slow)}; medusa ran with slither off` }
 }
 
 const block = (config: Config, slither: Slither): Config['slither'] =>
@@ -115,16 +122,15 @@ export function primed(root: string, compile = COMPILE): { off: string | null; c
     if (clamped.length > 0) writeFileSync(path, JSON.stringify(config, null, 2))
     return { off: null, clamped }
   }
-  const slither = slithered(root, sources(root), compile)
+  const slither = slithered(root, sources(root, true), compile)
   writeFileSync(path, JSON.stringify({ ...config, slither: block(config, slither) }, null, 2))
   return { off: 'note' in slither ? slither.note : null, clamped }
 }
 
 export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60, compile = COMPILE): Ran | Refused {
-  const hash = sources(root)
-  const refused = built(root, hash, compile)
+  const refused = built(root, sources(root), compile)
   if (refused !== undefined) return refused
-  const slither = slithered(root, hash, compile)
+  const slither = slithered(root, sources(root, true), compile)
   const [path, report] = [join(root, 'medusa.json'), join(root, meta, REPORT)]
   const { config, clamped } = funded(JSON.parse(readFileSync(path, 'utf8')) as Config)
   const kept = { ...config, slither: block(config, slither) }

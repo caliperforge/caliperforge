@@ -59,7 +59,7 @@ test('D1 each block is a row after the prose; spans add none', () => {
 })
 
 test('code in an unquoted required_change reads its finding', () => {
-  expect(read(CODED, 's')).toMatchObject({ outcome: 'refuse', spans: [`${SMOKE}:63`],
+  expect(read(CODED, 's')).toMatchObject({ outcome: 'refuse', spans: [`${SMOKE}:63`], origin_kind: 'ruling', origin_ref: 'reviewers.verdict',
     message: `- F1 ${SMOKE}:63 tight: ${CHANGE}; verify: npm run test -- ${SMOKE}` })
 })
 

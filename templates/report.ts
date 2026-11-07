@@ -2,6 +2,7 @@ import { put } from '../sequencer/workspace.ts'
 import type { Score } from '../store/bench.ts'
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { spend } from '../store/runs.ts'
 import type { Row } from './paired.ts'
 import { counted } from './powered.ts'
 
@@ -34,9 +35,10 @@ export function report(db: Db, root: string, plan: number, runs: Row[][], notPow
   const read = <T>(kind: keyof typeof KINDS): T[] => eventsOf(db, plan, KINDS[kind]).map((e) => JSON.parse(e.message) as T)
   const critic = eventsOf(db, plan, KINDS.critic).map((e) => e.outcome)
   const why = counted(notPowered, critic)
+  const { gross, net, credited } = spend(db, plan)
   const sections: Record<keyof typeof TITLES, Section> = {
     result: result(runs),
-    cost: { phases: or(read<Phase>('cost')), fix_turns: or(read<Turn>('fix_turns')) },
+    cost: { gross_usd: gross, net_usd: net, credited: or(credited), phases: or(read<Phase>('cost')), fix_turns: or(read<Turn>('fix_turns')) },
     map: { ...missed('map_miss', read<Miss>('map_miss')), ...missed('slice_miss', read<Miss>('slice_miss')), unused: or(read<Unused>('map_unused').map((u) => u.row)) },
     reach: read<Reach>('reach').at(-1) ?? '-',
     checks: { hits: or(hits(read<Hit>('checks'))), reach_fixes: or(read<ReachFix>('reach_fixes')), network: or(eventsOf(db, plan, KINDS.network).map((e) => e.message)) },

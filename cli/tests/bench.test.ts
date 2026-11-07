@@ -8,12 +8,12 @@ import { dry } from '../../sequencer/index.ts'
 import { get, git, planDir, put, srcDir } from '../../sequencer/workspace.ts'
 import { record } from '../../store/bench.ts'
 import { addRun } from '../../store/brief.ts'
-import { eventsAfter, ofKind } from '../../store/events.ts'
+import { eventsAfter, logged, ofKind } from '../../store/events.ts'
 import { type Db, upsertRule } from '../../store/index.ts'
 import { dial, lanes } from '../../store/lanes.ts'
 import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan, type PlanRow } from '../../store/plans.ts'
 import { fingerprint, refused as refuse } from '../../store/refusals.ts'
-import { runTokens } from '../../store/runs.ts'
+import { runTokens, spend } from '../../store/runs.ts'
 import { dried } from '../../templates/dry.ts'
 import { credit, fileBench, refuzz, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
@@ -152,7 +152,7 @@ test('file D5 --stop-after context lands in target.yml', () => {
 const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
 
 const ROW = { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null,
-  pre_fix_calls: null, fix_calls: null, not_powered: null }
+  pre_fix_calls: null, fix_calls: null, not_powered: null, gross_usd: 0, net_usd: 0 }
 
 /** A plan with its generate.json, target.yml and scored suite, and a live scorecard row. */
 function rescorable(state: PlanRow['state'] = 'done', template: PlanRow['template'] = 'bench'): { dir: string; d: Db } {
@@ -303,6 +303,16 @@ test('credit refuses a foreign or unknown run, logs none', () => {
   expect(() => { credit(d, 1, [...ours, theirs], 'why') }).toThrow(`run ${String(theirs)} is not a run of plan 1`)
   expect(() => { credit(d, 1, [Number(ours[0]), 999], 'why') }).toThrow('run 999 is not a run of plan 1')
   expect(credits(d)).toEqual([])
+})
+
+test('spend nets out credited runs, each listed once', () => {
+  const { d } = creditable()
+  for (const [plan, cost_usd] of [[1, 1], [1, 2], [1, 4], [2, 8]] as const) addRun(d, { ...RUN, plan, cost_usd })
+  const [two, four] = runTokens(d, 1).slice(-2).map(({ id }) => id)
+  for (let i = 0; i < 2; i++) logged(d, { plan: 1, kind: 'bench.credit', actor: 'machine', outcome: 'pass', message: 'refire', pointer: null, run: Number(four) })
+  credit(d, 1, [Number(two)], 'reach misread')
+  expect(spend(d, 1)).toEqual({ gross: 7, net: 1, credited: [two, four] })
+  expect(spend(d, 3)).toEqual({ gross: 0, net: 0, credited: [] })
 })
 
 test('credit refuses a non-bench plan and logs nothing', () => {

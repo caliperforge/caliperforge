@@ -1,13 +1,14 @@
 import type { Db } from './index.ts'
 
 export interface Score { plan: number; target: string; generator: string; catches: number; false_positives: number; untested: number | null; tokens: number; seconds: number; x_ray: 0 | 1 | null
-  pre_fix_calls: number | null; fix_calls: number | null; not_powered: 'wall' | 'reduced_generate' | 'few_properties' | 'pre_fix_calls' | 'fix_calls' | 'compile_failed' | 'context_missed' | 'scaffold_missed' | 'coverage_missed' | null }
+  pre_fix_calls: number | null; fix_calls: number | null; not_powered: 'wall' | 'reduced_generate' | 'few_properties' | 'pre_fix_calls' | 'fix_calls' | 'compile_failed' | 'context_missed' | 'scaffold_missed' | 'coverage_missed' | null
+  gross_usd: number | null; net_usd: number | null }
 
-const COLUMNS = 'plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray, pre_fix_calls, fix_calls, not_powered'
+const COLUMNS = 'plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray, pre_fix_calls, fix_calls, not_powered, gross_usd, net_usd'
 
 export function record(db: Db, s: Score): number {
   return Number(db.prepare(`INSERT INTO bench_scorecard (${COLUMNS}) VALUES (@plan, @target, @generator, @catches, @false_positives, @untested, @tokens,
-    @seconds, @x_ray, @pre_fix_calls, @fix_calls, @not_powered)`).run(s).lastInsertRowid)
+    @seconds, @x_ray, @pre_fix_calls, @fix_calls, @not_powered, @gross_usd, @net_usd)`).run(s).lastInsertRowid)
 }
 
 export function setUntested(db: Db, plan: number, untested: number): void {

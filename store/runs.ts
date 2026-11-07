@@ -14,6 +14,13 @@ export function credited(db: Db, plan: number, runs: number[]): number {
     AND EXISTS (SELECT 1 FROM events WHERE events.run = runs.id AND events.kind = 'bench.credit')`).get(plan, JSON.stringify(runs)) as { usd: number }).usd
 }
 
+export function spend(db: Db, plan: number): { gross: number; net: number; credited: number[] } {
+  const { gross } = db.prepare('SELECT coalesce(sum(cost_usd), 0) AS gross FROM runs WHERE plan = ?').get(plan) as { gross: number }
+  const ids = (db.prepare(`SELECT DISTINCT runs.id FROM runs JOIN events ON events.run = runs.id AND events.kind = 'bench.credit'
+    WHERE runs.plan = ? ORDER BY runs.id`).all(plan) as { id: number }[]).map(({ id }) => id)
+  return { gross, net: gross - credited(db, plan, ids), credited: ids }
+}
+
 export interface Generated {
   id: number; transcript_path: string; session: string | null; phase: string | null
   input_tokens: number; cache_write_tokens: number; cache_read_tokens: number; output_tokens: number

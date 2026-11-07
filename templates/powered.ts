@@ -4,6 +4,7 @@ import { put } from '../sequencer/workspace.ts'
 import type { Event } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { record, type Score, supersede } from '../store/bench.ts'
+import { spend } from '../store/runs.ts'
 
 type Keys = Pick<Score, 'target' | 'generator'>
 
@@ -53,7 +54,10 @@ export function walled(db: Db, root: string, plan: number, keys: Keys, made: Pic
 }
 
 /** `fuzz_bench` is left out of score.json when `sha` is undefined, as JSON.stringify drops it. */
-export function kept(db: Db, root: string, plan: number, keys: Keys, score: Omit<Score, 'plan' | 'target' | 'generator'>, sha?: string, noted: object = {}): void {
+export function kept(db: Db, root: string, plan: number, keys: Keys, made: Omit<Score, 'plan' | 'target' | 'generator' | 'gross_usd' | 'net_usd'>, sha?: string,
+  noted: object = {}): void {
+  const { gross, net } = spend(db, plan)
+  const score = { ...made, gross_usd: gross, net_usd: net }
   supersede(db, plan)
   record(db, { plan, ...keys, ...score })
   put(root, plan, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score, ...noted }))

@@ -486,7 +486,8 @@ const BENCH = 'bench not_powered'
 test('D6 a not_powered score is listed with its reason', () => {
   const db = world()
   expect(benchSection(underpowered(db))).toBe(`${BENCH} (0)\n  none\n`)
-  const score = { target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 1, untested: null, tokens: 1, seconds: 1, x_ray: null }
+  const score = { target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 1, untested: null, tokens: 1, seconds: 1, x_ray: null,
+    gross_usd: 0, net_usd: 0 }
   plan(db, 1, 'done', null)
   plan(db, 2, 'done', null)
   addScore(db, { plan: 1, ...score, target: 'yuzu-m01', pre_fix_calls: 69467, fix_calls: 69467, not_powered: 'pre_fix_calls' })
@@ -498,7 +499,7 @@ test('D7 a few_properties score is listed', () => {
   const db = world()
   plan(db, 1, 'done', null)
   addScore(db, { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null,
-    pre_fix_calls: 505660, fix_calls: 505660, not_powered: 'few_properties' })
+    pre_fix_calls: 505660, fix_calls: 505660, not_powered: 'few_properties', gross_usd: 0, net_usd: 0 })
   expect(benchSection(underpowered(db))).toBe(`${BENCH} (1)\n  plan 1\teuler-earn-m01\tfizz\tfew_properties\tpre_fix 505660\tfix 505660\n`)
 })
 

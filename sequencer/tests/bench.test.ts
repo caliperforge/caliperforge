@@ -13,7 +13,8 @@ import { rescore } from '../../cli/bench.ts'
 import { record, scores, supersede, type Score } from '../../store/bench.ts'
 import { eventsAfter, eventsOf, logged, runRows, type Event } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
-import type { Db } from '../../store/index.ts'
+import { addRun } from '../../store/brief.ts'
+import { type Db, upsertRule } from '../../store/index.ts'
 import { dial, set } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
@@ -841,7 +842,7 @@ test('1617b D3 a cost-walled generate scores wall, no pair', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: expect.stringContaining('run.cost_wall') as string })
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.jsonl'))).toBe(false)
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1234,
-    seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
+    seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall', gross_usd: 0, net_usd: 0 }])
 })
 
 const REPEAT_READ = 'ruling:run.repeat_read stopped the run after 61 reads of /tmp/x.ts'
@@ -924,7 +925,7 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
 }
 
 const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5, pre_fix_calls: null, fix_calls: null,
-  not_powered: 'reduced_generate' }
+  not_powered: 'reduced_generate', gross_usd: 0, net_usd: 0 }
 
 /** The seeds and union score.json carries for PAIRS on each of the two seeds. */
 const SEEDED = { seeds: [1, 2].map((seed) => ({ seed, catch: 2, fp_candidate: 1, silent: 1, calls: { pre_fix: null, fix: null }, seconds: expect.any(Number) as number })),
@@ -1392,7 +1393,7 @@ test('D5 generate at the wall records one wall row, no pair', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.jsonl'))).toBe(false)
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: CEILING,
-    seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
+    seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall', gross_usd: 0, net_usd: 0 }])
   expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ not_powered: 'wall' })
   expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: '-', counted: { counted: 'no', why: 'wall' } })
 })
@@ -1648,7 +1649,8 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(readdirSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01')).sort()).toEqual(['euler-earn-m01.seed-1.jsonl', 'euler-earn-m01.seed-2.jsonl'])
-  const score = { catches: 3, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null, pre_fix_calls: 20, fix_calls: 40, not_powered: null }
+  const score = { catches: 3, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null, pre_fix_calls: 20, fix_calls: 40, not_powered: null,
+    gross_usd: 0, net_usd: 0 }
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...score }])
   const calls = { pre_fix: 10, fix: 20 }
   const seconds = expect.any(Number) as number
@@ -1746,7 +1748,7 @@ test('report D3 D6 every section is built from its events', () => {
     said(db, KINDS.critic, 'clean')
   })
   expect(json).toEqual({ result: RESULT,
-    cost: { phases: [{ phase: 'context', tokens: 1000, usd: 2 }], fix_turns: [{ turn: 1, tokens: 100, usd: 0.5 }] },
+    cost: { gross_usd: 0, net_usd: 0, credited: '-', phases: [{ phase: 'context', tokens: 1000, usd: 2 }], fix_turns: [{ turn: 1, tokens: 100, usd: 0.5 }] },
     map: { map_miss: 3, map_miss_top: [{ file: 'a.sol', line: 4, count: 2 }, { file: 'b.sol', line: 9, count: 1 }],
       slice_miss: 1, slice_miss_top: [{ file: 'c.sol', line: 1, count: 1 }], unused: ['Vault.deposit'] },
     reach: { met: false, reasons: ['no boundary test'] },
@@ -1761,7 +1763,7 @@ test('report D3 D6 every section is built from its events', () => {
 
 test('report D4 no events shows -, counted no with critic -', () => {
   const { json, md } = reported(() => undefined)
-  expect(json).toEqual({ result: RESULT, cost: { phases: '-', fix_turns: '-' },
+  expect(json).toEqual({ result: RESULT, cost: { gross_usd: 0, net_usd: 0, credited: '-', phases: '-', fix_turns: '-' },
     map: { map_miss: '-', map_miss_top: '-', slice_miss: '-', slice_miss_top: '-', unused: '-' }, reach: '-',
     checks: { hits: '-', reach_fixes: '-', network: '-' }, counted: { counted: 'no', why: 'no_critic', critic: '-' } })
   expect(md).toContain('## Reach\n\n-\n')
@@ -1776,6 +1778,23 @@ test('report D5 a refused critic is not_clean, report kept', () => {
   expect(json).toMatchObject({ result: RESULT, counted: { counted: 'no', why: 'not_clean', critic: ['pass', 'refuse'] } })
   expect([...md.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(TITLES)
   expect(md).toContain('- counted: no\n- why: not_clean\n')
+})
+
+test('score and report carry gross, net and the credited runs', () => {
+  const { root, db } = sided(8, 505660, 505660)
+  upsertRule(db, { id: 'fizz_generator', kind: 'card', path: 'seats/seat.md', content_hash: 'a'.repeat(64), loaded_at: AT })
+  for (const cost_usd of [1, 2, 4]) {
+    addRun(db, { plan: 1, step: 1, seat: 'fizz_generator', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'opus', effort: 'high', input_tokens: 1,
+      cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 1, seconds: 1, exit: 0, at: AT, transcript_path: 'x.transcript.jsonl', cost_usd })
+  }
+  const [, two, four] = runRows(db).map(({ id }) => id)
+  for (const run of [four, two]) logged(db, { plan: 1, kind: 'bench.credit', actor: 'machine', outcome: 'pass', message: 'refire', pointer: null, run: Number(run) })
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const cost = { gross_usd: 7, net_usd: 1 }
+  expect(scores(db)).toMatchObject([cost])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject(cost)
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ cost: { ...cost, credited: [two, four] } })
+  expect(get(root, 1, 'report.md')).toContain(`## Cost\n\n- gross_usd: 7\n- net_usd: 1\n- credited: ${String(two)}; ${String(four)}\n`)
 })
 
 test('counted D6 only an unbuilt or unpowered run is not counted', () => {

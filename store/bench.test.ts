@@ -16,7 +16,15 @@ function db(): Db {
 }
 
 const fizz = { target: 'euler-earn-m01', generator: 'fizz', catches: 3, false_positives: 1, untested: 2, tokens: 4200, seconds: 61.5, x_ray: 1 as const,
-  pre_fix_calls: 505660, fix_calls: 505660, not_powered: null }
+  pre_fix_calls: 505660, fix_calls: 505660, not_powered: null, gross_usd: 7, net_usd: 1 }
+
+const UNCOSTED = { gross_usd: null, net_usd: null }
+
+/** `record` on a database migrated before 0139, which has no cost columns. */
+function uncosted(d: Db, s: Score): void {
+  d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray, pre_fix_calls, fix_calls,
+    not_powered) VALUES (@plan, @target, @generator, @catches, @false_positives, @untested, @tokens, @seconds, @x_ray, @pre_fix_calls, @fix_calls, @not_powered)`).run(s)
+}
 
 /** A database migrated through every schema file before `version`. */
 function before(version: string): Db {
@@ -48,7 +56,7 @@ it('D3 refuses negative counts and empty names', () => {
   const d = db()
   const plan = planRow(d)
   for (const bad of [{ catches: -1 }, { false_positives: -1 }, { untested: -1 }, { tokens: -1 }, { seconds: -0.5 }, { target: '' }, { generator: '' },
-    { x_ray: 2 as 1 }]) {
+    { x_ray: 2 as 1 }, { gross_usd: -1 }, { net_usd: -0.5 }]) {
     expect(() => record(d, { plan, ...fizz, ...bad })).toThrow(/CHECK/)
   }
 })
@@ -62,12 +70,20 @@ it('setUntested sets the one plan row', () => {
   expect(scores(d).map((s) => s.untested)).toEqual([4, null])
 })
 
-it('D1 D4 migrates once to 138 with one bench_scorecard table', () => {
+it('D1 D4 migrates once to 139 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0138_bench_cost_wall.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0139_bench_gross_net.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(138)
+  expect(d.pragma('user_version', { simple: true })).toBe(139)
+})
+
+it('0139 reads a 0138 row as NULL costs, every column kept', () => {
+  const d = before('0139')
+  const old: Score = { plan: planRow(d), ...fizz, ...UNCOSTED }
+  uncosted(d, old)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0139_bench_gross_net.sql'])
+  expect(scores(d)).toEqual([old])
 })
 
 it('accepts the three phase misses, refuses short', () => {
@@ -82,14 +98,14 @@ it('0137 keeps every 0136 row, live or superseded', () => {
   const d = before('0137')
   const [one, two] = [planRow(d), planRow(d)]
   const reasons = [null, 'wall', 'reduced_generate', 'few_properties', 'pre_fix_calls', 'fix_calls', 'compile_failed']
-  const old: Score[] = reasons.map((why) => ({ plan: one, ...fizz, not_powered: why as Score['not_powered'] }))
+  const old: Score[] = reasons.map((why) => ({ plan: one, ...fizz, ...UNCOSTED, not_powered: why as Score['not_powered'] }))
   for (const score of old) {
-    record(d, score)
+    uncosted(d, score)
     supersede(d, one)
   }
-  const live: Score = { plan: two, ...fizz, not_powered: 'compile_failed' }
-  record(d, live)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql'])
+  const live: Score = { plan: two, ...fizz, ...UNCOSTED, not_powered: 'compile_failed' }
+  uncosted(d, live)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql'])
   expect(scores(d)).toEqual([...old, live])
   expect(underpowered(d)).toEqual([live])
   expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
@@ -108,14 +124,14 @@ it('1645b D5 0120 keeps every 0119 row, live or superseded', () => {
   const d = before('0120')
   const [one, two] = [planRow(d), planRow(d)]
   const reasons = [null, 'wall', 'reduced_generate', 'few_properties', 'pre_fix_calls', 'fix_calls']
-  const old: Score[] = reasons.map((why) => ({ plan: one, ...fizz, not_powered: why as Score['not_powered'] }))
+  const old: Score[] = reasons.map((why) => ({ plan: one, ...fizz, ...UNCOSTED, not_powered: why as Score['not_powered'] }))
   for (const score of old) {
-    record(d, score)
+    uncosted(d, score)
     supersede(d, one)
   }
-  const live: Score = { plan: two, ...fizz, not_powered: 'few_properties' }
-  record(d, live)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql'])
+  const live: Score = { plan: two, ...fizz, ...UNCOSTED, not_powered: 'few_properties' }
+  uncosted(d, live)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql'])
   expect(scores(d)).toEqual([...old, live])
   expect(underpowered(d)).toEqual([live])
   expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
@@ -132,14 +148,15 @@ it('D5 accepts the five reasons, refuses short', () => {
 it('D5 0119 keeps every 0118 row, live or superseded', () => {
   const d = before('0119')
   const [one, two] = [planRow(d), planRow(d)]
-  const old: Score[] = [null, 'wall', 'reduced_generate', 'pre_fix_calls', 'fix_calls'].map((why) => ({ plan: one, ...fizz, not_powered: why as Score['not_powered'] }))
+  const old: Score[] = [null, 'wall', 'reduced_generate', 'pre_fix_calls', 'fix_calls'].map((why) => ({ plan: one, ...fizz, ...UNCOSTED,
+    not_powered: why as Score['not_powered'] }))
   for (const score of old) {
-    record(d, score)
+    uncosted(d, score)
     supersede(d, one)
   }
-  const live: Score = { plan: two, ...fizz, not_powered: 'fix_calls' }
-  record(d, live)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql'])
+  const live: Score = { plan: two, ...fizz, ...UNCOSTED, not_powered: 'fix_calls' }
+  uncosted(d, live)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql'])
   expect(scores(d)).toEqual([...old, live])
   expect(underpowered(d)).toEqual([live])
   expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
@@ -151,7 +168,7 @@ it('D2 0118 reads an 0117 row by its calls a side', () => {
   const insert = d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray,
     pre_fix_calls, fix_calls) VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1, ?, ?)`)
   for (const [pre, fix] of [[69467, 69467], [505660, 505660], [505660, 1000]]) insert.run(planRow(d), pre, fix)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql'])
   expect(scores(d).map((s) => s.not_powered)).toEqual(['pre_fix_calls', null, 'fix_calls'])
 })
 
@@ -161,7 +178,7 @@ it('D1 0117 reads an 0116 row as NULL calls, refuses -1', () => {
   d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1)`).run(plan)
   expect(migrate(d, join(root, 'schema'))).toEqual(['0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql',
-    '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql'])
+    '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql', '0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql'])
   expect(scores(d)).toMatchObject([{ plan, pre_fix_calls: null, fix_calls: null }])
   for (const bad of [{ pre_fix_calls: -1 }, { fix_calls: -1 }]) {
     expect(() => record(d, { plan: planRow(d), ...fizz, ...bad })).toThrow(/CHECK/)

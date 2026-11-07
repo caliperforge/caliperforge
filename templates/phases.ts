@@ -13,7 +13,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import { criticCheck } from './critic.ts'
 import { compiled, extract } from './extract.ts'
 import { type Check, FIX, fixed, type Fixed } from './fixturn.ts'
-import { costWalled } from './generated.ts'
+import { costWalled, faulted } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
 import { grader } from './missed.ts'
@@ -175,10 +175,10 @@ function slithering({ db, plan, name }: Bench, root: string): void {
 }
 
 async function reached(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<Sum | Outcome> {
-  const [map, corpus] = [join(handoffs, MAP), join(handoffs, '../corpus_medusa')]
-  const [broken] = compiled(root, 'coverage')
+  const [map, corpus, report] = [join(handoffs, MAP), join(handoffs, '../corpus_medusa'), join(handoffs, '../corpus_medusa/coverage/revert_report.json')]
+  const [broken] = [...compiled(root, 'coverage'), ...(existsSync(report) ? [] : [{ rule: 'coverage.no_revert_report', note: `coverage: medusa wrote no ${report}; the machine's coverage medusa.json does not set fuzzing.revertReporterEnabled` }])]
   if (broken !== undefined) return { outcome: 'refuse', spans: [broken.rule], note: broken.note }
-  const items = reach(root, read(map), join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json'), readings(suite(root).probes, trackers(root, corpus)))
+  const items = reach(root, read(map), join(corpus, 'coverage/lcov.info'), report, readings(suite(root).probes, trackers(root, corpus)))
   writeFileSync(map, written(read(map), items))
   const [lost] = unlocated(items)
   if (lost !== undefined) return { outcome: 'refuse', spans: [lost.rule], note: lost.note }
@@ -258,7 +258,7 @@ export const STOPPED = 'stopped.json'
 export const stoppedAt = (handoffs: string): { phase: string; sum: Sum; smoked: string } | null =>
   existsSync(join(handoffs, STOPPED)) ? JSON.parse(read(join(handoffs, STOPPED))) as { phase: string; sum: Sum; smoked: string } : null
 
-export async function phased(bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> {
+export const phased = faulted(async (bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> => {
   const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, STOPPED)
@@ -297,4 +297,4 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
     if (phase === stop) return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
   }
   return ended(bench, manifest, hash, handoffs, stopped, sum)
-}
+})

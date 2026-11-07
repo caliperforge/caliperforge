@@ -252,10 +252,14 @@ test('a retry resumes at the first phase not yet passed', async () => {
 const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 
-async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}, wrote: Record<string, Record<string, string>> = {}) {
+async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}, wrote: Record<string, Record<string, string>> = {}, report = true) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
   writeFileSync(join(handoffs, 'map.md'), map)
+  if (report) {
+    mkdirSync(join(handoffs, '../corpus_medusa/coverage'), { recursive: true })
+    writeFileSync(join(handoffs, '../corpus_medusa/coverage/revert_report.json'), '{}')
+  }
   const packets: Packet[] = []
   const fires: { phase: string; issue: string; map: string }[] = []
   const { db, root, run } = benched((packet, phase) => {
@@ -423,6 +427,29 @@ test('an unlocated reach item refuses before any fix turn', async () => {
   const { fires, sum } = await mapped()
   expect(fires.map((f) => f.phase)).toEqual(LEAN)
   expect(sum).toEqual({ outcome: 'refuse', spans: ['reach.unlocated'], note: '1 row(s) have no at: <file> L<start>-L<end> in map.md: Guards V.deposit' })
+})
+
+test('no revert report refuses before reach or any fix turn', async () => {
+  vi.mocked(reach).mockClear()
+  const { handoffs, fires, sum } = await mapped(undefined, {}, {}, false)
+  expect(fires.map((f) => f.phase)).toEqual(LEAN)
+  expect(sum).toEqual({ outcome: 'refuse', spans: ['coverage.no_revert_report'],
+    note: `coverage: medusa wrote no ${join(handoffs, '../corpus_medusa/coverage/revert_report.json')}; the machine's coverage medusa.json does not set fuzzing.revertReporterEnabled` })
+  expect(reach).not.toHaveBeenCalled()
+})
+
+test('a grading throw needs the COO and fires no seat again', async () => {
+  const message = "ENOENT: no such file or directory, open 'revert_report.json'\n    at readFileSync"
+  vi.mocked(reach).mockImplementationOnce(() => { throw new Error(message) })
+  const { fires, sum } = await mapped()
+  expect(fires.map((f) => f.phase)).toEqual(LEAN)
+  const first = "ENOENT: no such file or directory, open 'revert_report.json'"
+  expect(sum).toEqual({ outcome: 'needs_coo', spans: ['machine_fault', `threw: ${first}`], note: `phase grading threw: ${first}`, message })
+})
+
+test('a database is locked throw is not caught', async () => {
+  vi.mocked(reach).mockImplementationOnce(() => { throw new Error('database is locked') })
+  await expect(mapped()).rejects.toThrow('database is locked')
 })
 
 test('a not_clean scaffold passing its grade resumes at coverage', async () => {

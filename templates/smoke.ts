@@ -117,13 +117,14 @@ const block = (config: Config, slither: Slither): Config['slither'] =>
 export function primed(root: string, compile = COMPILE): { off: string | null; clamped: string[] } {
   const path = join(root, 'medusa.json')
   const { config, clamped } = funded(JSON.parse(readFileSync(path, 'utf8')) as Config)
+  const reporting = { ...config, fuzzing: { ...config.fuzzing, revertReporterEnabled: true } }
   const { useSlither, cachePath } = config.slither ?? {}
   if (useSlither === false || (cachePath !== undefined && existsSync(resolve(root, cachePath)))) {
-    if (clamped.length > 0) writeFileSync(path, JSON.stringify(config, null, 2))
+    writeFileSync(path, JSON.stringify(reporting, null, 2))
     return { off: null, clamped }
   }
   const slither = slithered(root, sources(root, true), compile)
-  writeFileSync(path, JSON.stringify({ ...config, slither: block(config, slither) }, null, 2))
+  writeFileSync(path, JSON.stringify({ ...reporting, slither: block(config, slither) }, null, 2))
   return { off: 'note' in slither ? slither.note : null, clamped }
 }
 

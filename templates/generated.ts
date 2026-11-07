@@ -1,10 +1,12 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CostWall } from '../providers/kind.ts'
+import { NETWORK } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { put } from '../sequencer/workspace.ts'
 import { price } from '../store/brief.ts'
 import type { Db } from '../store/index.ts'
+import { LOCKED } from '../store/timed.ts'
 import { spawned } from '../store/transcript.ts'
 import { degraded } from './powered.ts'
 
@@ -18,6 +20,17 @@ export function costWall(db: Db, provider: string, model: string): CostWall | Ou
 
 export function costWalled(stop: string | null): string | null {
   return stop !== null && ['ruling:run.cost_wall', 'ruling:run.repeat_read'].some((wall) => stop.startsWith(wall)) ? stop : null
+}
+
+export const faulted = <A extends unknown[], T>(run: (...args: A) => Promise<T | Outcome>) => async (...args: A): Promise<T | Outcome> => {
+  try {
+    return await run(...args)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes(LOCKED) || NETWORK.test(message)) throw error
+    const first = message.split('\n')[0] ?? ''
+    return { outcome: 'needs_coo', spans: ['machine_fault', `threw: ${first}`], note: `phase grading threw: ${first}`, message }
+  }
 }
 
 function agentsOf(transcripts: string[]): number {

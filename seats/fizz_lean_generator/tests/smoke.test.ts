@@ -173,18 +173,19 @@ test('a failing slither runs medusa with slither off', () => {
   expect(readdirSync(join(root, 'cache'))).toEqual(['fizz-build-info.json'])
 })
 
-test('primed only clamps on a held cache or slither off', () => {
+const reporting = <T extends { fuzzing: object }>(config: T): T => ({ ...config, fuzzing: { ...config.fuzzing, revertReporterEnabled: true } })
+
+test('primed enables the reporter on a held cache or slither off', () => {
   const { root } = medusa('')
   mkdirSync(join(root, 'cache'))
   writeFileSync(join(root, 'cache/held.json'), '{}')
   for (const slither of [{ useSlither: true, cachePath: 'cache/held.json' }, { useSlither: false }]) {
-    const config = JSON.stringify({ ...MEDUSA, slither })
-    writeFileSync(join(root, 'medusa.json'), config)
+    writeFileSync(join(root, 'medusa.json'), JSON.stringify({ ...MEDUSA, slither }))
     expect(primed(root)).toEqual({ off: null, clamped: [] })
-    expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+    expect(restored(root)).toEqual(reporting({ ...MEDUSA, slither }))
     writeFileSync(join(root, 'medusa.json'), JSON.stringify({ ...FUNDED, slither }))
     expect(primed(root)).toEqual({ off: null, clamped: [OVER] })
-    expect(restored(root)).toEqual({ ...CLAMPED, slither })
+    expect(restored(root)).toEqual(reporting({ ...CLAMPED, slither }))
   }
   expect(['forge.log', 'slither.log'].map((log) => existsSync(join(root, log)))).toEqual([false, false])
 })
@@ -195,7 +196,7 @@ test('a slow primed scan turns slither off and returns the note', () => {
   const gone = JSON.stringify({ ...MEDUSA, slither: { useSlither: true, cachePath: 'cache/gone.json' } })
   writeFileSync(join(root, 'medusa.json'), gone)
   expect(primed(root, 1)).toEqual({ off: `smoke: slither ${SLITHER} ran past its 1 s limit; medusa ran with slither off`, clamped: [] })
-  expect(restored(root)).toEqual({ ...MEDUSA, slither: { useSlither: false, cachePath: 'cache/gone.json' } })
+  expect(restored(root)).toEqual(reporting({ ...MEDUSA, slither: { useSlither: false, cachePath: 'cache/gone.json' } }))
   expect(readdirSync(join(root, 'cache'))).toEqual([SLOW])
   writeFileSync(join(root, 'medusa.json'), gone)
   expect(primed(root, 1)).toEqual({ off: SKIP, clamped: [] })

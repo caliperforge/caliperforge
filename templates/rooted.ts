@@ -10,7 +10,7 @@ export function rooted(src: string, into: string): void {
   if (existsSync(join(src, 'lib/forge-std'))) cpSync(join(src, 'lib/forge-std'), join(into, 'root/lib/forge-std'), { recursive: true })
 }
 
-/** Copies `src`'s `suite` and its `root/` into `into`, or returns false when `src` holds no suite. */
+
 export function archived(src: string, suite: string, into: string): boolean {
   if (!existsSync(join(src, suite))) return false
   cpSync(join(src, suite), into, { recursive: true })

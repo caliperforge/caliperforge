@@ -34,10 +34,10 @@ export function registerReturn(command: Command, { root, db, out }: Cli, read: R
     })
 }
 
-function reopen(root: string, plan: PlanRow, read: Read, exec: Run): void {
-  premised(root, plan.id)
+export function reopen(root: string, plan: PlanRow, read: Read, exec: Run): void {
   const ref = originRef(plan)
   if (ref !== null) reopenIssue(ref.repo, ref.no, read, exec)
+  premised(root, plan.id)
 }
 
 function resumed(at: string | undefined, why: string | undefined, to: number | undefined): At | undefined {

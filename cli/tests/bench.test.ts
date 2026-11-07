@@ -149,6 +149,40 @@ test('file D5 --stop-after context lands in target.yml', () => {
   expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz_lean\nstop_after: context\n`)
 })
 
+/** A fizz_lean_generator plan on smoke-01 whose regrades end in `outcomes`. */
+function regraded(...outcomes: ('pass' | 'refuse')[]): { dir: string; d: Db; plan: number } {
+  const dir = benchRoot()
+  const d = fresh(schema)
+  const plan = Number(fileBench(d, dir, 'smoke-01', false, 'fizz_lean_generator', AT)[0])
+  for (const outcome of outcomes) logged(d, { plan, kind: 'bench.regrade', actor: 'bench', outcome, message: 'regraded', pointer: null, run: null })
+  return { dir, d, plan }
+}
+
+test.each<{ outcomes: ('pass' | 'refuse')[] }>([{ outcomes: [] }, { outcomes: ['pass', 'refuse'] }])('lean file is refused after regrades $outcomes', ({ outcomes }) => {
+  const { dir, d, plan } = regraded(...outcomes)
+  const why = `smoke-01: plan ${String(plan)} has no clean regrade; run cf bench regrade ${String(plan)} or file with --why`
+  expect(() => fileBench(d, dir, 'smoke-01', false, 'fizz_lean_generator', AT)).toThrow(why)
+  expect(() => fileBench(d, dir, undefined, true, 'fizz_lean_generator', AT)).toThrow(why)
+  expect(allPlans(d)).toHaveLength(1)
+})
+
+test('lean file --why files and logs one waiver per plan', () => {
+  const { dir, d } = regraded()
+  const ids = fileBench(d, dir, undefined, true, 'fizz_lean_generator', AT, undefined, 'regrade is down')
+  expect(ids).toHaveLength(2)
+  expect(ofKind(d, 'bench.regrade_waived')).toEqual(ids.map((plan) => ({ plan, kind: 'bench.regrade_waived', actor: 'coo', outcome: 'pass', message: 'regrade is down' })))
+})
+
+test('a clean regrade or a first run files, other seats ungated', () => {
+  const { dir, d } = regraded('refuse', 'pass')
+  expect(fileBench(d, dir, undefined, true, 'fizz_lean_generator', AT)).toHaveLength(2)
+  for (const seat of ['fizz_generator', 'house_generator']) {
+    fileBench(d, dir, 'smoke-01', false, seat, AT)
+    expect(fileBench(d, dir, 'smoke-01', false, seat, AT)).toHaveLength(1)
+  }
+  expect(ofKind(d, 'bench.regrade_waived')).toEqual([])
+})
+
 const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
 
 const ROW = { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null,

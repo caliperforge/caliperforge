@@ -1,16 +1,17 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planDir, put } from '../../../sequencer/workspace.ts'
-import { eventsAfter, runRows } from '../../../store/events.ts'
+import { eventsAfter, ofKind, runRows } from '../../../store/events.ts'
 import type { Db } from '../../../store/index.ts'
 import { pipeNamed, putPlan } from '../../../store/plans.ts'
-import { dried } from '../../../templates/dry.ts'
+import { dried, regraded } from '../../../templates/dry.ts'
 import { compiled } from '../../../templates/extract.ts'
 import { trackers } from '../../../templates/probes.ts'
 import { reach } from '../../../templates/reach.ts'
+import { planted as fetched } from '../../../templates/rooted.ts'
 import { smoke } from '../../../templates/smoke.ts'
 import type { Suite } from '../../../templates/suite.ts'
 
@@ -25,6 +26,8 @@ vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await imp
 vi.mock('../../../templates/probes.ts', async (importOriginal) => ({ ...await importOriginal<object>(), trackers: vi.fn(() => new Map()) }))
 
 vi.mock('../../../templates/extract.ts', async (importOriginal) => ({ ...await importOriginal<object>(), compiled: vi.fn(() => []) }))
+
+vi.mock('../../../templates/rooted.ts', async (importOriginal) => ({ ...await importOriginal<object>(), planted: vi.fn() }))
 
 const repo = join(import.meta.dirname, '../../..')
 const AT = '2026-11-04T00:00:00.000Z'
@@ -70,7 +73,7 @@ function planted(files: Record<string, string> = {}, src = 'src'): { db: Db; roo
   return { db, root }
 }
 
-const table = (rows: string[][]): string => ['plan 1', ...rows.map((row) => row.join('\t')), ''].join('\n')
+const table = (rows: string[][], heading = 'plan 1'): string => [heading, ...rows.map((row) => row.join('\t')), ''].join('\n')
 
 test('every check prints in phase order, missing inputs cannot run', () => {
   const { db, root } = planted()
@@ -173,4 +176,58 @@ test('a dry pass logs one bench.dry event, writes no run', () => {
   expect(dried(db, root, 1, fizz())).toContain('context\tast\trefuse handoff.ast | context: forge build --ast failed: boom\n')
   expect(eventsAfter(db, 0)).toEqual(['pass', 'refuse'].map((outcome) => ({ plan: 1, kind: 'bench.dry', actor: 'bench', outcome, message: 'plan 1', pointer: null, run: null })))
   expect(runRows(db)).toEqual([])
+})
+
+const SUITES = 'fuzz-bench/suites/fizz_lean/euler-earn-m01'
+const REGRADED = `plan 1 regraded from ${SUITES}`
+
+/** A done bench plan with no src/ whose archived suite holds SRC and `files`; `planted` lays it at test/fizz. */
+function regradable(files: Record<string, string> = {}): { db: Db; root: string; archive: string } {
+  const root = mkdtempSync(join(tmpdir(), 'cf-regrade-'))
+  cpSync(join(repo, 'seats/fizz_lean_generator/skill'), join(root, 'seats/fizz_lean_generator/skill'), { recursive: true })
+  const db = fresh(join(repo, 'schema'))
+  putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'done', queued_at: AT, step: 4, retries: 0 })
+  put(root, 1, 'target.yml', 'target: euler-earn-m01\ngenerator: fizz_lean\n')
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1 }))
+  const archive = written(join(planDir(root, 1), SUITES), Object.fromEntries(Object.entries({ ...SRC, ...files }).map(([path, text]) => [path.slice('test/fizz/'.length), text])))
+  vi.mocked(fetched).mockImplementation((...[, , into, { suites }]) => { cpSync(suites, join(into, 'test/fizz'), { recursive: true }) })
+  return { db, root, archive }
+}
+
+test('regrade rebuilds from the archive, every row, no run', () => {
+  const { db, root, archive } = regradable()
+  const before = tree(archive)
+  expect(regraded(db, root, 1, fizz())).toBe(table(ROWS, REGRADED))
+  expect(vi.mocked(fetched)).toHaveBeenLastCalledWith(root, 1, join(root, '.cf/regrade/1'), { suites: archive, target: 'fizz' })
+  expect(tree(archive)).toEqual(before)
+  expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
+  expect(runRows(db)).toEqual([])
+})
+
+test('a suite with an unaimed entry point lcov hits is misread', () => {
+  const map = '## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Signatures\n\n- V.deposit(uint256 assets) | at: src/V.sol L7-L9\n'
+  const { db, root } = regradable({ [`${META}/handoff/map.md`]: map, [`${META}/corpus_medusa/coverage/lcov.info`]: 'SF:/repo/src/V.sol\nDA:8,3\nend_of_record\n' })
+  expect(regraded(db, root, 1, fizz()))
+    .toContain('scaffold\tsuite\trefuse suite.misread | scaffold: V.deposit has no raw handler, yet lcov.info hits src/V.sol L7-L9\tmisread\n')
+  expect(ofKind(db, 'bench.regrade').map((e) => e.outcome)).toEqual(['refuse'])
+})
+
+test('a throw refuses the regrade, another rule passes it', () => {
+  const { db, root } = regradable({ [`${META}/corpus_medusa/call_sequences/1.json`]: '[]' })
+  vi.mocked(trackers).mockImplementationOnce(() => { throw new Error('boom') })
+  expect(regraded(db, root, 1, fizz())).toContain('coverage\tprobe readings\trefuse throw | boom\n')
+  vi.mocked(compiled).mockReturnValueOnce([{ rule: 'handoff.ast', note: 'context: forge build --ast failed: boom' }])
+  expect(regraded(db, root, 1, fizz())).toContain('context\tast\trefuse handoff.ast | context: forge build --ast failed: boom\n')
+  expect(ofKind(db, 'bench.regrade')).toEqual(['refuse', 'pass'].map((outcome) => ({ plan: 1, kind: 'bench.regrade', actor: 'bench', outcome, message: REGRADED })))
+})
+
+test('an unregradable plan throws and logs no regrade', async () => {
+  const { db, root } = regradable()
+  vi.mocked(fetched).mockImplementationOnce((await vi.importActual<typeof import('../../../templates/rooted.ts')>('../../../templates/rooted.ts')).planted)
+  expect(() => regraded(db, root, 1, fizz())).toThrow('plan 1 has no checkout.json')
+  rmSync(join(planDir(root, 1), SUITES), { recursive: true })
+  expect(() => regraded(db, root, 1, fizz())).toThrow(`plan 1 has no ${SUITES}`)
+  putPlan(db, { id: 2, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'queued', queued_at: AT, step: 1, retries: 0 })
+  expect(() => regraded(db, root, 2, fizz())).toThrow('plan 2 is not a done bench plan')
+  expect(ofKind(db, 'bench.regrade')).toEqual([])
 })

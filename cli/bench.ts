@@ -6,18 +6,18 @@ import { staffing } from '../sequencer/staffing.ts'
 import { render, sessionDir, split } from '../sequencer/subagents.ts'
 import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { supersede } from '../store/bench.ts'
-import { logged } from '../store/events.ts'
+import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type Holder } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
 import { generated, lastTranscript, runTokens } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
-import { dried } from '../templates/dry.ts'
+import { dried, regraded } from '../templates/dry.ts'
 import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
 import type { Cli } from './cf-lanes.ts'
 
-export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string, stop?: string): number[] {
+export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string, stop?: string, why?: string): number[] {
   const key = staffing(root).find((r) => r.template === 'bench' && r.step === 1 && r.seat === seat)?.key
   if (key === undefined) throw new Error(`${seat} is not a bench generator in rules/staffing.yaml`)
   if (all === (target !== undefined)) throw new Error('cf bench file takes <target> or --all')
@@ -36,9 +36,13 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
     if (missing !== undefined) throw new Error(`fuzz-bench has no targets/${missing}.yml`)
     const refused = target === undefined ? undefined : noSuite(db, root, target, key)
     if (refused !== undefined) throw new Error(`${String(target)}: plan ${String(refused)} refused at step 1 with bench.no_suite`)
-    return names.filter((name) => noSuite(db, root, name, key) === undefined).map((name) => {
+    const filed = names.filter((name) => noSuite(db, root, name, key) === undefined)
+    const gated = seat === 'fizz_lean_generator'
+    if (gated && why === undefined) regateable(db, root, filed, key)
+    return filed.map((name) => {
       const id = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 0 })
       briefed(db, id, { title: `Bench: score ${key} on ${name} (catch / miss / false alarm)`, what: null, why: null, ends: null })
+      if (gated && why !== undefined) logged(db, { plan: id, kind: 'bench.regrade_waived', actor: 'coo', outcome: 'pass', message: why, pointer: null, run: null })
       put(root, id, 'target.yml', `${copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key)}${stop === undefined ? '' : `stop_after: ${stop}\n`}`)
       return id
     })
@@ -49,14 +53,25 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
 
 const field = (yml: string, key: string): string | undefined => [...yml.matchAll(new RegExp(`^${key}: (.+)$`, 'gm'))].at(-1)?.[1]
 
+const latest = (db: Db, root: string, name: string, key: string): number | undefined => plansOf(db, 'bench').reverse().find(({ id }) => {
+  const yml = maybe(root, id, 'target.yml')
+  return yml !== null && field(yml, 'target') === name && field(yml, 'generator') === key
+})?.id
+
 function noSuite(db: Db, root: string, name: string, key: string): number | undefined {
-  const plan = plansOf(db, 'bench').reverse().find(({ id }) => {
-    const yml = maybe(root, id, 'target.yml')
-    return yml !== null && field(yml, 'target') === name && field(yml, 'generator') === key
-  })
+  const plan = latest(db, root, name, key)
   if (plan === undefined) return undefined
-  const last = refusalRows(db, plan.id)[0]
-  return last?.step === 1 && last.span === 'bench.no_suite' ? plan.id : undefined
+  const last = refusalRows(db, plan)[0]
+  return last?.step === 1 && last.span === 'bench.no_suite' ? plan : undefined
+}
+
+function regateable(db: Db, root: string, names: string[], key: string): void {
+  for (const name of names) {
+    const plan = latest(db, root, name, key)
+    if (plan !== undefined && eventsOf(db, plan, 'bench.regrade').at(-1)?.outcome !== 'pass') {
+      throw new Error(`${name}: plan ${String(plan)} has no clean regrade; run cf bench regrade ${String(plan)} or file with --why`)
+    }
+  }
 }
 
 /** The suites folder is the only copy left: the tick reaps `src/` from every done plan. */
@@ -141,8 +156,9 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
   bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
     .requiredOption('--generator <seat>', 'a bench generator in rules/staffing.yaml')
     .option('--stop-after <phase>', 'park a fizz_lean_generator run once this phase hands off')
-    .action((target: string | undefined, options: { all?: boolean; generator: string; stopAfter?: string }) => {
-      for (const id of fileBench(db(), root, target, options.all === true, options.generator, new Date().toISOString(), options.stopAfter)) {
+    .option('--why <text>', 'file a fizz_lean_generator pair whose last run has no clean regrade')
+    .action((target: string | undefined, options: { all?: boolean; generator: string; stopAfter?: string; why?: string }) => {
+      for (const id of fileBench(db(), root, target, options.all === true, options.generator, new Date().toISOString(), options.stopAfter, options.why)) {
         out(`plan ${String(id)}\t${[...get(root, id, 'target.yml').matchAll(/^target: (.*)$/gm)].at(-1)?.[1] ?? ''}\n`)
       }
     })
@@ -173,4 +189,5 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
     .action((plan: string, options: { suite?: string }) => {
       out(dried(db(), root, Number(plan), join(homedir(), '.claude/skills/fizz'), options.suite === undefined ? undefined : Number(options.suite)))
     })
+  bench.command('regrade').argument('<plan>').action((plan: string) => { out(regraded(db(), root, Number(plan), join(homedir(), '.claude/skills/fizz'))) })
 }

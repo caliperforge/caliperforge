@@ -16,7 +16,8 @@ import { readings, trackers } from './probes.ts'
 import { type Item, met, misread, type ProbeReadings, reach, unlocated, unmet, written } from './reach.ts'
 import { callee, rows } from './slices.ts'
 import { smoke, unrun } from './smoke.ts'
-import { harnessed, probed, suite } from './suite.ts'
+import { planted } from './rooted.ts'
+import { harnessed, misaimed, probed, suite } from './suite.ts'
 
 const META = 'test/fizz/fizz_data'
 
@@ -70,13 +71,14 @@ function context(at: Copy): Row[] {
 }
 
 function scaffold(at: Copy): Row[] {
-  const { dir, fizz, map } = at
+  const { dir, fizz, handoffs, map } = at
   return [handed(at, 'scaffold'), ['scaffold', 'ast', checked(at, [], () => compiled(dir, 'scaffold'))],
     ['scaffold', 'layer', () => 'cannot run: needs the map as the phase found it'],
     ['scaffold', 'suite', checked(at, [], () => {
       const found = suite(dir)
       writeFileSync(map, suited(found, read(map)))
-      return [...harnessed(found, read(map)), ...probed(found, read(map))]
+      const lost = misaimed(found, read(map), read(join(handoffs, '../corpus_medusa/coverage/lcov.info')))
+      return lost.length > 0 ? lost : [...harnessed(found, read(map)), ...probed(found, read(map))]
     })],
     grade(at, 'scaffold', 'suite', [join(dir, 'test/fizz/handlers'), join(dir, 'test/fizz/Properties.sol')]),
     ['scaffold', 'smoke', () => {
@@ -142,6 +144,31 @@ function cleared(dir: string): void {
   for (const name of readdirSync(dir).filter((name) => !BUILT.includes(name))) rmSync(join(dir, name), { recursive: true, force: true })
 }
 
+function tabled(db: Db, root: string, plan: number, dir: string, fizz: string): (readonly [string, string, string])[] {
+  const handoffs = join(dir, META, 'handoff')
+  let t: Touched | string | undefined
+  const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), fix: () => t ??= fixed(root, plan, dir) }
+  return [...context(at), ...scaffold(at), ...coverage(at), ...invariants(at), ['end', 'count', checked(at, [], () => counted(dir))] satisfies Row]
+    .map(([phase, check, result]) => [phase, check, result()] as const)
+}
+
+const misreads = (result: string): boolean => (/^refuse (.*?) \| /.exec(result)?.[1] ?? '').split(', ').some((rule) => rule.endsWith('.misread'))
+
+export function regraded(db: Db, root: string, plan: number, fizz: string): string {
+  const { suites, generator, target } = scoredSuite(db, root, plan)
+  const dir = join(root, '.cf/regrade', String(plan))
+  try {
+    planted(root, plan, dir, { suites, target: 'fizz' })
+    const table = tabled(db, root, plan, dir, fizz).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
+    const heading = `plan ${String(plan)} regraded from fuzz-bench/suites/${generator}/${target}`
+    const refused = table.some((row) => row[2].startsWith('refuse throw') || row.length === 4)
+    logged(db, { plan, kind: 'bench.regrade', actor: 'bench', outcome: refused ? 'refuse' : 'pass', message: heading, pointer: null, run: null })
+    return `${heading}\n${table.map((row) => `${row.join('\t')}\n`).join('')}`
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 export function dried(db: Db, root: string, plan: number, fizz: string, scored?: number): string {
   const suites = scored === undefined ? null : scoredSuite(db, root, scored).suites
   const src = [`${join(planDir(root, plan), 'src')}.stopped`, join(planDir(root, plan), 'src')].find((path) => existsSync(path))
@@ -152,11 +179,7 @@ export function dried(db: Db, root: string, plan: number, fizz: string, scored?:
   try {
     cpSync(src, dir, { recursive: true, filter: (from) => !BUILT.some((name) => from === join(src, name) && existsSync(join(dir, name))) })
     if (suites !== null) laid(src, dir, suites)
-    const handoffs = join(dir, META, 'handoff')
-    let t: Touched | string | undefined
-    const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), fix: () => t ??= fixed(root, plan, dir) }
-    const table = [...context(at), ...scaffold(at), ...coverage(at), ...invariants(at), ['end', 'count', checked(at, [], () => counted(dir))] satisfies Row]
-      .map(([phase, check, result]) => [phase, check, result()] as const)
+    const table = tabled(db, root, plan, dir, fizz)
     const heading = scored === undefined ? `plan ${String(plan)}` : `plan ${String(plan)} with plan ${String(scored)}'s suite`
     logged(db, { plan, kind: 'bench.dry', actor: 'bench', outcome: table.some(([, , result]) => result.startsWith('refuse')) ? 'refuse' : 'pass', message: heading, pointer: null, run: null })
     return `${heading}\n${table.map((row) => `${row.join('\t')}\n`).join('')}`

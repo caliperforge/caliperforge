@@ -7,13 +7,15 @@ import { homeOf } from '../../sequencer/home.ts'
 import { dry } from '../../sequencer/index.ts'
 import { get, git, planDir, put, srcDir } from '../../sequencer/workspace.ts'
 import { record } from '../../store/bench.ts'
-import { ofKind } from '../../store/events.ts'
-import type { Db } from '../../store/index.ts'
+import { addRun } from '../../store/brief.ts'
+import { eventsAfter, ofKind } from '../../store/events.ts'
+import { type Db, upsertRule } from '../../store/index.ts'
 import { dial, lanes } from '../../store/lanes.ts'
 import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan, type PlanRow } from '../../store/plans.ts'
 import { fingerprint, refused as refuse } from '../../store/refusals.ts'
+import { runTokens } from '../../store/runs.ts'
 import { dried } from '../../templates/dry.ts'
-import { fileBench, refuzz, rescore } from '../bench.ts'
+import { credit, fileBench, refuzz, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
 import { add } from '../plan.ts'
@@ -269,6 +271,44 @@ test('refuzz D3 the plan waits for 22:00 Guatemala time', () => {
   const would = { pipe: 'refuzz', plan: id, step: 2, template: 'bench' }
   expect(dry(d, new Date('2026-09-18T16:00:00.000Z')).would).not.toContainEqual(would)
   expect(dry(d, new Date('2026-09-19T04:00:00.000Z')).would).toContainEqual(would)
+})
+
+const RUN = { step: 1, seat: 'fizz_generator', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'opus', effort: 'high',
+  input_tokens: 1, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 1, seconds: 1, exit: 0,
+  at: AT, transcript_path: 'x.transcript.jsonl', cost_usd: null }
+
+function creditable(template: PlanRow['template'] = 'bench'): { d: Db; ours: number[]; theirs: number } {
+  const d = fresh(schema)
+  upsertRule(d, { id: RUN.seat, kind: 'card', path: 'seats/seat.md', content_hash: RUN.rule_hash, loaded_at: AT })
+  for (const id of [1, 2]) {
+    putPlan(d, { id, pipe_id: Number(pipeNamed(d, 'bench')?.id), target_id: null, template: id === 1 ? template : 'bench', state: 'done', queued_at: AT, step: 4, retries: 0 })
+  }
+  for (const plan of [1, 1, 1, 2]) addRun(d, { ...RUN, plan })
+  return { d, ours: runTokens(d, 1).map(({ id }) => id), theirs: Number(runTokens(d, 2)[0]?.id) }
+}
+
+const credits = (d: Db): ReturnType<typeof eventsAfter> => eventsAfter(d, 0).filter(({ kind }) => kind === 'bench.credit')
+
+test('credit logs one bench.credit per run, coo, the why', () => {
+  const { d, ours } = creditable()
+  const before = planById(d, 1)
+  credit(d, 1, [ours[2], ours[0], ours[1]].map(Number), 'reach misread')
+  expect(credits(d)).toEqual([2, 0, 1].map((i) =>
+    ({ plan: 1, kind: 'bench.credit', actor: 'coo', outcome: 'pass', message: 'reach misread', pointer: null, run: ours[i] })))
+  expect(planById(d, 1)).toEqual(before)
+})
+
+test('credit refuses a foreign or unknown run, logs none', () => {
+  const { d, ours, theirs } = creditable()
+  expect(() => { credit(d, 1, [...ours, theirs], 'why') }).toThrow(`run ${String(theirs)} is not a run of plan 1`)
+  expect(() => { credit(d, 1, [Number(ours[0]), 999], 'why') }).toThrow('run 999 is not a run of plan 1')
+  expect(credits(d)).toEqual([])
+})
+
+test('credit refuses a non-bench plan and logs nothing', () => {
+  const { d, ours } = creditable('research')
+  expect(() => { credit(d, 1, ours, 'why') }).toThrow('plan 1 is not a bench plan')
+  expect(credits(d)).toEqual([])
 })
 
 test('file D4 a seat that generates no bench is refused', () => {

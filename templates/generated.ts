@@ -5,17 +5,18 @@ import { NETWORK } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { put } from '../sequencer/workspace.ts'
 import { price } from '../store/brief.ts'
+import { setting } from '../store/drift.ts'
 import type { Db } from '../store/index.ts'
 import { LOCKED } from '../store/timed.ts'
 import { spawned } from '../store/transcript.ts'
 import { degraded } from './powered.ts'
 
-const BENCH_COST_WALL_USD = 40
-
 export function costWall(db: Db, provider: string, model: string): CostWall | Outcome {
+  const usd = setting(db, 'bench.cost_wall_usd')
+  if (usd === undefined) return { outcome: 'refuse', spans: ['bench.no_cost_wall'], note: 'no settings row bench.cost_wall_usd' }
   const prices = price(db, provider, model)
   if (prices === undefined) return { outcome: 'refuse', spans: ['bench.unpriced'], note: `no prices row for ${provider} ${model}` }
-  return { usd: BENCH_COST_WALL_USD, ...prices }
+  return { usd: Number(usd), ...prices }
 }
 
 export function costWalled(stop: string | null): string | null {

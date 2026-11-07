@@ -14,10 +14,11 @@ import { record, scores, supersede, type Score } from '../../store/bench.ts'
 import { eventsAfter, eventsOf, logged, runRows, type Event } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
-import { dial } from '../../store/lanes.ts'
+import { dial, set } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
+import { costWall } from '../../templates/generated.ts'
 import { counted, powered } from '../../templates/powered.ts'
 import { KINDS } from '../../templates/report.ts'
 import { drift, mechanisms } from '../drift.ts'
@@ -802,10 +803,30 @@ test('D5 a stop under the ceiling is refused on its reason', async () => {
 
 const COST_WALLED = 'ruling:run.cost_wall stopped the run at $40.10, past the $40 wall'
 
-test('1617b D1 the generate packet carries the $40 cost wall', async () => {
+test('the generate packet carries the cost wall from settings', async () => {
   const fired = stub(1000, 'completed', true)
   await generated(fired)
-  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 40, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
+  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 60, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
+})
+
+test('the cost wall is read from settings, refused without it', async () => {
+  const db = fresh(schema)
+  const prices = { input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 }
+  expect(costWall(db, 'claude-agent-sdk', 'claude-opus-5-5')).toEqual({ usd: 60, ...prices })
+  set(db, 'bench.cost_wall_usd', '75', 'ceo', '2026-11-07')
+  expect(costWall(db, 'claude-agent-sdk', 'claude-opus-5-5')).toEqual({ usd: 75, ...prices })
+  db.exec("DELETE FROM settings WHERE key = 'bench.cost_wall_usd'")
+  expect(costWall(db, 'claude-agent-sdk', 'claude-opus-5-5')).toEqual({ outcome: 'refuse', spans: ['bench.no_cost_wall'],
+    note: 'no settings row bench.cost_wall_usd' })
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  staffedIn(root)
+  checkedOut(root)
+  target(root, { generator: 'fizz' })
+  queued(db, 'bench')
+  const fired = stub(1000, 'completed', true)
+  expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'refuse', spans: ['bench.no_cost_wall'] })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
 })
 
 test('1617b D2 a cost-walled generate passes with its wall', async () => {

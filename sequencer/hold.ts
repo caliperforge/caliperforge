@@ -1,7 +1,9 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { pushed } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane, retried, rewound } from '../store/holds.ts'
+import { reopened } from '../store/reopened.ts'
 import { clearWaitsOn, holdOn, planById, terminal } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
 import { type At, forward } from './forward.ts'
@@ -59,6 +61,7 @@ function repeatAtCheck(db: Db, root: string, plan: number): boolean {
 
 function next(db: Db, root: string, plan: number, actor: string, to?: number): number {
   if (to !== undefined) return rewound(db, plan, to, actor)
+  if (planById(db, plan).state === 'done' && !pushed(db, plan)) return reopened(db, plan, actor)
   return repeatAtCheck(db, root, plan) ? retried(db, plan, actor) : returnToLane(db, plan, actor)
 }
 

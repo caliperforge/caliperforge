@@ -147,21 +147,6 @@
   "symbols.ts": {
     "lines": 43
   },
-  "tests/size.test.ts": {
-    "prepare": 1
-  },
-  "tests/spawns.test.ts": {
-    "prepare": 1
-  },
-  "tests/tick.test.ts": {
-    "prepare": 1
-  },
-  "tests/upgrade.test.ts": {
-    "prepare": 1
-  },
-  "tests/upstream.test.ts": {
-    "prepare": 1
-  },
   "tests/voice.test.ts": {
     "prepare": 1
   },

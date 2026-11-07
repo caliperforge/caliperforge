@@ -26,6 +26,7 @@ import { record, sharing } from '../../store/files.ts'
 import { drop, take } from '../../store/leases.ts'
 import { allEvents, eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { addReview, overrule, verdictRows } from '../../store/verdict.ts'
+import { verdictMessage } from '../../store/trail.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
@@ -480,7 +481,7 @@ test('a review needs_ceo holds for the coo with its question', async () => {
   const w = await ESCALATED()
   expect(plan(w.db, 1)).toMatchObject({ step: 4, state: 'blocked_on_ceo' })
   expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${`${WORDS}\n\n${BLOCK}`.replace(/\s+/g, ' ')}` })
-  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: `${WORDS}\n\n${BLOCK}` })
+  expect(verdictRows(w.db, 1).filter((v) => v.step === 4).map((v) => verdictMessage(w.db, v.id))[0]).toBe(`${WORDS}\n\n${BLOCK}`)
   const plan1 = allEvents(w.db).filter((e) => e.plan === 1)
   expect(plan1.filter((e) => e.actor === 'code_quality').map((e) => e.outcome)).toEqual(['escalate'])
   expect(plan1.filter((e) => e.kind !== 'director' && e.outcome === 'needs_ceo')).toEqual([])

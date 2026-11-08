@@ -476,11 +476,13 @@ test('a report-only check still fixes an unlisted suite row', async () => {
 test('report-only rows list in report.md only when listed', async () => {
   vi.mocked(reach).mockReturnValueOnce([UNMET])
   const { db, root } = await reportOnly(`## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n${OUTSIDE}`)
-  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ report_only: { checks: ONLY.split(','), rows: ROWS } })
-  expect(get(root, 1, 'report.md')).toMatch(/\n## Counted\n\n(- .*\n)+\n## Report-only checks\n\n- checks: suite\.outside; reach\.unmet; reach\.boundary\n- rows: rule suite\.outside, note scaffold: Permit2 .*; rule reach\.boundary, note Guards V\.deposit: passing never seen\n$/)
+  const { report_only: listed, ...unlisted } = JSON.parse(get(root, 1, 'report.json')) as Record<string, unknown>
+  expect(listed).toEqual({ checks: ONLY.split(','), rows: ROWS })
+  const md = get(root, 1, 'report.md')
+  expect(md).toMatch(/\n## Counted\n\n(- .*\n)+\n## Report-only checks\n\n- checks: suite\.outside; reach\.unmet; reach\.boundary\n- rows: rule suite\.outside, note scaffold: Permit2 .*; rule reach\.boundary, note Guards V\.deposit: passing never seen\n$/)
   report(db, root, 1, [], null)
-  expect(JSON.parse(get(root, 1, 'report.json'))).not.toHaveProperty('report_only')
-  expect(get(root, 1, 'report.md')).not.toContain('## Report-only checks')
+  expect(JSON.parse(get(root, 1, 'report.json'))).toStrictEqual(unlisted)
+  expect(get(root, 1, 'report.md')).toBe(md.slice(0, md.indexOf('\n## Report-only checks')))
 })
 
 test('an unlocated reach item refuses before any fix turn', async () => {

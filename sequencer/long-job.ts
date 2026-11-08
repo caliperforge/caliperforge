@@ -22,10 +22,10 @@ interface Job { command: string; out: string; pid: number; at: string }
 
 const jobOf = (root: string, plan: number): Job => JSON.parse(get(root, plan, 'job.json')) as Job
 
-/** Starts a fetcher or measurer reply's `**Run:**` command detached, writing to the reply's `**Output:**` folder. */
-export function launched(db: Db, root: string, plan: PlanRow, reply: string): Outcome {
+/** Starts a fetcher or measurer reply's `**Run:**` command detached, writing to `folder` when given, else the reply's `**Output:**` folder. */
+export function launched(db: Db, root: string, plan: PlanRow, reply: string, folder?: string): Outcome {
   const [command = '', named] = [RUN, OUTPUT].map((line) => line.exec(reply)?.[1]?.trim())
-  const out = named === undefined ? null : work(named)
+  const out = folder ?? (named === undefined ? null : work(named))
   if (out === null) return { outcome: 'refuse', spans: ['research.long_job'], note: '**Run:** needs an **Output:** folder under ~/cf_work/' }
   mkdirSync(out, { recursive: true })
   detach(db, root, plan, command, out)

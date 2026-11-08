@@ -22,7 +22,7 @@ interface Job { command: string; out: string; pid: number; at: string }
 
 const jobOf = (root: string, plan: number): Job => JSON.parse(get(root, plan, 'job.json')) as Job
 
-/** Starts a measurer reply's `**Run:**` command detached, writing to the reply's `**Output:**` folder. */
+/** Starts a fetcher or measurer reply's `**Run:**` command detached, writing to the reply's `**Output:**` folder. */
 export function launched(db: Db, root: string, plan: PlanRow, reply: string): Outcome {
   const [command = '', named] = [RUN, OUTPUT].map((line) => line.exec(reply)?.[1]?.trim())
   const out = named === undefined ? null : work(named)

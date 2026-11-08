@@ -235,7 +235,7 @@ export function unproven(suite: string, name: string): Outcome | number {
 
 const WORKERS = 4
 
-function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
+export function medusa(db: Db, plan: number | null, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
   const installed = !existsSync(join(src, 'medusa.json'))
   const path = join(src, installed ? suite : '', 'medusa.json')
   if (!existsSync(path)) return null

@@ -32,8 +32,8 @@ function ruled(issue: string): string {
 }
 
 export function stray(root: string, plan: PlanRow, text: string): string | null {
-  const file = (path: string) => statSync(join(root, path.replace(/(?::\d+(?:-\d+)?)?[.,;:]*$/, '')), { throwIfNoEntry: false })?.isFile() === true
-  return [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id) && !file(m[0]))?.[0] ?? null
+  const exists = (path: string) => statSync(join(root, path.replace(/(?::\d+(?:-\d+)?)?[.,;:]*$/, '')), { throwIfNoEntry: false }) !== undefined
+  return [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id) && !exists(m[0]))?.[0] ?? null
 }
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {

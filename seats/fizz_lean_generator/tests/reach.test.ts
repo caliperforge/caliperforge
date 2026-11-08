@@ -60,12 +60,6 @@ test('D4: entry rows carry typed reverts, line and success %', () => {
   expect(keys(unmet(MAP, items))).not.toContain(WITHDRAW)
 })
 
-test('a guard reads passing from the next DA line', () => {
-  const lcov = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'lcov.info')
-  writeFileSync(lcov, readFileSync(join(fixtures, 'lcov.info'), 'utf8').replace('DA:15,0\n', ''))
-  expect(at(judged(PROBES, REPORT, MAP, lcov), 'Guards V.withdraw')).toMatchObject({ met: true, cells: ['passing: yes', 'reverting: yes'] })
-})
-
 const reported = (fns: Record<string, [calls: number, reverts: number, reason: string]>): string => {
   const report = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'revert_report.json')
   writeFileSync(report, JSON.stringify({ contractRevertMetrics: { FuzzTester: { functionRevertMetrics: Object.fromEntries(Object.entries(fns).map(([fn, [calls, reverts, reason]]) =>
@@ -73,14 +67,21 @@ const reported = (fns: Record<string, [calls: number, reverts: number, reason: s
   return report
 }
 
-test('a guard reads a qualified error from any handler', () => {
+test('a guard reads passing from its handler\'s successful calls', () => {
+  expect(at(judged(), 'Guards V.withdraw')).toMatchObject({ met: true, cells: ['passing: yes', 'reverting: yes'] })
+  const report = reported({ v_withdraw: [30, 30, 'panic: arithmetic underflow/overflow'] })
+  expect(at(judged(PROBES, report), 'Guards V.withdraw')).toMatchObject({ met: false, cells: ['passing: no', 'reverting: yes'],
+    note: 'Guards V.withdraw: passing never seen' })
+})
+
+test('a guard reads every error its span names from any handler', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-reach-'))
   mkdirSync(join(root, 'src'))
-  writeFileSync(join(root, 'src/E.sol'), 'function _supplyStrategy() internal {\n    revert ErrorsLib.AllCapsReached();\n}\n')
+  writeFileSync(join(root, 'src/E.sol'), 'function _supplyStrategy() internal {\n    revert ErrorsLib.NotAllowed();\n    revert ErrorsLib.AllCapsReached();\n}\n')
   const name = 'EulerEarn._deposit / _supplyStrategy (shared by deposit, mint)'
-  const map = `## Guards\n\n- ${name} | at: src/E.sol L2-L2\n\n## Handlers\n\n- FuzzTester.eulerEarn_deposit | target: EulerEarn.deposit\n`
+  const map = `## Guards\n\n- ${name} | at: src/E.sol L2-L3\n\n## Handlers\n\n- FuzzTester.eulerEarn_deposit | target: EulerEarn.deposit\n`
   const items = reach(root, map, join(fixtures, 'lcov.info'), reported({ eulerEarn_deposit: [10, 4, 'AllCapsReached()'] }), PROBES)
-  expect(at(items, `Guards ${name}`)?.cells).toEqual(['passing: no', 'reverting: yes'])
+  expect(at(items, `Guards ${name}`)?.cells).toEqual(['passing: yes', 'reverting: yes'])
 })
 
 test('entry figures read only the handlers aimed at it', () => {
@@ -123,11 +124,10 @@ test('a row with no range is reach.unlocated, not a throw', () => {
 test('D5: unmet drops only a filled Unreachable reason', () => {
   const items = judged()
   expect(unmet(MAP, items).map(({ key, reverts }) => ({ key, reverts }))).toEqual([{ key: 'Guards V.deposit', reverts: [] },
-    { key: 'Guards V.withdraw', reverts: ['panic: arithmetic underflow/overflow [other] 28'] }, { key: 'Limits V.CAP', reverts: [] },
-    { key: 'Conversion points V.convertToAssets', reverts: [] }])
+    { key: 'Limits V.CAP', reverts: [] }, { key: 'Conversion points V.convertToAssets', reverts: [] }])
   expect(keys(unmet(unreachable(MAP, ['Guards V.deposit | reason: CAP needs 1e24 of deposits']), items))).not.toContain('Guards V.deposit')
   for (const reason of ['', '<why>']) expect(keys(unmet(unreachable(MAP, [`Guards V.deposit | reason: ${reason}`]), items))).toContain('Guards V.deposit')
-  expect(met(MAP, items)).toMatchObject({ met: false, reasons: expect.arrayContaining(['Guards V.withdraw: passing never seen']) as string[] })
+  expect(met(MAP, items)).toMatchObject({ met: false, reasons: expect.arrayContaining(['Guards V.deposit: reverting never seen']) as string[] })
   expect(met(unreachable(MAP, unmet(MAP, items).map((i) => `${i.key} | reason: no input reaches it`)), items)).toEqual({ met: true, reasons: [] })
 })
 

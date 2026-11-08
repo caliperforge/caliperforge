@@ -1658,6 +1658,7 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7, broken: 0, flaky: 0,
     seeds: [{ seed: 1, catch: 0, ...none, silent: 3, calls, seconds }, { seed: 2, catch: 3, ...none, silent: 0, calls, seconds }],
     union: { catch: 3, ...none, flaky: 0, silent: 0 } })
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: { catch: 3, flaky: 0, p1: ['silent', 'catch'] } })
   expect(runRows(db)).toEqual([])
 })
 
@@ -1720,7 +1721,7 @@ test('seeds D2 the union counts, the smallest seed is powered', () => {
 })
 
 /** pre_fix and fix on each of two seeds: four probes fail on both, mint and deposit_full differ by seed. */
-const PROBES ={ ...Object.fromEntries([1, 2, 3, 4].map((n) => [`property_probe${String(n)}`, [['fail', 'fail'], ['fail', 'fail']]])),
+const PROBES = {...Object.fromEntries([1, 2, 3, 4].map((n) => [`property_probe${String(n)}`, [['fail', 'fail'], ['fail', 'fail']]])),
   'assert:eulerEarn_mint': [['pass', 'fail'], ['fail', 'fail']], 'assert:eulerEarn_deposit_full': [['fail', 'pass'], ['pass', 'fail']],
   ...Object.fromEntries(['clamped', 'full', 'twoSources'].map((s) => [`assert:publicAllocator_reallocateTo_${s}`, [['fail', 'pass'], ['fail', 'pass']]])),
   'assert:eulerEarn_withdraw': [['pass', 'pass'], ['pass', 'pass']], 'assert:eulerEarn_redeem': [[null, null], [null, null]] }

@@ -17,7 +17,7 @@ import { costWalled, faulted, net, refired, refiring, tallied } from './generate
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
 import { grader } from './missed.ts'
-import { duplicated, packets, planned } from './plan.ts'
+import { BATCHES, batches, bulleted, crashed, duplicated, implemented, packets, planned, skeleton } from './plan.ts'
 import type { Step } from './pr-path.ts'
 import { readings, trackers } from './probes.ts'
 import { met, misread, reach, unlocated, unmet, written } from './reach.ts'
@@ -46,7 +46,7 @@ const MAP = 'map.md'
 
 const EXCERPTS = 'excerpts'
 
-export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number; refire?: string }
+export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number; refire?: string; batched?: boolean }
 
 export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling, refire }: Bench, manifest: Seat, hash: string, map?: Range[]): Fire {
   return async (prompt, issue, sum, phase) => {
@@ -68,11 +68,11 @@ function added(sum: Sum, fired: Fired, transcript: string, who: string, ceiling:
   const next = { ...sum, tokens: sum.tokens + fired.usage.input + fired.usage.output, seconds: sum.seconds + fired.seconds, usd: sum.usd + (fired.usage.cost ?? 0),
     transcripts: [...sum.transcripts, transcript], wall: costWalled(fired.stop_reason) }
   if (next.tokens >= ceiling) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${who} hit the ${String(ceiling)}-token ceiling at ${String(next.tokens)} tokens` }
-  if (next.wall === null && fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${who} ${fired.ended}` }
+  if (next.wall === null && fired.ended !== 'completed') return crashed({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${who} ${fired.ended}` }, next)
   return next
 }
 
-interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; map?: string }
+export interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; map?: string }
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
@@ -92,17 +92,15 @@ function facts({ phase, root, path, map }: Pick<Phase, 'phase' | 'root' | 'path'
   return refused
 }
 
-const listed = (refused: Refused[]): string => refused.map((r) => `- ${r.rule}: ${r.note}`).join('\n')
-
 async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = []): Promise<Sum | Outcome> {
-  const issue = refused.length === 0 ? at.issue : `${at.issue}\nYour handoff was refused:\n${listed(refused)}`
+  const issue = refused.length === 0 ? at.issue : `${at.issue}\nYour handoff was refused:\n${bulleted(refused)}`
   const ran = await fire(at.prompt, issue, sum, at.phase)
   if ('outcome' in ran || ran.wall !== null) return ran
   const handed = [...handoff(at.skill, at.phase, read(at.path)), ...facts(at)]
   if (handed.length === 0) return ran
-  if (listed(handed) !== listed(refused)) return checked(fire, at, ran, handed)
+  if (bulleted(handed) !== bulleted(refused)) return checked(fire, at, ran, handed)
   return { outcome: 'needs_coo', spans: [...new Set(handed.map((r) => r.rule))], note: `${at.phase} handoff refused twice on the same span`,
-    message: `Refused:\n${listed(refused)}\n\nRefused again:\n${listed(handed)}` }
+    message: `Refused:\n${bulleted(refused)}\n\nRefused again:\n${bulleted(handed)}` }
 }
 
 const FACTS = ['Limits', 'Outside dependencies', 'Conversion points']
@@ -207,8 +205,9 @@ const ENTRY = 'Selected entry points '
 
 async function invariant(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, at: Phase, sum: Sum): Promise<Sum | Outcome> {
   const [map, cut, plan, reports] = [join(handoffs, MAP), join(handoffs, EXCERPTS), join(handoffs, 'plan.md'), join(handoffs, '../reports')]
-  slices(read(map), cut, sections(read(map)).filter(([name]) => LAID.includes(name)).map(([, s]) => s.trimEnd()).join('\n\n'), join(reports, 'slices'))
   const fire = firing(bench, manifest, hash, ranges(read(map)))
+  if (bench.batched === true && existsSync(join(handoffs, BATCHES))) return implemented({ fire, at, end: ending(at) }, handoffs, sum)
+  slices(read(map), cut, sections(read(map)).filter(([name]) => LAID.includes(name)).map(([, s]) => s.trimEnd()).join('\n\n'), join(reports, 'slices'))
   const planning = `Run Steps 9a-9c only, and end once the Synthesizer has written ${plan} from the \`# Plan\` block of ${join(skill, TEMPLATES)}.`
   const first = await fire(at.prompt, at.issue.replace(ending(at), planning), sum, 'invariants-plan')
   if ('outcome' in first || first.wall !== null) return first
@@ -221,8 +220,9 @@ async function invariant(bench: Bench, manifest: Seat, hash: string, skill: stri
   const got = await fixes.fix({ name: 'synthesizer', rules: machine(skill, 'invariants'), facts: '', run: () => planned(read(plan), read(map), names, unreached).refused })
   if (!('turns' in got)) return got
   for (const name of planned(read(plan), read(map), names, unreached).flagged) fixes.log('plan.flagged', 'pass', name)
-  const fizz = bench.granted.find((path) => basename(path) === 'fizz') ?? ''
-  const { global, specific } = packets(read(plan), read(map), cut, read(join(fizz, 'references/property-generation.md')), names)
+  const guide = read(join(bench.granted.find((path) => basename(path) === 'fizz') ?? '', 'references/property-generation.md'))
+  if (bench.batched === true) return implemented({ fire, at, end: ending(at) }, handoffs, fixes.sum, batches(read(plan), read(map), cut, skeleton(root, names), guide))
+  const { global, specific } = packets(read(plan), read(map), cut, guide, names)
   const leg: Phase = { ...at, map: read(map), issue: [at.issue, 'Run Steps 9d-9e.', `## Global packet\n\n${global}`, `## Specific packet\n\n${specific}`].join('\n') }
   const ran = await checked(fire, leg, fixes.sum)
   if ('outcome' in ran || ran.wall !== null) return ran

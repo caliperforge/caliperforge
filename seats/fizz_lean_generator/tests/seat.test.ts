@@ -92,8 +92,9 @@ test('D1: the manifest loads past its digests', () => {
   })
 })
 
-test('D2: fizz_lean staffs the lean seat and fizz stays fizz', () => {
+test('D2: both lean keys staff the lean seat, fizz stays fizz', () => {
   expect(staffed(root, 'bench', 1, 'fizz_lean')).toEqual({ seat: 'fizz_lean_generator' })
+  expect(staffed(root, 'bench', 1, 'fizz_lean_v5')).toEqual({ seat: 'fizz_lean_generator' })
   expect(staffed(root, 'bench', 1, 'fizz')).toEqual({ seat: 'fizz_generator' })
 })
 

@@ -130,6 +130,22 @@ test('undone refuses a cannot-be-done D row and names it', () => {
   expect(verdict.message).toBe('cannot-be-done: D2')
 })
 
+const ruling = (id: string): string => `# Ask\n\n- D2 the case\n\n## Answer from the director (2026-11-08)\n\n${id} is accepted as checked post-merge.\n`
+
+test('undone passes a cannot-be-done row a ruling accepts', () => {
+  expect(undone(cannot('D2'), false, ruling('D2')).outcome).toBe('pass')
+})
+
+test('undone refuses a cannot-be-done row no ruling names', () => {
+  for (const issue of [ruling('D3'), '# Ask\n\n- D2 the case\n']) {
+    const verdict = undone(cannot('D2'), false, issue)
+    expect(verdict.spans).toEqual(['D2'])
+    expect(verdict.message).toBe('cannot-be-done: D2')
+  }
+  const two = cannot('D2').replace('status: done', 'status: cannot-be-done')
+  expect(undone(two, false, ruling('D2')).spans).toEqual(['D1'])
+})
+
 test('undone passes a cannot-be-done G row', () => {
   expect(undone(cannot('G1'), false).outcome).toBe('pass')
 })

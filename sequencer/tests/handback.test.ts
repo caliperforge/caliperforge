@@ -163,6 +163,15 @@ test('a cannot-be-done hand-back stops for the director', async () => {
   expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: cannot-be-done: /)
 })
 
+test('a cannot-be-done row a director ruling accepts runs on', async () => {
+  const w = await atBuild()
+  await tick(w.db, w.root, stub(CANNOT))
+  put(w.root, 1, 'issue.md', `${get(w.root, 1, 'issue.md')}\n## Answer from the director (2026-11-08)\n\nD2 is accepted as checked post-merge.\n`)
+  await tick(w.db, w.root, stub(CANNOT), undefined, undefined, watched([], w.root, 1))
+  expect(verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')?.outcome).toBe('pass')
+  expect(plan(w.db, 1).state).not.toBe('blocked_on_ceo')
+})
+
 test('D5 an unmoved diff after a new ruling stops at step 3', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, stub(UNPOINTED))

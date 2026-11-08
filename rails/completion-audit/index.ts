@@ -37,7 +37,7 @@ export function audit(handback: string, expected: string[], prev = '', diff = ''
   return refuse(subject, spans, `${spans.join(', ')} expected by the ticket, absent from the handback or carried with no pointer`)
 }
 
-export function undone(handback: string, unmoved: boolean): Verdict {
+export function undone(handback: string, unmoved: boolean, issue = ''): Verdict {
   const subject = createHash('sha256').update(handback).digest('hex')
   const line = /^[-*>_ ]*Not done.*$/m.exec(handback)?.[0]
   if (line !== undefined) return refuse(subject, ['step-2.handback.md'], line.trim())
@@ -45,10 +45,14 @@ export function undone(handback: string, unmoved: boolean): Verdict {
   const listed = typeof rows === 'string' ? [] : [...rows.values()]
   const wrong = listed.find((row) => row.status === 'brief-wrong')
   if (wrong !== undefined) return refuse(subject, [wrong.id], `brief-wrong: ${(wrong.why ?? '').trim()}`)
-  const cannot = listed.filter((row) => /^D\d+$/.test(row.id) && row.status === 'cannot-be-done').map((row) => row.id)
+  const cannot = listed.filter((row) => /^D\d+$/.test(row.id) && row.status === 'cannot-be-done' && !accepted(issue, row.id)).map((row) => row.id)
   if (cannot.length > 0) return refuse(subject, cannot, `cannot-be-done: ${cannot.join(', ')}`)
   if (unmoved) return refuse(subject, ['rulings.md'], 'rulings.md changed since the last step-3 lap and the diff did not')
   return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest: subject, spans: [], message: 'no case handed back not done' }
+}
+
+function accepted(issue: string, id: string): boolean {
+  return issue.split(/^(?=## )/m).some((section) => /^## (?:Ruling|Answer from the director)/.test(section) && new RegExp(`\\b${id}\\b`).test(section))
 }
 
 function refuse(subject: string, spans: string[], message: string): Verdict {

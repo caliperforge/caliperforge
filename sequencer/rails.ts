@@ -76,7 +76,7 @@ export function unbuilt(root: string, plan: number): boolean {
 }
 
 function completed(db: Db, root: string, plan: number, handback: string, diff: string): Outcome | null {
-  const stop = undone(handback, judged(root, plan, diff, handback))
+  const stop = undone(handback, judged(root, plan, diff, handback), get(root, plan, 'issue.md'))
   if (stop.outcome !== 'pass') {
     record(db, plan, stop, 0)
     return { outcome: 'needs_ceo', spans: stop.spans, note: `completion-audit: ${stop.message}` }

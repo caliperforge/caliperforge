@@ -248,3 +248,38 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D7: a fresh forge build reads
   ])
   expect([found.handlers, found.trackers]).toEqual([FOUND.handlers, FOUND.trackers])
 }, 300_000)
+
+const LIMITS = 'test/fizz/probes/LimitsProbes.sol'
+const HEAD = /^abstract contract (\w+)[^{]*\{(?:\}|[\s\S]*?\n\})/gm
+const LIMITED = [
+  { start: 4, end: 4, name: 'ProbeEntropy', cites: null },
+  { start: 7, end: 12, name: 'ProbeMaxTimelock', cites: 'ConstantsLib.MAX_TIMELOCK' },
+  { start: 15, end: 20, name: 'ProbeMaxFee', cites: 'ConstantsLib.MAX_FEE' },
+  { start: 24, end: 29, name: 'ProbeMaxQueueLength', cites: null },
+  { start: 31, end: 31, name: 'Probes', cites: null },
+].map((p) => ({ file: LIMITS, ...p, trackers: [], calls: [] }))
+
+function limited(built = true): string {
+  const root = project(built)
+  const source = readFileSync(join(fixtures, 'LimitsProbes.sol'), 'utf8')
+  mkdirSync(join(root, 'test/fizz/probes'))
+  copyFileSync(join(fixtures, 'LimitsProbes.sol'), join(root, LIMITS))
+  const nodes = [...source.matchAll(HEAD)].map((m, i) => ({ nodeType: 'ContractDefinition', src: `${String(m.index)}:${String(m[0].length)}:0`, id: i + 1, name: m[1], nodes: [] }))
+  if (built) mkdirSync(join(root, 'out/LimitsProbes.sol'))
+  if (built) writeFileSync(join(root, 'out/LimitsProbes.sol/LimitsProbes.json'), JSON.stringify({ ast: { nodeType: 'SourceUnit', src: '0:0:0', id: 0, absolutePath: LIMITS, nodes } }))
+  return root
+}
+
+test('a probe cited on the line above its abstract head is read', () => {
+  const found = suite(limited())
+  expect(found.probes).toEqual(LIMITED)
+  expect(probed(found, map({ Limits: ['MAX_TIMELOCK', 'MAX_FEE', 'MAX_QUEUE_LENGTH'].map((c) => `- ConstantsLib.${c}`).join('\n') }))).toEqual([
+    { rule: 'suite.probe', note: 'scaffold: ## Limits ConstantsLib.MAX_QUEUE_LENGTH has no probe' },
+  ])
+})
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('a fresh forge build reads probes cited above their heads', () => {
+  const root = limited(false)
+  expect(compiled(root)).toEqual([])
+  expect(suite(root).probes).toEqual(LIMITED)
+}, 300_000)

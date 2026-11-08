@@ -20,7 +20,7 @@ interface Solc extends Node { arguments?: Node[]; stateMutability?: string; righ
 
 interface Part extends Member { bytes: (node: Node) => string }
 
-interface Contract { name: string; at: At; text: string; members: Part[] }
+interface Contract { name: string; at: At; above: string; text: string; members: Part[] }
 
 interface Medusa { compilation?: { platform?: string; platformConfig?: { target?: string; args?: string[] } } }
 
@@ -56,9 +56,10 @@ function contracts(root: string, file: string, unit: Node): Contract[] {
     const [start = 0, length = 0] = node.src.split(':').map(Number)
     return source.subarray(start, start + length).toString()
   }
+  const above = (node: Node): string => source.subarray(0, Number(node.src.split(':')[0])).toString().split('\n').at(-2) ?? ''
   return membersOf(file, source, { ...unit, nodes: [{ ...unit, nodeType: 'ContractDefinition' }] })
     .filter((c) => c.node.nodeType === 'ContractDefinition')
-    .map((c) => ({ name: c.node.name ?? '', at: c.at(c.node), text: bytes(c.node), members: membersOf(file, source, { ...unit, nodes: [c.node] }).map((m) => ({ ...m, bytes })) }))
+    .map((c) => ({ name: c.node.name ?? '', at: c.at(c.node), above: above(c.node), text: bytes(c.node), members: membersOf(file, source, { ...unit, nodes: [c.node] }).map((m) => ({ ...m, bytes })) }))
 }
 
 function harness(root: string): Contract[] {
@@ -124,7 +125,7 @@ const standIn = (c: Contract): Suite['standIns'][number] => ({ ...c.at, name: c.
 const external = (n: Solc): boolean => n.expression?.nodeType === 'MemberAccess'
   && (contractOf(n.expression.expression) !== '' || ADDRESS.test(type(n.expression.expression)))
 
-const probe = (c: Contract): Suite['probes'][number] => ({ ...c.at, name: c.name, cites: CITES.exec(c.text)?.[1] ?? null,
+const probe = (c: Contract): Suite['probes'][number] => ({ ...c.at, name: c.name, cites: CITES.exec(c.above)?.[1] ?? CITES.exec(c.text)?.[1] ?? null,
   trackers: c.members.filter((m) => m.node.nodeType === 'VariableDeclaration' && m.node.constant !== true && contractOf(m.node) === '').map((m) => m.name),
   calls: c.members.flatMap((m) => calls(m.node).filter(external).map(m.bytes)) })
 

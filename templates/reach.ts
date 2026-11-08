@@ -5,7 +5,7 @@ import { laid, RANGE } from './map.ts'
 import type { Reach } from './report.ts'
 import { callee, NONE, type Row, rows } from './slices.ts'
 
-export interface ProbeReadings { limits: Record<string, { max: bigint }>; conversions: Record<string, { min: bigint; max: bigint; saw1Wei: boolean }> }
+export interface ProbeReadings { limits: Record<string, { max: bigint }>; conversions: Record<string, { min: bigint; max: bigint; saw1Wei: boolean }>; held?: Record<string, string> }
 
 export interface Item { key: string; met: boolean; cells: string[]; note: string; reverts: string[]; located: boolean; misread: boolean }
 
@@ -102,16 +102,23 @@ function guard({ root, rows: map, metrics, all }: Read, row: Row): Judged {
     note: [...(passing ? [] : ['passing never seen']), ...(reverting ? [] : ['reverting never seen'])].join(', ') }
 }
 
+function unread({ held }: ProbeReadings, name: string): Judged {
+  const said = held?.[name]
+  return said === undefined ? { met: false, cells: [], note: 'no probe reading', misread: false }
+    : { met: false, cells: [`probe: ${said}`], note: `probe: ${said}, no tracker reading`, misread: false }
+}
+
 function limit({ probes }: Read, { name, cells }: Row): Judged {
   const [probe, bound] = [probes.limits[name], integer(cells.get('bound') ?? '')]
-  if (probe === undefined || bound === undefined) return { met: false, cells: [], note: probe === undefined ? 'no probe reading' : 'bound has no integer literal', misread: false }
+  if (probe === undefined) return unread(probes, name)
+  if (bound === undefined) return { met: false, cells: [], note: 'bound has no integer literal', misread: false }
   const met = (probe.max > bound ? probe.max - bound : bound - probe.max) * 100n <= bound
   return { met, cells: [`bound: ${String(bound)}`, `max: ${String(probe.max)}`], note: `max ${String(probe.max)} is not within 1% of ${String(bound)}`, misread: false }
 }
 
 function conversion({ probes }: Read, { name }: Row): Judged {
   const probe = probes.conversions[name]
-  if (probe === undefined) return { met: false, cells: [], note: 'no probe reading', misread: false }
+  if (probe === undefined) return unread(probes, name)
   const notes = [...(probe.saw1Wei ? [] : ['no 1-wei case']), ...(probe.max >= WIDE ? [] : ['max below 1e24'])]
   return { met: notes.length === 0, cells: [`min: ${String(probe.min)}`, `max: ${String(probe.max)}`, `1 wei: ${yes(probe.saw1Wei)}`], note: notes.join(', '), misread: false }
 }

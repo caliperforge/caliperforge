@@ -270,6 +270,26 @@ test("the scored reach reads the probe pass's readings", async () => {
   vi.mocked(reach).mockImplementation(() => [])
 })
 
+test("only the scored reach reads report.json's probe readings", async () => {
+  const corpus = `${META}/corpus_medusa`
+  const { db, root } = regradable({ [`${META}/handoff/map.md`]: '## Limits\n\n- V.CAP | bound: 5\n', [`${corpus}/call_sequences/1.json`]: '[]',
+    [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{"contractRevertMetrics":{}}',
+    'test/fizz/Probes.sol': '// probe: V.CAP\nabstract contract ProbeCap {\n    function read_probeCap() internal pure returns (bool) { return true; }\n}\n' })
+  vi.mocked(suite).mockImplementation(() => ({ ...EMPTY, probes: [{ file: 'test/fizz/Probes.sol', start: 2, end: 4, name: 'ProbeCap', cites: 'V.CAP', trackers: [], calls: [] }] }))
+  vi.mocked(reach).mockImplementation((await vi.importActual<typeof import('../../../templates/reach.ts')>('../../../templates/reach.ts')).reach)
+  const row = (name: string, note: string): string => `coverage\treach ${name}\trefuse reach.unmet | Limits V.CAP: ${note}\n`
+  put(root, 1, 'report.json', JSON.stringify({ probes: { property_probeCap: 'true on 3 of 4 sequences' } }))
+  const out = regraded(db, root, 1, fizz())
+  expect(out).toContain(row('scored', 'probe: property_probeCap true on 3 of 4 sequences, no tracker reading'))
+  expect(out).toContain(row('smoke', 'no probe reading'))
+  put(root, 1, 'report.json', JSON.stringify({ probes: '-' }))
+  expect(regraded(db, root, 1, fizz())).toContain(row('scored', 'no probe reading'))
+  rmSync(join(planDir(root, 1), 'report.json'))
+  expect(regraded(db, root, 1, fizz())).toContain(row('scored', 'no probe reading'))
+  vi.mocked(suite).mockImplementation(() => EMPTY)
+  vi.mocked(reach).mockImplementation(() => [])
+})
+
 test('a regrade with no out/ refuses the coverage rows', () => {
   const corpus = `${META}/corpus_medusa`
   const { db, root } = regradable({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{}' }, false)

@@ -58,9 +58,9 @@ test('D2: probes sharing a cite merge max, min and saw1Wei', () => {
   expect(readings(rows, values)).toEqual({ limits: {}, conversions: { 'V.x': { min: 1n, max: 7n, saw1Wei: true } } })
 })
 
-test('D3: a missing value stays 0n or false, max-only is a limit', () => {
+test('D3: a cite with no value is left out, a missing one stays 0n', () => {
   const rows = [...ROWS, row('ProbeLoose', null, ['maxLoose'])]
-  expect(readings(rows, new Map([['ProbeConvert.minAssets', 4n], ['ProbeLoose.maxLoose', 9n]]))).toEqual({ limits: { 'V.CAP': { max: 0n } },
+  expect(readings(rows, new Map([['ProbeConvert.minAssets', 4n], ['ProbeLoose.maxLoose', 9n]]))).toEqual({ limits: {},
     conversions: { 'V.convertToAssets': { min: 4n, max: 0n, saw1Wei: false } } })
 })
 

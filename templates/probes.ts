@@ -52,6 +52,7 @@ export function readings(probes: Suite['probes'], values: Map<string, Value>): P
   const read: ProbeReadings = { limits: {}, conversions: {} }
   for (const cite of new Set(probes.flatMap((p) => p.cites ?? []))) {
     const seen = probes.filter((p) => p.cites === cite).flatMap((p) => p.trackers).flatMap((t) => { const v = values.get(t); return v === undefined ? [] : [{ t: bare(t), v }] })
+    if (seen.length === 0) continue
     const ints = (prefix: string): bigint[] => seen.flatMap(({ t, v }) => typeof v === 'bigint' && t.startsWith(prefix) ? [v] : [])
     const [maxes, mins, saws] = [ints('max'), ints('min'), seen.flatMap(({ v }) => typeof v === 'boolean' ? [v] : [])]
     const max = maxes.reduce(larger, 0n)

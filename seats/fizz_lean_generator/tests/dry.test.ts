@@ -253,6 +253,23 @@ test("regrade judges reach on the scored corpus and on smoke's", () => {
   expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
 })
 
+test("the scored reach reads the probe pass's readings", async () => {
+  const corpus = `${META}/corpus_medusa`
+  const { db, root } = regradable({ [`${META}/handoff/map.md`]: '## Limits\n\n- V.CAP | bound: 5\n', [`${corpus}/call_sequences/1.json`]: '[]',
+    [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{"contractRevertMetrics":{}}' })
+  const probes = [{ file: 'test/fizz/Probes.sol', start: 1, end: 1, name: 'ProbeCap', cites: 'V.CAP', trackers: ['ProbeCap.maxTotal'], calls: [] }]
+  vi.mocked(suite).mockImplementation(() => ({ ...EMPTY, probes }))
+  vi.mocked(trackers).mockClear().mockImplementation(() => new Map([['ProbeCap.maxTotal', 5n]]))
+  vi.mocked(reach).mockImplementation((await vi.importActual<typeof import('../../../templates/reach.ts')>('../../../templates/reach.ts')).reach)
+  const out = regraded(db, root, 1, fizz())
+  expect(vi.mocked(trackers).mock.calls).toEqual([[join(root, '.cf/regrade/1'), join(root, '.cf/regrade/1', corpus)]])
+  expect(out).toContain('coverage\treach scored\tpass\n')
+  expect(out).not.toContain('no probe reading')
+  vi.mocked(suite).mockImplementation(() => EMPTY)
+  vi.mocked(trackers).mockImplementation(() => new Map())
+  vi.mocked(reach).mockImplementation(() => [])
+})
+
 test('a regrade with no out/ refuses the coverage rows', () => {
   const corpus = `${META}/corpus_medusa`
   const { db, root } = regradable({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{}' }, false)

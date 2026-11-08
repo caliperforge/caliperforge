@@ -98,28 +98,30 @@ function scaffold(at: Copy): Row[] {
     ['scaffold', 'critic.stand_in', checked(at, [], () => critic(join(fizz, 'references/critic-pass.md'), dir, 'critic.stand_in'))]]
 }
 
-function reaching(at: Copy, name: string, corpus: string): [probe: Row, reach: Row, boundary: Row] {
-  const { dir, map } = at
-  const [sequences, lcov, report] = [join(corpus, 'call_sequences'), join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json')]
-  let [probes, items]: [ProbeReadings | undefined, Item[] | undefined] = [undefined, undefined]
-  const probing = (): ProbeReadings => probes ??= readings(suite(dir).probes, trackers(dir, corpus))
+const built = (dir: string, run: () => Refused[]) => (): Refused[] => existsSync(join(dir, 'out')) ? run() : UNBUILT
+
+function reaching(at: Copy, name: string, corpus: string, probing: () => ProbeReadings): [reach: Row, boundary: Row] {
+  const { dir, handoffs, map } = at
+  const [lcov, report] = [join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json')]
+  const needs = [lcov, report, join(handoffs, '../corpus_medusa/call_sequences')]
+  let items: Item[] | undefined
   const reached = (): Item[] => items ??= reach(dir, read(map), lcov, report, probing())
-  const built = (run: () => Refused[]) => (): Refused[] => existsSync(join(dir, 'out')) ? run() : UNBUILT
-  return [['coverage', 'probe readings', checked(at, [sequences], built(() => { probing(); return [] }))],
-    ['coverage', `reach ${name}`, checked(at, [lcov, report, sequences], built(() => {
-      writeFileSync(map, written(read(map), reached()))
-      return [...unlocated(reached()), ...misread(reached()), ...unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))]
-    }))],
-    ['coverage', `boundary ${name}`, checked(at, [lcov, report, sequences], built(() => [...unlocated(reached()), ...misread(reached()),
-      ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))]))]]
+  return [['coverage', `reach ${name}`, checked(at, needs, built(dir, () => {
+    writeFileSync(map, written(read(map), reached()))
+    return [...unlocated(reached()), ...misread(reached()), ...unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))]
+  }))],
+  ['coverage', `boundary ${name}`, checked(at, needs, built(dir, () => [...unlocated(reached()), ...misread(reached()),
+    ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))]))]]
 }
 
 function coverage(at: Copy): Row[] {
-  const { handoffs } = at
+  const { dir, handoffs } = at
   const corpus = join(handoffs, '../corpus_medusa')
-  const [probe, ...ran] = reaching(at, 'smoke', corpus)
-  const scored = at.scored === null ? [] : reaching(at, 'scored', at.scored).slice(1)
-  return [handed(at, 'coverage'), probe, ...scored, ...ran, grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), join(corpus, 'coverage/lcov.info')])]
+  let probes: ProbeReadings | undefined
+  const probing = (): ProbeReadings => probes ??= readings(suite(dir).probes, trackers(dir, corpus))
+  const scored = at.scored === null ? [] : reaching(at, 'scored', at.scored, probing)
+  return [handed(at, 'coverage'), ['coverage', 'probe readings', checked(at, [join(corpus, 'call_sequences')], built(dir, () => { probing(); return [] }))],
+    ...scored, ...reaching(at, 'smoke', corpus, probing), grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), join(corpus, 'coverage/lcov.info')])]
 }
 
 function invariants(at: Copy): Row[] {

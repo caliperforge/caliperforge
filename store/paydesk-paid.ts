@@ -26,19 +26,11 @@ export function parsed(stdout: string, stderr: string, code: number | null): Par
 
 export function recent(ledger: string, now: Date): Set<string> {
   if (!existsSync(ledger)) return new Set()
-  return new Set(readFileSync(ledger, 'utf8').split('\n').flatMap((line) => {
-    const row = json(line)
+  return new Set(readFileSync(ledger, 'utf8').split('\n').filter((line) => line.trim() !== '').flatMap((line) => {
+    const row = JSON.parse(line) as Partial<Record<keyof Spend, unknown>> | null
     const at = typeof row?.at === 'string' ? Date.parse(row.at) : NaN
     return typeof row?.fqn === 'string' && now.getTime() - at < WEEK ? [row.fqn] : []
   }))
-}
-
-function json(line: string): Partial<Record<keyof Spend, unknown>> | null {
-  try {
-    return JSON.parse(line) as Partial<Record<keyof Spend, unknown>> | null
-  } catch {
-    return null
-  }
 }
 
 export function paid(scanned: Row[], options: Options): { rows: ListingScan[]; spent: number; skipped: number; capped: boolean } {

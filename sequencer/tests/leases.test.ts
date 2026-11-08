@@ -3,11 +3,11 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { dryLines, tickNote } from '../../cli/brief.ts'
 import { eventsOf, runRows } from '../../store/events.ts'
 import { width } from '../../store/lanes.ts'
-import { beat, clear, held, holder, take } from '../../store/leases.ts'
+import { alive, beat, clear, held, holder, take } from '../../store/leases.ts'
 import { advance, dropPlan, waiting } from '../../store/plans.ts'
 import { last, receipt } from '../../store/ticks.ts'
 import { unleased } from '../../store/unleased.ts'
@@ -78,6 +78,15 @@ test('a dead holder\'s lease is taken; the receipt names its pid',async () => {
   expect(fired.map((f) => f.plan)).toEqual([ID])
   expect(tickNote(fired)).toContain(`took over pid ${String(dead)}`)
   expect(held(w.db)).toEqual([])
+})
+
+test('alive rethrows a kill error other than EPERM or ESRCH', () => {
+  const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw Object.assign(new Error('x'), { code: 'EINVAL' }) })
+  try {
+    expect(() => alive(1)).toThrow('x')
+  } finally {
+    kill.mockRestore()
+  }
 })
 
 /** A built plan left running and tagged `leased`, as a tick that died mid-step leaves it. */

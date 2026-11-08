@@ -33,8 +33,7 @@
     "lines": 200
   },
   "leases.ts": {
-    "lines": 69,
-    "silent-catch": 1
+    "lines": 69
   },
   "merges.ts": {
     "lines": 63
@@ -43,8 +42,7 @@
     "lines": 31
   },
   "paydesk-paid.ts": {
-    "lines": 82,
-    "silent-catch": 1
+    "lines": 74
   },
   "plans.ts": {
     "lines": 304

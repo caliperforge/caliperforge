@@ -47,7 +47,7 @@ const ROWS = [
   ['scaffold', 'handoff', 'pass'], ['scaffold', 'ast', 'pass'], ['scaffold', 'layer', 'cannot run: needs the map as the phase found it'],
   ['scaffold', 'suite', 'pass'], ['scaffold', 'grade', NEEDS('test/fizz/handlers')], ['scaffold', 'smoke', 'pass'], ['scaffold', 'critic.stand_in', 'pass'],
   ['coverage', 'handoff', NEEDS(`${META}/handoff/coverage.md`)], ['coverage', 'probe readings', NEEDS(`${META}/corpus_medusa/call_sequences`)],
-  ['coverage', 'reach', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)], ['coverage', 'boundary', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)],
+  ['coverage', 'reach smoke', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)], ['coverage', 'boundary smoke', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)],
   ['coverage', 'grade', NEEDS(`${META}/handoff/coverage.md`)],
   ['invariants', 'handoff', NEEDS(`${META}/handoff/invariants.md`)], ['invariants', 'ast', 'pass'], ['invariants', 'plan', NEEDS(`${META}/handoff/plan.md`)],
   ['invariants', 'duplicate', NEEDS(`${META}/reports/invariants-global-property-implementer.md`)], ['invariants', 'critic.share_converted', 'pass'],
@@ -119,7 +119,7 @@ test('an unlocated item refuses the reach and boundary rows', () => {
   const key = 'Selected entry points C.transfer(address to)'
   vi.mocked(reach).mockReturnValueOnce([{ key, met: false, cells: ['at: none'], note: `${key}: no at`, reverts: [], located: false, misread: false }])
   const refused = `refuse reach.unlocated | 1 row(s) have no at: <file> L<start>-L<end> in map.md: ${key}`
-  const now = new Map([['probe readings', 'pass'], ['reach', refused], ['boundary', refused]])
+  const now = new Map([['probe readings', 'pass'], ['reach smoke', refused], ['boundary smoke', refused]])
   const rows = ROWS.map(([phase = '', check = '', result = '']) => [phase, check, now.get(check) ?? result])
   expect(dried(db, root, 1, fizz())).toBe(table(rows))
 })
@@ -180,6 +180,7 @@ test('a dry pass logs one bench.dry event, writes no run', () => {
 
 const SUITES = 'fuzz-bench/suites/fizz_lean/euler-earn-m01'
 const REGRADED = `plan 1 regraded from ${SUITES}`
+const SCORED = ROWS.flatMap((row) => row[1] === 'reach smoke' ? [...['reach scored', 'boundary scored'].map((check) => ['coverage', check, NEEDS('scored/corpus_medusa/coverage/lcov.info')]), row] : [row])
 
 /** A done bench plan with no src/ whose archived suite holds SRC and `files`; `planted` lays it at test/fizz. */
 function regradable(files: Record<string, string> = {}): { db: Db; root: string; archive: string } {
@@ -202,7 +203,7 @@ test('regrade rebuilds from the archive, every row, no run', () => {
     rooted.push(existsSync(join(dir, 'medusa.json')))
     return { results: [], note: null, cache: null, clamped: [] }
   })
-  expect(regraded(db, root, 1, fizz())).toBe(table(ROWS, REGRADED))
+  expect(regraded(db, root, 1, fizz())).toBe(table(SCORED, REGRADED))
   expect(vi.mocked(fetched)).toHaveBeenLastCalledWith(root, 1, join(root, '.cf/regrade/1'), { suites: archive, target: 'fizz' })
   expect(rooted).toEqual([false])
   expect(tree(archive)).toEqual(before)
@@ -227,6 +228,28 @@ test('regrade lays the archived medusa.json under test/fizz/', () => {
   expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
 })
 
+test("regrade judges reach on the scored corpus and on smoke's", () => {
+  const corpus = `${META}/corpus_medusa`
+  const { db, root, archive } = regradable({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: 'scored', [`${corpus}/coverage/revert_report.json`]: '{}' })
+  const before = tree(archive)
+  vi.mocked(smoke).mockImplementationOnce((dir) => {
+    writeFileSync(join(dir, corpus, 'coverage/lcov.info'), 'smoke')
+    return { results: [], note: null, cache: null, clamped: [] }
+  })
+  const key = 'Guards Vault.deposit'
+  const judged = (...[, , lcov]: Parameters<typeof reach>): ReturnType<typeof reach> => {
+    const text = readFileSync(lcov, 'utf8')
+    return [{ key, met: text === 'scored', cells: [], note: `${key}: ${text} never reverted`, reverts: [], located: true, misread: false }]
+  }
+  vi.mocked(reach).mockImplementationOnce(judged).mockImplementationOnce(judged)
+  const now = new Map([['probe readings', 'pass'], ['reach scored', 'pass'], ['boundary scored', 'pass'],
+    ['reach smoke', `refuse reach.unmet | ${key}: smoke never reverted`], ['boundary smoke', `refuse reach.boundary | ${key}: smoke never reverted`]])
+  const rows = SCORED.map(([phase = '', check = '', result = '']) => [phase, check, now.get(check) ?? result])
+  expect(regraded(db, root, 1, fizz())).toBe(table(rows, REGRADED))
+  expect(tree(archive)).toEqual(before)
+  expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
+})
+
 test('a suite with an unaimed entry point lcov hits is misread', () => {
   const map = '## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Signatures\n\n- V.deposit(uint256 assets) | at: src/V.sol L7-L9\n'
   const { db, root } = regradable({ [`${META}/handoff/map.md`]: map, [`${META}/corpus_medusa/coverage/lcov.info`]: 'SF:/repo/src/V.sol\nDA:8,3\nend_of_record\n' })
@@ -243,7 +266,7 @@ test('a throw refuses the regrade, another rule passes it', () => {
   vi.mocked(compiled).mockReturnValueOnce([{ rule: 'handoff.ast', note: 'context: forge build --ast failed: boom' }]).mockReturnValueOnce([])
     .mockReturnValueOnce([{ rule: 'handoff.ast', note }])
   const now = new Map([['context ast', 'refuse handoff.ast | context: forge build --ast failed: boom'], ['coverage probe readings', 'pass'], ['invariants ast', `refuse handoff.ast | ${note}`]])
-  const rows = ROWS.map(([phase = '', check = '', result = '']) => [phase, check, now.get(`${phase} ${check}`) ?? result])
+  const rows = SCORED.map(([phase = '', check = '', result = '']) => [phase, check, now.get(`${phase} ${check}`) ?? result])
   expect(regraded(db, root, 1, fizz())).toBe(table(rows, REGRADED))
   expect(ofKind(db, 'bench.regrade')).toEqual(['refuse', 'pass'].map((outcome) => ({ plan: 1, kind: 'bench.regrade', actor: 'bench', outcome, message: REGRADED })))
 })

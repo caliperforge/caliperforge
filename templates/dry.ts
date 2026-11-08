@@ -31,7 +31,7 @@ const ENTRY = 'Selected entry points '
 
 type Row = [phase: string, check: string, result: () => string]
 
-interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string; fix: () => Touched | string }
+interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string; scored: string | null; fix: () => Touched | string }
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
@@ -96,21 +96,27 @@ function scaffold(at: Copy): Row[] {
     ['scaffold', 'critic.stand_in', checked(at, [], () => critic(join(fizz, 'references/critic-pass.md'), dir, 'critic.stand_in'))]]
 }
 
-function coverage(at: Copy): Row[] {
-  const { dir, handoffs, map } = at
-  const corpus = join(handoffs, '../corpus_medusa')
+function reaching(at: Copy, name: string, corpus: string): [probe: Row, reach: Row, boundary: Row] {
+  const { dir, map } = at
   const [sequences, lcov, report] = [join(corpus, 'call_sequences'), join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json')]
   let [probes, items]: [ProbeReadings | undefined, Item[] | undefined] = [undefined, undefined]
   const probing = (): ProbeReadings => probes ??= readings(suite(dir).probes, trackers(dir, corpus))
   const reached = (): Item[] => items ??= reach(dir, read(map), lcov, report, probing())
-  return [handed(at, 'coverage'), ['coverage', 'probe readings', checked(at, [sequences], () => { probing(); return [] })],
-    ['coverage', 'reach', checked(at, [lcov, report, sequences], () => {
+  return [['coverage', 'probe readings', checked(at, [sequences], () => { probing(); return [] })],
+    ['coverage', `reach ${name}`, checked(at, [lcov, report, sequences], () => {
       writeFileSync(map, written(read(map), reached()))
       return [...unlocated(reached()), ...misread(reached()), ...unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))]
     })],
-    ['coverage', 'boundary', checked(at, [lcov, report, sequences], () => [...unlocated(reached()), ...misread(reached()),
-      ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))])],
-    grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), lcov])]
+    ['coverage', `boundary ${name}`, checked(at, [lcov, report, sequences], () => [...unlocated(reached()), ...misread(reached()),
+      ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))])]]
+}
+
+function coverage(at: Copy): Row[] {
+  const { handoffs } = at
+  const corpus = join(handoffs, '../corpus_medusa')
+  const [probe, ...ran] = reaching(at, 'smoke', corpus)
+  const scored = at.scored === null ? [] : reaching(at, 'scored', at.scored).slice(1)
+  return [handed(at, 'coverage'), probe, ...scored, ...ran, grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), join(corpus, 'coverage/lcov.info')])]
 }
 
 function invariants(at: Copy): Row[] {
@@ -146,10 +152,11 @@ function cleared(dir: string): void {
   for (const name of readdirSync(dir).filter((name) => !BUILT.includes(name))) rmSync(join(dir, name), { recursive: true, force: true })
 }
 
-function tabled(db: Db, root: string, plan: number, dir: string, fizz: string): (readonly [string, string, string])[] {
+function tabled(db: Db, root: string, plan: number, dir: string, fizz: string, scored?: string): (readonly [string, string, string])[] {
   const handoffs = join(dir, META, 'handoff')
   let t: Touched | string | undefined
-  const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), fix: () => t ??= fixed(root, plan, dir) }
+  const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), scored: scored ?? null,
+    fix: () => t ??= fixed(root, plan, dir) }
   return [...context(at), ...scaffold(at), ...coverage(at), ...invariants(at), ['end', 'count', checked(at, [], () => counted(dir))] satisfies Row]
     .map(([phase, check, result]) => [phase, check, result()] as const)
 }
@@ -170,7 +177,9 @@ export function regraded(db: Db, root: string, plan: number, fizz: string): stri
   try {
     planted(root, plan, dir, { suites, target: 'fizz' })
     unrooted(suites, dir)
-    const table = tabled(db, root, plan, dir, fizz).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
+    const [archived, scored] = [join(suites, 'fizz_data/corpus_medusa'), join(dir, 'scored/corpus_medusa')]
+    if (existsSync(archived)) cpSync(archived, scored, { recursive: true })
+    const table = tabled(db, root, plan, dir, fizz, scored).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
     const heading = `plan ${String(plan)} regraded from fuzz-bench/suites/${generator}/${target}`
     const refused = table.some((row) => row[2].startsWith('refuse throw') || row.length === 4)
     logged(db, { plan, kind: 'bench.regrade', actor: 'bench', outcome: refused ? 'refuse' : 'pass', message: heading, pointer: null, run: null })

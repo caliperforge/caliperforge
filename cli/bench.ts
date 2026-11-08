@@ -11,10 +11,11 @@ import type { Db } from '../store/index.ts'
 import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type Holder } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
 import { generated, lastTranscript, runTokens } from '../store/runs.ts'
-import { copied } from '../templates/bench.ts'
+import { copied, medusa } from '../templates/bench.ts'
 import { dried, regraded } from '../templates/dry.ts'
 import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
+import { placed, rooted } from '../templates/rooted.ts'
 import type { Cli } from './cf-lanes.ts'
 
 export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, generator: string, at: string, stop?: string, why?: string): number[] {
@@ -129,6 +130,23 @@ export function refuzz(db: Db, root: string, source: number, hours: number, seed
   return id
 }
 
+export function medusaFile(db: Db, src: string, suite: string, workers: number, out: string): string[] {
+  if (!Number.isInteger(workers) || workers < 1) throw new Error(`--workers takes a positive whole number, not ${String(workers)}`)
+  const config = medusa(db, null, src, suite, null)
+  if (config === null) throw new Error(`no medusa.json in ${src} or ${join(src, suite)}`)
+  if ('outcome' in config) throw new Error(config.note)
+  Object.assign(config.config as object, { fuzzing: { ...(config.config as { fuzzing?: object }).fuzzing, workers } })
+  const dir = mkdtempSync(join(tmpdir(), 'cf-medusa-'))
+  try {
+    rooted(src, dir)
+    placed(config.config, src, dir)
+    cpSync(join(dir, 'medusa.json'), out)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+  return config.clamped
+}
+
 export function credit(db: Db, plan: number, runs: number[], why: string): void {
   if (planById(db, plan).template !== 'bench') throw new Error(`plan ${String(plan)} is not a bench plan`)
   const own = new Set(runTokens(db, plan).map(({ id }) => id))
@@ -153,8 +171,18 @@ export function tokens(db: Db, root: string, plan: number, projects: string): st
   return runs.map((run) => render(run, split(join(planDir(root, plan), basename(run.transcript_path)), sessionDir(projects, run.session)))).join('')
 }
 
+function withMedusa(bench: Command, { db, out }: Cli): Command {
+  bench.command('medusa').argument('<checkout>').requiredOption('--suite <dir>', 'the suite folder inside the checkout')
+    .requiredOption('--workers <n>').requiredOption('--out <path>')
+    .action((checkout: string, options: { suite: string; workers: string; out: string }) => {
+      const clamped = medusaFile(db(), checkout, options.suite, Number(options.workers), options.out)
+      out(`medusa.json written to ${options.out}${clamped.length === 0 ? '' : `; targetContractsBalances ${clamped.join(', ')} clamped to 1e24 wei`}\n`)
+    })
+  return bench
+}
+
 export function registerBench(cf: Command, { root, db, out }: Cli): void {
-  const bench = cf.command('bench')
+  const bench = withMedusa(cf.command('bench'), { root, db, out })
   bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
     .requiredOption('--generator <seat>', 'a bench generator key or seat in rules/staffing.yaml')
     .option('--stop-after <phase>', 'park a fizz_lean_generator run once this phase hands off')

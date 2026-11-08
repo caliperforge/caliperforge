@@ -15,7 +15,7 @@ import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan,
 import { fingerprint, refused as refuse } from '../../store/refusals.ts'
 import { runTokens, spend } from '../../store/runs.ts'
 import { dried } from '../../templates/dry.ts'
-import { credit, fileBench, refuzz, rescore } from '../bench.ts'
+import { credit, fileBench, medusaFile, refuzz, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
 import { add } from '../plan.ts'
@@ -318,6 +318,20 @@ test('refuzz D3 the plan waits for 22:00 Guatemala time', () => {
   const would = { pipe: 'refuzz', plan: id, step: 2, template: 'bench' }
   expect(dry(d, new Date('2026-09-18T16:00:00.000Z')).would).not.toContainEqual(would)
   expect(dry(d, new Date('2026-09-19T04:00:00.000Z')).would).toContainEqual(would)
+})
+
+test('cf bench medusa refuses bad workers or no medusa.json', () => {
+  const src = root()
+  const out = join(src, 'out.json')
+  const d = fresh(schema)
+  for (const [workers, why] of [[0, 'not 0'], [2.5, 'not 2.5'], [Number('four'), 'not NaN']] as const) {
+    expect(() => medusaFile(d, src, 'test/fizz', workers, out)).toThrow(`--workers takes a positive whole number, ${why}`)
+  }
+  expect(() => medusaFile(d, src, 'test/fizz', 2, out)).toThrow(`no medusa.json in ${src} or ${join(src, 'test/fizz')}`)
+  writeFileSync(join(src, 'medusa.json'), '{')
+  expect(() => medusaFile(d, src, 'test/fizz', 2, out)).toThrow('JSON')
+  expect(ofKind(d, 'swallowed')).toMatchObject([{ plan: null, kind: 'swallowed', actor: 'score' }])
+  expect(existsSync(out)).toBe(false)
 })
 
 const RUN = { step: 1, seat: 'fizz_generator', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'opus', effort: 'high',

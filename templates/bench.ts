@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
@@ -25,6 +25,7 @@ import { firing, phased, START } from './phases.ts'
 import { buildError, FEWEST, fewer, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { COMMENT, sampled, unprobed } from './probes.ts'
+import { field, rebased } from './rebased.ts'
 import { report } from './report.ts'
 import { archived, placed, recloned, rooted, scrapped } from './rooted.ts'
 import { unstopped } from './stopped.ts'
@@ -232,10 +233,6 @@ export function unproven(suite: string, name: string): Outcome | number {
     note: `${name} wrote no invariant_, property_ or echidna_ function in ${counted.map((p) => `${SUITE}/${p}`).join(', ')}` }
 }
 
-/** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */
-const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
-  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
-
 const WORKERS = 4
 
 function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
@@ -251,11 +248,7 @@ function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hour
     logged(db, { plan, kind: 'swallowed', actor: 'score', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return { outcome: 'refuse', spans: ['bench.medusa_json'], note: firstLine(error) }
   }
-  for (const [keys, key] of installed ? [] : MOVED) {
-    const parent = keys.reduce(field, config)
-    const value = field(parent, key)
-    if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
-  }
+  if (!installed) rebased(config, (value) => moved(suite, value))
   const platform = field(field(config, 'compilation'), 'platformConfig')
   const args = field(platform, 'args') ?? []
   if (Array.isArray(args)) args.splice(0, args.length, ...(args as unknown[]).flatMap((arg) => arg === '--ignore-compile' ? [] : [arg === '--foundry-ignore-compile' ? '--foundry-compile-all' : arg]))
@@ -277,10 +270,6 @@ function moved(suite: string, path: string): string {
   const inside = relative(suite, path)
   if (inside.startsWith('..')) return join('../..', path)
   return inside === '' ? '.' : inside
-}
-
-function field(tree: unknown, key: string): unknown {
-  return typeof tree === 'object' && tree !== null ? (tree as Record<string, unknown>)[key] : undefined
 }
 
 /** A full sha goes straight to `clone`, which fetches it by itself; a rev expression on a full sha is fetched by that sha. */

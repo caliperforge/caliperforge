@@ -12,7 +12,9 @@ import { route } from '../next.ts'
 import { get, headSha, maybe, put, srcDir } from '../workspace.ts'
 import { plan, stub, world, type World } from './world.ts'
 
-const ASK = '# The cap\n\n**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it\n**Measure:** time it\n'
+const QUESTION = '# The cap\n\n**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it\n'
+
+const ASK = `${QUESTION}**Measure:** time it\n`
 
 const JOB = '**Run:** echo measured; exit 3\n**Output:** ~/cf_work/job/\n'
 
@@ -39,7 +41,7 @@ const researching = (ask = ASK): World => {
   return w
 }
 
-const FETCH = `${ASK}**Output:** ~/cf_work/job/\n`
+const FETCH = `${QUESTION}**Output:** ~/cf_work/job/\n`
 
 /** `seat` answers each of `replies` in turn and its prompts land in `prompts`. */
 const answering = (replies: string[], prompts: string[], seat = 'measurer'): Provider => ({

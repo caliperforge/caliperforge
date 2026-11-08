@@ -210,30 +210,30 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
   return asked.note === WRITTEN ? got : { ...got, note: `${asked.note}; ${got.note}` }
 }
 
-async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, read: Read, measured = false): Promise<Outcome> {
+async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, read: Read, measured = false, fetch = false): Promise<Outcome> {
   const ask = askOf(root, plan)
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
   const { out } = folder
   const job = exited(db, root, plan)
-  const measure = measured || out !== undefined || job !== null || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
-  const runs = out !== undefined ? 'fetcher' : measure ? 'measurer' : null
+  const measure = measured || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
+  const runs = fetch || (!measure && out !== undefined) ? 'fetcher' : measure || job !== null ? 'measurer' : null
   const seat = runs === null ? step : { ...step, seat: runs, runs }
   if (out !== undefined) mkdirSync(out, { recursive: true })
   const last = maybe(root, plan.id, 'answer.md')
   const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
     maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${last === null ? '' : `\n\n# Your last answer — repair what the ask and the refusal name, keep the rest\n\n${
-    last}\n\n# Its sources, [source:n] counting from 1\n\n${get(root, plan.id, 'sources.json')}`}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
+    last}\n\n# Its sources, [source:n] counting from 1\n\n${get(root, plan.id, 'sources.json')}`}${runs === null ? '' : `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}`}${
     out === undefined ? '' : `\n\n# Output\n\n${out}`}${job ?? ''}${runs === null ? BEFORE : ''}`
   const fires: Provider = runs === null ? { ...provider, fire: (packet) => provider.fire({ ...packet, idle: Number.POSITIVE_INFINITY }) } : provider
   const draft = join(srcDir(root, plan.id), '.cf/draft.md')
   rmSync(draft, { force: true })
-  const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
+  const fired = await ran(db, root, plan, seat, fires, input, false, true, runs === 'fetcher' ? out : undefined)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
-  if (runs !== null && RUN.test(fired.text)) return launched(db, root, plan, fired.text)
+  if (runs !== null && RUN.test(fired.text)) return launched(db, root, plan, fired.text, runs === 'measurer' ? out : undefined)
   const needs = NEEDS.exec(fired.text)?.[1]
-  if (!measure && needs === 'needs_run') return gathering(db, root, plan, step, provider, read, true)
-  if (measure && needs === 'needs_build') {
+  if ((runs === null && needs === 'needs_run') || (runs === 'measurer' && out !== undefined && needs === 'needs_build')) return gathering(db, root, plan, step, provider, read, true, runs !== null)
+  if (runs !== null && needs === 'needs_build') {
     const note = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
     put(root, plan.id, 'question.md', note)
     return { outcome: 'needs_ceo', spans: ['ask.md'], note }
@@ -242,7 +242,7 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
   const sources = sourced(db, root, plan, reply, read)
   if (sources.outcome === 'refuse') return sources
-  if (measure) put(root, plan.id, 'runs.json', JSON.stringify([...transcripts(db, plan.id, step.step).flatMap(outputs), ...jobRun(db, root, plan)]))
+  if (runs !== null) put(root, plan.id, 'runs.json', JSON.stringify([...transcripts(db, plan.id, step.step).flatMap(outputs), ...jobRun(db, root, plan)]))
   put(root, plan.id, 'answer.md', (sources.reply ?? reply).replace(FENCE, '').trim())
   return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }

@@ -823,9 +823,23 @@ const home = (): string => {
   return dir
 }
 
-test('fetch D1: an Output line fires fetcher into its folder', async () => {
+test('fetch D1: a Measure line with Output fires measurer', async () => {
   const out = join(home(), 'cf_work/rubin-post')
   const w = researching(`${MEASURE}**Output:** ~/cf_work/rubin-post/\n`)
+  const head = headed(w)
+  question(w.root, plan(w.db, 1))
+  const seen: Packet[] = []
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => seen.push(p))))
+    .toMatchObject({ outcome: 'pass', note: expect.stringContaining('measurer: answer.md written') as unknown })
+  const [packet] = seen
+  expect(packet?.prompt).toContain(`# Output\n\n${out}`)
+  expect(packet?.refuse(join(out, 'data.json'))).not.toBeNull()
+  expect(ran(w)).toEqual(['measurer'])
+})
+
+test('fetch D1: an Output line fires fetcher into its folder', async () => {
+  const out = join(home(), 'cf_work/rubin-post')
+  const w = researching(`${ASK}**Output:** ~/cf_work/rubin-post/\n`)
   const head = headed(w)
   question(w.root, plan(w.db, 1))
   const seen: Packet[] = []
@@ -850,7 +864,25 @@ test.each(['/tmp/x', '~/cf_work/../x', '~/cf_work', '~/.ssh/config'])('fetch D2:
   expect(readdirSync(dir)).toEqual([])
 })
 
-test('ruling D1/D2: an Output ruling reruns gather on fetcher', async () => {
+test('long job D2: a Run reply launches into the ask Output', async () => {
+  const out = join(home(), 'cf_work/timed')
+  const w = researching(`${MEASURE}**Output:** ~/cf_work/timed/\n`)
+  headed(w)
+  question(w.root, plan(w.db, 1))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring('**Run:** echo measured\n', () => undefined)))
+    .toMatchObject({ outcome: 'pass', held: true, note: 'long job started: echo measured' })
+  expect(JSON.parse(maybe(w.root, 1, 'job.json') ?? '')).toMatchObject({ command: 'echo measured', out })
+})
+
+const NEEDS_BUILD = 'This needs the network.\n\n```\n---\noutcome: needs_build\n---\n```\n'
+
+/** The measurer answers needs_build and the fetcher `reply`. */
+const unbuilt = (reply: string, seen: (packet: Packet) => void): Provider => ({
+  name: 'claude-agent-sdk',
+  fire: (packet) => measuring(packet.prompt.includes('# fetcher\n') ? reply : NEEDS_BUILD, seen).fire(packet),
+})
+
+test('ruling D1/D2: a measurer needs_build reruns on fetcher', async () => {
   const out = join(home(), 'cf_work/1401a')
   const w = researching(MEASURE)
   const head = headed(w)
@@ -858,11 +890,11 @@ test('ruling D1/D2: an Output ruling reruns gather on fetcher', async () => {
   expect(maybe(w.root, 1, 'ask.md')).toMatch(/\n\*\*Output:\*\* ~\/cf_work\/1401a\/\n$/)
   question(w.root, plan(w.db, 1))
   let prompt = ''
-  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => { prompt = p.prompt })))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), unbuilt(fence(entry(head)), (p) => { prompt = p.prompt })))
     .toMatchObject({ outcome: 'pass', note: expect.stringContaining('fetcher: answer.md written') as unknown })
   expect(prompt).toContain(`# Output\n\n${out}`)
   expect(existsSync(out)).toBe(true)
-  expect(ran(w)).toEqual(['fetcher'])
+  expect(ran(w)).toEqual(['measurer', 'fetcher'])
 })
 
 test.each(['~/cf_work/../x', '~/.ssh/config'])('ruling D3: Output %s is written', (named) => {
@@ -909,8 +941,6 @@ test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
     .toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
   expect(ran(w)).toEqual(['measurer'])
 })
-
-const NEEDS_BUILD = 'This needs the network.\n\n```\n---\noutcome: needs_build\n---\n```\n'
 
 const UNBUILT = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
 

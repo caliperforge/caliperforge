@@ -40,7 +40,8 @@ test('D3: the prompt answers needs_build for network or writes', () => {
 
 test('the prompt names a Run command for a job past one call', () => {
   const prompt = seat(root, 'measurer').prompt
-  for (const part of ['## Long job', '600 s', '**Run:**', '**Output:**', '`job.log`', '`# Long job`', '`cf bench medusa <checkout> --suite <dir> --workers <n> --out <path>`']) {
+  for (const part of ['## Long job', '600 s', '**Run:**', '**Output:**', '`job.log`', '`# Long job`', '`cf bench medusa <checkout> --suite <dir> --workers <n> --out <path>`',
+    '`compile_s`', '`fuzz_s`', 'after `compile_s:`']) {
     expect(prompt).toContain(part)
   }
 })

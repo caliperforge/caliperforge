@@ -16,6 +16,7 @@ import { dried, regraded } from '../templates/dry.ts'
 import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
 import { placed, rooted } from '../templates/rooted.ts'
+import { type Config, prebuilt, reusing } from '../templates/smoke.ts'
 import type { Cli } from './cf-lanes.ts'
 
 export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, generator: string, at: string, stop?: string, why?: string): number[] {
@@ -130,12 +131,13 @@ export function refuzz(db: Db, root: string, source: number, hours: number, seed
   return id
 }
 
-export function medusaFile(db: Db, src: string, suite: string, workers: number, out: string): string[] {
+export function medusaFile(db: Db, src: string, suite: string, workers: number, out: string): { clamped: string[]; compile: number } {
   if (!Number.isInteger(workers) || workers < 1) throw new Error(`--workers takes a positive whole number, not ${String(workers)}`)
   const config = medusa(db, null, src, suite, null)
   if (config === null) throw new Error(`no medusa.json in ${src} or ${join(src, suite)}`)
   if ('outcome' in config) throw new Error(config.note)
-  Object.assign(config.config as object, { fuzzing: { ...(config.config as { fuzzing?: object }).fuzzing, workers } })
+  const compile = prebuilt(src, suite)
+  Object.assign(config.config as object, { fuzzing: { ...(config.config as Config).fuzzing, workers }, compilation: reusing(config.config as Config) })
   const dir = mkdtempSync(join(tmpdir(), 'cf-medusa-'))
   try {
     rooted(src, dir)
@@ -144,7 +146,7 @@ export function medusaFile(db: Db, src: string, suite: string, workers: number, 
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
-  return config.clamped
+  return { clamped: config.clamped, compile }
 }
 
 export function credit(db: Db, plan: number, runs: number[], why: string): void {
@@ -175,8 +177,8 @@ function withMedusa(bench: Command, { db, out }: Cli): Command {
   bench.command('medusa').argument('<checkout>').requiredOption('--suite <dir>', 'the suite folder inside the checkout')
     .requiredOption('--workers <n>').requiredOption('--out <path>')
     .action((checkout: string, options: { suite: string; workers: string; out: string }) => {
-      const clamped = medusaFile(db(), checkout, options.suite, Number(options.workers), options.out)
-      out(`medusa.json written to ${options.out}${clamped.length === 0 ? '' : `; targetContractsBalances ${clamped.join(', ')} clamped to 1e24 wei`}\n`)
+      const { clamped, compile } = medusaFile(db(), checkout, options.suite, Number(options.workers), options.out)
+      out(`medusa.json written to ${options.out}; compile_s: ${String(compile)}${clamped.length === 0 ? '' : `; targetContractsBalances ${clamped.join(', ')} clamped to 1e24 wei`}\n`)
     })
   return bench
 }

@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { dirname, join } from 'node:path'
+import { afterEach, expect, test, vi } from 'vitest'
 import { fresh, rejects } from '../../checks/sqlite.ts'
 import { homeOf } from '../../sequencer/home.ts'
 import { dry } from '../../sequencer/index.ts'
@@ -332,6 +332,44 @@ test('cf bench medusa refuses bad workers or no medusa.json', () => {
   expect(() => medusaFile(d, src, 'test/fizz', 2, out)).toThrow('JSON')
   expect(ofKind(d, 'swallowed')).toMatchObject([{ plan: null, kind: 'swallowed', actor: 'score' }])
   expect(existsSync(out)).toBe(false)
+})
+
+afterEach(() => { vi.unstubAllEnvs() })
+
+/** A checkout with src/V.sol, lib/x.sol and test/fizz/medusa.json, and a forge on PATH that logs its args and runs `script`. */
+function forged(script: string): string {
+  const [src, bin] = [root(), root()]
+  writeFileSync(join(bin, 'forge'), `#!/bin/sh\necho "$@" >> forge.log\n${script}\n`, { mode: 0o755 })
+  vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+  for (const file of ['src/V.sol', 'lib/x.sol', 'test/fizz/medusa.json']) {
+    mkdirSync(dirname(join(src, file)), { recursive: true })
+    writeFileSync(join(src, file), '{}')
+  }
+  return src
+}
+
+test('cf bench medusa builds src and the suite once per change', () => {
+  const src = forged('mkdir -p out/build-info')
+  const d = fresh(schema)
+  const builds = (): string[] => readFileSync(join(src, 'forge.log'), 'utf8').trimEnd().split('\n')
+  const [one, two] = [join(src, 'one.json'), join(src, 'two.json')]
+  for (const out of [one, two]) medusaFile(d, src, 'test/fizz', 2, out)
+  expect(builds()).toEqual(['build --build-info --force src test/fizz'])
+  for (const out of [one, two]) expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ compilation: { platformConfig: { args: ['--foundry-ignore-compile'] } } })
+  writeFileSync(join(src, 'lib/x.sol'), 'contract X {}')
+  expect(medusaFile(d, src, 'test/fizz', 2, one)).toEqual({ clamped: [], compile: 0 })
+  expect(builds()).toHaveLength(1)
+  writeFileSync(join(src, 'src/V.sol'), 'contract V {}')
+  medusaFile(d, src, 'test/fizz', 2, one)
+  expect(builds()).toHaveLength(2)
+})
+
+test('cf bench medusa throws on a failed forge, writes nothing', () => {
+  const src = forged('exit 1')
+  const out = join(src, 'out.json')
+  expect(() => medusaFile(fresh(schema), src, 'test/fizz', 2, out)).toThrow('forge build --build-info --force src test/fizz exited 1')
+  expect(existsSync(out)).toBe(false)
+  expect(existsSync(join(src, 'cache/fizz-medusa-build.json'))).toBe(false)
 })
 
 const RUN = { step: 1, seat: 'fizz_generator', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'opus', effort: 'high',

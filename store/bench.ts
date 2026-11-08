@@ -24,6 +24,10 @@ export function scores(db: Db): Score[] {
   return db.prepare(`SELECT ${COLUMNS} FROM bench_scorecard ORDER BY id`).all() as Score[]
 }
 
+export function live(db: Db): Score[] {
+  return db.prepare(`SELECT ${COLUMNS} FROM bench_scorecard WHERE superseded = 0 ORDER BY id`).all() as Score[]
+}
+
 export function underpowered(db: Db): Score[] {
   return db.prepare(`SELECT ${COLUMNS} FROM bench_scorecard WHERE superseded = 0 AND not_powered IS NOT NULL ORDER BY id`).all() as Score[]
 }

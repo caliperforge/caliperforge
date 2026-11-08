@@ -198,6 +198,36 @@ test('a view read is skipped when a handler is aimed', () => {
   expect(misaimed(unaimed, ACCEPT, lcov(8, 3))).toEqual([
     { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },
   ])
+  wrapped((accept as Node & { expression: Loose }).expression)
+  expect(suite(based(JSON.stringify(built))).handlers).toEqual(unaimed.handlers)
+})
+
+function recalled(change: (call: Loose) => void): string {
+  const built = JSON.parse(BASE_AST) as { ast: Node }
+  const body = below(built.ast).find((n) => n.id === 273) as Node & { statements: [Node & { expression: Loose }] }
+  change(body.statements[0].expression)
+  return JSON.stringify(built)
+}
+
+function wrapped(call: Loose): void {
+  call.expression = { id: 990, nodeType: 'FunctionCallOptions', src: call.src, expression: call.expression as Loose }
+}
+
+const encoded = (memberName: string) => (call: Loose): void => {
+  call.arguments = [call.expression as Loose, ...call.arguments]
+  call.expression = { id: 991, nodeType: 'MemberAccess', src: call.src, memberName, expression: { id: 992, nodeType: 'Identifier', src: call.src, name: 'abi' } }
+}
+
+test.each([
+  { name: 'call options', change: wrapped, target: 'EulerEarn.acceptCap' },
+  { name: 'abi.encodeCall', change: encoded('encodeCall'), target: 'EulerEarn.acceptCap' },
+  { name: 'abi.encode', change: encoded('encode'), target: null },
+])('a call through $name aims $target', ({ change, target }) => {
+  const found = suite(based(recalled(change)))
+  expect(found.handlers).toEqual(EULER.handlers.map((h) => ({ ...h, target })))
+  expect(misaimed(found, ACCEPT, lcov(8, 3))).toEqual(target === null ? [
+    { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },
+  ] : [])
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('a fresh forge build of Base reads as its fixture', () => {

@@ -5,6 +5,7 @@ import { firstLine } from '../sequencer/unpolled.ts'
 import { planDir } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { quieted } from './balances.ts'
 import { unproven } from './bench.ts'
 import { critic } from './critic.ts'
 import { compiled, extract } from './extract.ts'
@@ -158,7 +159,7 @@ function unrooted(suites: string, dir: string): void {
   if (!existsSync(path)) return
   const config: unknown = JSON.parse(readFileSync(path, 'utf8'))
   rebased(config, (value) => join('test/fizz', value))
-  writeFileSync(join(dir, 'medusa.json'), JSON.stringify(config, null, 2))
+  writeFileSync(join(dir, 'medusa.json'), JSON.stringify(quieted(config), null, 2))
 }
 
 const misreads = (result: string): boolean => (/^refuse (.*?) \| /.exec(result)?.[1] ?? '').split(', ').some((rule) => rule.endsWith('.misread'))

@@ -22,6 +22,7 @@ const MAP = [
 ].join('\n')
 const PROBES: ProbeReadings = { limits: { 'V.CAP': { max: 5n * 10n ** 23n } }, conversions: { 'V.convertToAssets': { min: 0n, max: 2n * 10n ** 24n, saw1Wei: false } } }
 const WITHDRAW = 'Selected entry points V.withdraw(uint256 assets)'
+const HELD = { 'V.CAP': 'property_probeCap true on 3 of 4 sequences', 'V.convertToAssets': 'property_probeConvert true on 1 of 2 sequences' }
 
 function judged(probes = PROBES, report = REPORT, map = MAP, lcov = join(fixtures, 'lcov.info')): Item[] {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-reach-'))
@@ -43,10 +44,19 @@ test('D2: a limit is met within 1% of its bound', () => {
   expect(limit({ 'V.CAP': { max: 5n * 10n ** 23n } })?.met).toBe(false)
   expect(limit({ 'V.CAP': { max: 995n * 10n ** 21n } })?.met).toBe(true)
   expect(limit({})).toMatchObject({ met: false, note: 'Limits V.CAP: no probe reading' })
+  const heldOnly = judged({ limits: {}, conversions: {}, held: HELD })
+  expect(at(heldOnly, 'Limits V.CAP')).toMatchObject({ met: false, cells: [`probe: ${HELD['V.CAP']}`],
+    note: `Limits V.CAP: probe: ${HELD['V.CAP']}, no tracker reading` })
+  expect(written(MAP, heldOnly)).toContain(`- Limits V.CAP | met: no | probe: ${HELD['V.CAP']}\n`)
+  expect(at(judged({ ...PROBES, limits: { 'V.CAP': { max: 995n * 10n ** 21n } }, held: HELD }), 'Limits V.CAP'))
+    .toMatchObject({ met: true, cells: ['bound: 1000000000000000000000000', 'max: 995000000000000000000000'] })
 })
 
 test('D3: a conversion missing its 1-wei case is not met', () => {
   expect(at(judged(), 'Conversion points V.convertToAssets')).toMatchObject({ met: false, note: 'Conversion points V.convertToAssets: no 1-wei case' })
+  expect(at(judged({ ...PROBES, held: HELD }), 'Conversion points V.convertToAssets')).toMatchObject({ note: 'Conversion points V.convertToAssets: no 1-wei case' })
+  expect(at(judged({ limits: {}, conversions: {}, held: HELD }), 'Conversion points V.convertToAssets')).toMatchObject({ met: false,
+    cells: [`probe: ${HELD['V.convertToAssets']}`], note: `Conversion points V.convertToAssets: probe: ${HELD['V.convertToAssets']}, no tracker reading` })
 })
 
 test('D4: entry rows carry typed reverts, line and success %', () => {

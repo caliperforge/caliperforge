@@ -26,6 +26,7 @@ const WARNING = /^Warning \(\d+\)/
 const FAILED = /\[FAIL|error|revert/i
 export const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
 const PROBE = /\bfunction\s+(property_probe\w*)\s*\(/g
+const READ = /\bfunction\s+(?:property|read)_probe(\w*)\s*\(/g
 const VISIBLE = /(\bfunction\s+read_probe\w*\s*\([^)]*\)[^{;]*?)\b(?:public|external)\b/g
 
 const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1)
@@ -221,4 +222,17 @@ export function sampled(db: Db, plan: number, src: string, suite: string): Recor
     const said = [...out.matchAll(LOGGED)].filter(([, name]) => name === `probe.${n}`).map(([, , raw]) => raw)
     return [n, said.length === 0 ? 'dropped: no reading in forge output' : `true on ${String(said.filter((r) => r === 'true').length)} of ${String(said.length)} sequences`]
   }))
+}
+
+export function held(root: string, probes: Suite['probes'], said: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (Object.keys(said).length === 0) return out
+  for (const { file, start, end, cites } of probes) {
+    if (cites === null) continue
+    const text = readFileSync(join(root, file), 'utf8').split('\n').slice(start - 1, end).join('\n').replace(COMMENT, '')
+    const read = [...text.matchAll(READ)].map(([, rest = '']) => `property_probe${rest}`)
+      .flatMap((n) => said[n]?.startsWith('true on') === true ? [`${n} ${said[n]}`] : [])
+    if (read.length > 0) out[cites] = [...(out[cites] === undefined ? [] : [out[cites]]), ...read].join('; ')
+  }
+  return out
 }

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, onTestFinished, test, vi } from 'vitest'
 import { compiled } from '../../../templates/extract.ts'
-import { readings, trackers } from '../../../templates/probes.ts'
+import { held, readings, trackers } from '../../../templates/probes.ts'
 import type { Suite } from '../../../templates/suite.ts'
 
 vi.mock('node:child_process', async (importOriginal) => {
@@ -66,6 +66,20 @@ test('D3: a cite with no value is left out, a missing one stays 0n', () => {
 
 test('D4: ProbeCalls.lastAssets does not change the readings', () => {
   expect(readings(ROWS, new Map([...VALUES, ['ProbeCalls.lastAssets', 999n]]))).toEqual(readings(ROWS, new Map(VALUES)))
+})
+
+test('held maps true probe functions to their cite', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-fizz-probes-'))
+  mkdirSync(join(root, 'test/fizz'), { recursive: true })
+  const fn = (name: string): string => `    function ${name}() internal pure returns (bool) { return true; }`
+  writeFileSync(join(root, 'test/fizz/Probes.sol'), ['// probe: V.CAP', 'abstract contract ProbeCap {', fn('read_probeCap'), fn('property_probeCapLow'), '}',
+    'abstract contract ProbeFee {', fn('read_probeFee'), '}', 'abstract contract ProbeLoose {', fn('read_probeLoose'), '}',
+    'abstract contract ProbeGone {', fn('read_probeGone'), '}'].join('\n'))
+  const spanned = (name: string, cites: string | null, start: number): Suite['probes'][number] => ({ ...row(name, cites, []), start, end: start + 2 })
+  const said = { property_probeCap: 'true on 3 of 4 sequences', property_probeCapLow: 'true on 0 of 4 sequences',
+    property_probeFee: 'dropped: no corpus', property_probeLoose: 'true on 4 of 4 sequences' }
+  expect(held(root, [spanned('ProbeCap', 'V.CAP', 2), spanned('ProbeFee', 'V.FEE', 6), spanned('ProbeLoose', null, 9), spanned('ProbeGone', 'V.GONE', 12)], said))
+    .toEqual({ 'V.CAP': 'property_probeCap true on 3 of 4 sequences; property_probeCapLow true on 0 of 4 sequences' })
 })
 
 test('targetContracts not naming one is refused before forge', () => {

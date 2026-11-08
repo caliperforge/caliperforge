@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { firstLine } from '../sequencer/unpolled.ts'
+import { logged } from '../store/events.ts'
+import type { Db } from '../store/index.ts'
 import type { ProbeReadings } from './reach.ts'
 import { type Suite, suite } from './suite.ts'
 
@@ -21,6 +24,9 @@ const CAP = 50
 const REPLAYED = /^replayed: .*$/m
 const WARNING = /^Warning \(\d+\)/
 const FAILED = /\[FAIL|error|revert/i
+export const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
+const PROBE = /\bfunction\s+(property_probe\w*)\s*\(/g
+const VISIBLE = /(\bfunction\s+read_probe\w*\s*\([^)]*\)[^{;]*?)\b(?:public|external)\b/g
 
 const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1)
 
@@ -64,8 +70,8 @@ function forge(root: string, args: string[], held = ''): string {
 
 const layout = (root: string, contract: string): Layout => JSON.parse(forge(root, ['inspect', contract, 'storageLayout', '--json'])) as Layout
 
-function entry(root: string): Entry {
-  const { fuzzing: { targetContracts = [], deployerAddress = '0x30000', targetContractsBalances: [balance = 0] = [] } = {} } = JSON.parse(readFileSync(join(root, 'medusa.json'), 'utf8')) as
+function entry(root: string, config = join(root, 'medusa.json')): Entry {
+  const { fuzzing: { targetContracts = [], deployerAddress = '0x30000', targetContractsBalances: [balance = 0] = [] } = {} } = JSON.parse(readFileSync(config, 'utf8')) as
     { fuzzing?: { targetContracts?: string[]; deployerAddress?: string; targetContractsBalances?: (string | number)[] } }
   if (targetContracts.length !== 1) throw new Error(`medusa.json fuzzing.targetContracts names ${String(targetContracts.length)} contracts; probe readings need exactly one`)
   const [name = ''] = targetContracts
@@ -117,7 +123,7 @@ contract Readings {
     function replay(address from, bytes memory data) internal returns (bool ok) { vm.startPrank(from); (ok, ) = address(harness).call(data); }
 
 ${replays}
-    function logged(address h) internal view {
+    function logged(address h) internal {
         address p;
 ${reads}    }
 ${READERS}}
@@ -140,31 +146,43 @@ function handed(corpus: string, count: number, total: number): void {
   writeFileSync(file, REPLAYED.test(was) ? was.replace(REPLAYED, line) : `${was}${/[^\n]$/.test(was) ? '\n' : ''}${line}\n`)
 }
 
-export function trackers(root: string, corpus: string): Map<string, Value> {
-  const contract = entry(root)
+const sols = (dir: string): string[] => readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol'))
+
+function loaded(corpus: string): Sequence[] {
   const dir = join(corpus, 'call_sequences')
-  const sequences = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.json'))
+  return readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.json'))
     .map((p) => JSON.parse(readFileSync(join(dir, p), 'utf8')) as Sequence)
+}
+
+function replay(root: string, contract: Entry, sequences: Sequence[], read: (count: number) => string): string {
   const replays = kept(sequences)
-  const probes = suite(root).probes.map((p) => ({ ...p, layout: layout(root, p.name) }))
-  const entered = layout(root, contract.name)
-  const reads = probes.flatMap((p) => entered.storage.filter((e) => e.type.startsWith(`t_contract(${p.name})`)).flatMap((held) => [
-    `        p = address(uint160(word(h, ${held.slot}, ${String(held.offset)}, 20)));\n`,
-    ...p.layout.storage.filter((e) => p.trackers.includes(`${p.name}.${e.label}`) && TRACKED.test(e.type)).map((e) => {
-      const value = `word(p, ${e.slot}, ${String(e.offset)}, ${p.layout.types[e.type]?.numberOfBytes ?? ''})`
-      return `        log("${p.name}.${e.label}=", ${e.type === 't_bool' ? `${value} != 0` : value});\n`
-    }),
-  ]))
-  handed(corpus, replays.length, sequences.length)
-  let out: string
+  const reads = read(replays.length)
   try {
-    const text = source(replays.map(replayed).join(''), reads.join(''), contract)
+    const text = source(replays.map(replayed).join(''), reads, contract)
     writeFileSync(join(root, TEST), text)
-    out = forge(root, ['test', '-vv', '--match-path', TEST], ` on ${TEST}: ${String(Buffer.byteLength(text))} bytes, ${String(replays.length)} of ${String(sequences.length)} sequences`)
+    return forge(root, ['test', '-vv', '--match-path', TEST], ` on ${TEST}: ${String(Buffer.byteLength(text))} bytes, ${String(replays.length)} of ${String(sequences.length)} sequences`)
   } finally {
     rmSync(join(root, TEST), { force: true })
     rmSync(join(root, 'out/ProbeReadings.t.sol'), { recursive: true, force: true })
   }
+}
+
+export function trackers(root: string, corpus: string): Map<string, Value> {
+  const contract = entry(root)
+  const sequences = loaded(corpus)
+  const out = replay(root, contract, sequences, (count) => {
+    const probes = suite(root).probes.map((p) => ({ ...p, layout: layout(root, p.name) }))
+    const entered = layout(root, contract.name)
+    const reads = probes.flatMap((p) => entered.storage.filter((e) => e.type.startsWith(`t_contract(${p.name})`)).flatMap((held) => [
+      `        p = address(uint160(word(h, ${held.slot}, ${String(held.offset)}, 20)));\n`,
+      ...p.layout.storage.filter((e) => p.trackers.includes(`${p.name}.${e.label}`) && TRACKED.test(e.type)).map((e) => {
+        const value = `word(p, ${e.slot}, ${String(e.offset)}, ${p.layout.types[e.type]?.numberOfBytes ?? ''})`
+        return `        log("${p.name}.${e.label}=", ${e.type === 't_bool' ? `${value} != 0` : value});\n`
+      }),
+    ]))
+    handed(corpus, count, sequences.length)
+    return reads.join('')
+  })
   const values = new Map<string, Value>()
   for (const [, name = '', raw = ''] of out.matchAll(LOGGED)) {
     const [was, max] = [values.get(name), bare(name).startsWith('max')]
@@ -172,4 +190,34 @@ export function trackers(root: string, corpus: string): Map<string, Value> {
     else if (max || bare(name).startsWith('min')) values.set(name, typeof was !== 'bigint' ? BigInt(raw) : (max ? larger : smaller)(was, BigInt(raw)))
   }
   return values
+}
+
+/** Medusa's `testViewMethods` still assertion-tests a public view `read_probe*`, so each one is made `internal`. */
+export function unprobed(from: string, into: string): void {
+  cpSync(from, into, { recursive: true })
+  for (const path of sols(into).map((p) => join(into, p))) writeFileSync(path, readFileSync(path, 'utf8').replaceAll('property_probe', 'read_probe').replace(VISIBLE, '$1internal'))
+}
+
+export function sampled(db: Db, plan: number, src: string, suite: string): Record<string, string> {
+  const dir = join(src, suite)
+  const names = [...new Set(sols(dir).flatMap((p) => [...readFileSync(join(dir, p), 'utf8').replace(COMMENT, '').matchAll(PROBE)].map(([, name = '']) => name)))]
+  if (names.length === 0) return {}
+  const config = join(src, existsSync(join(src, 'medusa.json')) ? '' : suite, 'medusa.json')
+  const all = (why: string): Record<string, string> => Object.fromEntries(names.map((n) => [n, `dropped: ${why}`]))
+  let out: string
+  try {
+    const at = (existsSync(config) ? JSON.parse(readFileSync(config, 'utf8')) as { fuzzing?: { corpusDirectory?: string } } : {}).fuzzing?.corpusDirectory ?? ''
+    const corpus = resolve(dirname(config), at)
+    const sequences = at === '' || !existsSync(join(corpus, 'call_sequences')) ? [] : loaded(corpus)
+    if (sequences.length === 0) return all('no corpus')
+    out = replay(src, entry(src, config), sequences, () => names.map((n) =>
+      `        { (bool ok, bytes memory ret) = h.call(abi.encodeWithSignature("${n}()")); log("probe.${n}=", ok && ret.length == 32 && abi.decode(ret, (bool))); }\n`).join(''))
+  } catch (error) {
+    logged(db, { plan, kind: 'swallowed', actor: 'score', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    return all(firstLine(error))
+  }
+  return Object.fromEntries(names.map((n) => {
+    const said = [...out.matchAll(LOGGED)].filter(([, name]) => name === `probe.${n}`).map(([, , raw]) => raw)
+    return [n, said.length === 0 ? 'dropped: no reading in forge output' : `true on ${String(said.filter((r) => r === 'true').length)} of ${String(said.length)} sequences`]
+  }))
 }

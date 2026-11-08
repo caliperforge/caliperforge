@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -23,6 +23,7 @@ import { heldForCoo, profiled, rows, seedsOf } from './paired.ts'
 import { firing, phased, START } from './phases.ts'
 import { buildError, FEWEST, fewer, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
+import { COMMENT, sampled, unprobed } from './probes.ts'
 import { report } from './report.ts'
 import { archived, placed, recloned, rooted, scrapped } from './rooted.ts'
 import { unstopped } from './stopped.ts'
@@ -39,8 +40,6 @@ const SUITE = 'test/fizz'
 const META = 'fizz_data'
 
 const PROPERTY = /\bfunction\s+(?:invariant|property|echidna)_\w*\s*\(/g
-
-const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
 
 const PROPERTIES = 'Properties.sol'
 
@@ -177,7 +176,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
   put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
     CARRIED.filter((key) => keys[key] !== undefined).map((key) => `${key}: ${keys[key] ?? ''}\n`).join('')}`)
-  cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
+  unprobed(join(srcDir(root, plan.id), suite), join(bench, suites))
   rooted(srcDir(root, plan.id), join(bench, suites))
   const dropped = config === null ? null : placed(config.config, srcDir(root, plan.id), join(bench, suites))
   mkdirSync(join(bench, 'results', target), { recursive: true })
@@ -189,7 +188,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }
   kept(db, root, plan.id, { target, generator }, score, sha, { partial, ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
     ...(keys.refuzz === undefined ? {} : { mode: 'refuzz', source: Number(keys.refuzz) }), broken: seeded.union.broken, flaky: seeded.union.flaky, seeds: seeded.seeds, union: seeded.union, ...(ran.retried ? { via_ir_retry: true } : {}) })
-  report(db, root, plan.id, ran.runs, score.not_powered, keys.refuzz !== undefined)
+  report(db, root, plan.id, ran.runs, score.not_powered, keys.refuzz !== undefined, sampled(db, plan.id, srcDir(root, plan.id), suite))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }

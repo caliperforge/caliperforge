@@ -23,7 +23,7 @@ export interface Turn { turn: number; tokens: number; usd: number }
 
 export interface Phase { phase: string; tokens: number; usd: number }
 
-const TITLES = { result: 'Result', cost: 'Cost', map: 'Map health', reach: 'Reach', checks: 'Checks', counted: 'Counted' }
+const TITLES = { result: 'Result', probes: 'Probe readings', cost: 'Cost', map: 'Map health', reach: 'Reach', checks: 'Checks', counted: 'Counted' }
 
 const SAID: Record<Class, string> = { catch: 'catch', false_positive: 'false alarm', broken: 'broken', silent: 'silent', not_run: 'not run' }
 
@@ -31,13 +31,14 @@ const TOP = 5
 
 type Section = object | '-'
 
-export function report(db: Db, root: string, plan: number, runs: Row[][], notPowered: Score['not_powered'], refuzz = false): void {
+export function report(db: Db, root: string, plan: number, runs: Row[][], notPowered: Score['not_powered'], refuzz = false, probes: Record<string, string> = {}): void {
   const read = <T>(kind: keyof typeof KINDS): T[] => eventsOf(db, plan, KINDS[kind]).map((e) => JSON.parse(e.message) as T)
   const critic = eventsOf(db, plan, KINDS.critic).map((e) => e.outcome)
   const why = counted(notPowered, critic)
   const { gross, net, credited } = spend(db, plan)
   const sections: Record<keyof typeof TITLES, Section> = {
     result: result(runs, refuzz),
+    probes: Object.keys(probes).length === 0 ? '-' : probes,
     cost: { gross_usd: gross, net_usd: net, credited: or(credited), phases: or(read<Phase>('cost')), fix_turns: or(read<Turn>('fix_turns')) },
     map: { ...missed('map_miss', read<Miss>('map_miss')), ...missed('slice_miss', read<Miss>('slice_miss')), unused: or(read<Unused>('map_unused').map((u) => u.row)) },
     reach: read<Reach>('reach').at(-1) ?? '-',

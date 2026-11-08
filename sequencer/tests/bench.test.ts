@@ -1758,7 +1758,7 @@ function reported(log: (db: Db) => void) {
 
 const RESULT = { catch: 2, false_positive: 1, broken: 0, flaky: 0, silent: 1, not_run: 0, p1: ['catch', 'catch'], p2: ['catch', 'catch'], p3: ['false alarm', 'false alarm'], p4: ['silent', 'silent'] }
 
-const TITLES = ['Result', 'Cost', 'Map health', 'Reach', 'Checks', 'Counted']
+const TITLES = ['Result', 'Probe readings', 'Cost', 'Map health', 'Reach', 'Checks', 'Counted']
 
 test('report D3 D6 every section is built from its events', () => {
   const { json, md } = reported((db) => {
@@ -1773,7 +1773,7 @@ test('report D3 D6 every section is built from its events', () => {
     said(db, KINDS.cost, { phase: 'context', tokens: 1000, usd: 2 })
     said(db, KINDS.critic, 'clean')
   })
-  expect(json).toEqual({ result: RESULT,
+  expect(json).toEqual({ result: RESULT, probes: '-',
     cost: { gross_usd: 0, net_usd: 0, credited: '-', phases: [{ phase: 'context', tokens: 1000, usd: 2 }], fix_turns: [{ turn: 1, tokens: 100, usd: 0.5 }] },
     map: { map_miss: 3, map_miss_top: [{ file: 'a.sol', line: 4, count: 2 }, { file: 'b.sol', line: 9, count: 1 }],
       slice_miss: 1, slice_miss_top: [{ file: 'c.sol', line: 1, count: 1 }], unused: ['Vault.deposit'] },
@@ -1790,11 +1790,59 @@ test('report D3 D6 every section is built from its events', () => {
 
 test('report D4 no events shows -, counted no with critic -', () => {
   const { json, md } = reported(() => undefined)
-  expect(json).toEqual({ result: RESULT, cost: { gross_usd: 0, net_usd: 0, credited: '-', phases: '-', fix_turns: '-' },
+  expect(json).toEqual({ result: RESULT, probes: '-', cost: { gross_usd: 0, net_usd: 0, credited: '-', phases: '-', fix_turns: '-' },
     map: { map_miss: '-', map_miss_top: '-', slice_miss: '-', slice_miss_top: '-', unused: '-' }, reach: '-',
     checks: { hits: '-', reach_fixes: '-', network: '-' }, counted: { counted: 'no', why: 'no_critic', critic: '-' } })
+  expect(md).toContain('## Probe readings\n\n-\n')
   expect(md).toContain('## Reach\n\n-\n')
   expect(md).toContain('- counted: no\n- why: no_critic\n- critic: -\n')
+})
+
+/** A run_pair that writes a fail→pass row for every `function property_*` in the suite it is handed. */
+const PROPERTIED = `import json, os, re, sys
+name = os.path.basename(sys.argv[2])
+found = [p for d, _, fs in os.walk(sys.argv[2]) for f in fs if f.endswith('.sol') for p in re.findall(r'function (property_\\w+)', open(os.path.join(d, f)).read())]
+os.makedirs(f'results/{name}', exist_ok=True)
+open(f'results/{name}/{name}.jsonl', 'w').write('\\n'.join(json.dumps({'property': p, 'pre_fix': 'fail', 'fix': 'pass'}) for p in found))
+`
+
+const PROBING = 'contract FizzTest {\n  function property_holds() public returns (bool) { return true; }\n'
+  + '  function property_probeCap() public view returns (bool) { return true; }\n  function property_probeGone() external view returns (bool) { return true; }\n}\n'
+
+/** A suite of PROBING scored under PROPERTIED, with one corpus sequence when `corpus`, and a forge on PATH that prints only probeCap's reading. */
+function probing(corpus: boolean) {
+  const { root, db } = scoring(PROPERTIED)
+  const sequences = join(srcDir(root, 1), 'test/fizz/fizz_data/corpus_medusa/call_sequences')
+  writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), PROBING)
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { corpusDirectory: 'test/fizz/fizz_data/corpus_medusa', targetContracts: ['FizzTest'] } }))
+  if (corpus) mkdirSync(sequences, { recursive: true })
+  if (corpus) writeFileSync(join(sequences, '0.json'), JSON.stringify([{ call: { from: '0x10000', data: '0x12345678' } }]))
+  const bin = mkdtempSync(join(tmpdir(), 'cf-forge-'))
+  writeFileSync(join(bin, 'forge'), `#!/bin/sh\necho "$*" >> '${bin}/log'\necho '  probe.property_probeCap= true'\n`)
+  chmodSync(join(bin, 'forge'), 0o755)
+  vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  return { root, db, md: get(root, 1, 'report.md'), forged: existsSync(join(bin, 'log')) ? readFileSync(join(bin, 'log'), 'utf8') : '' }
+}
+
+test('probes are renamed out of the scored copy and read by forge', () => {
+  const { root, db, md, forged } = probing(true)
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'), 'utf8')).toBe(PROBING.replaceAll('property_probe', 'read_probe')
+    .replace('read_probeCap() public', 'read_probeCap() internal').replace('read_probeGone() external', 'read_probeGone() internal'))
+  expect(readFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), 'utf8')).toBe(PROBING)
+  expect(scores(db)).toMatchObject([{ catches: 1, false_positives: 0 }])
+  const { result } = JSON.parse(get(root, 1, 'report.json')) as { result: Record<string, unknown> }
+  expect([result.property_holds, Object.keys(result).filter((k) => k.includes('probe'))]).toEqual([['catch', 'catch'], []])
+  expect([...md.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(TITLES)
+  expect(md).toContain('## Probe readings\n\n- property_probeCap: true on 1 of 1 sequences\n- property_probeGone: dropped: no reading in forge output\n')
+  expect(forged).toBe('test -vv --match-path test/fizz/ProbeReadings.t.sol\n')
+  expect(existsSync(join(srcDir(root, 1), 'test/fizz/ProbeReadings.t.sol'))).toBe(false)
+})
+
+test('with no corpus every probe is dropped and forge never runs', () => {
+  const { md, forged } = probing(false)
+  expect(md).toContain('## Probe readings\n\n- property_probeCap: dropped: no corpus\n- property_probeGone: dropped: no corpus\n')
+  expect(forged).toBe('')
 })
 
 test('report D5 a refused critic is not_clean, report kept', () => {

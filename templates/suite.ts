@@ -35,6 +35,7 @@ const PROPERTY = /^(?:invariant|property|echidna)_/
 const LIMITS = /^\s*\/\/ stand-in limits:(.*)$/
 const LIMIT = /^\s*\/\/ - (.*)$/
 const MAPPED = / \| map: (.+)$/
+const NOT_DEPLOYED = /^not deployed:\s*(.*)$/
 const NONE = 'none'
 const CLAMPS = new Set(['bound', 'between'])
 const ACTORS = new Set(['address', 'address[]'])
@@ -176,18 +177,22 @@ const entered = (map: string): string[] => named(map, 'Selected entry points').m
 
 const aims = (found: Suite, name: string, clamped: boolean): boolean => found.handlers.some((h) => h.targets.includes(name) && h.clamped === clamped)
 
-const word = (text: string): RegExp => new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`)
+const undeployed = (map: string): string[] => listed(map, 'Outside dependencies').map((r) => r.split(' | '))
+  .filter(([, ...cells]) => cells.some((c) => filled(NOT_DEPLOYED.exec(c)?.[1]))).map(([name = '']) => name)
+
+const word = (text: string, prefix = '', flags = ''): RegExp => new RegExp(`(?<!\\w)${prefix}${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`, flags)
 
 export function harnessed(found: Suite, map: string): Refused[] {
-  const [unclamped, outside] = [excused(map, 'Unclamped'), named(map, 'Outside dependencies')]
+  const [unclamped, outside, undone] = [excused(map, 'Unclamped'), named(map, 'Outside dependencies'), undeployed(map)]
   const cited = [...named(map, 'Limits'), ...outside]
-  const known = [...found.standIns.flatMap((s) => [s.name, s.replaces]), ...found.deployed.map((d) => d.contract)]
+  const known = [...found.standIns.map((s) => s.name), ...found.deployed.map((d) => d.contract)]
+  const replaced = known.flatMap((k) => STAND_IN.exec(k)?.slice(1) ?? [])
   return [
     ...entered(map).flatMap((name) => [
       ...(aims(found, name, false) ? [] : [`scaffold: ${name} has no raw handler`]),
       ...(aims(found, name, true) || unclamped.includes(name) ? [] : [`scaffold: ${name} has no clamped handler and no ## Unclamped row`]),
     ]).map((note) => ({ rule: 'suite.clamped', note })),
-    ...outside.filter((name) => !known.some((k) => word(k).test(name)))
+    ...outside.filter((name) => !undone.includes(name) && !known.some((k) => word(k).test(name)) && !replaced.some((r) => word(r, 'I?', 'i').test(name)))
       .map((name) => ({ rule: 'suite.outside', note: `scaffold: ${name} under ## Outside dependencies has no stand-in and is not deployed in setup()` })),
     ...found.standIns.flatMap((s) => s.limits.filter((l) => l.map === null || !cited.includes(l.map))
       .map((l) => ({ rule: 'suite.stand_in', note: `scaffold: ${s.name} limit "${l.limit}" cites no ## Limits or ## Outside dependencies row` }))),

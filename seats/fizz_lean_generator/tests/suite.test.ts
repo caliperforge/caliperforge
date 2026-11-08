@@ -69,12 +69,21 @@ test('D3: a stand-in limit citing no map row is refused', () => {
 
 test('D4: an outside dependency with no stand-in is refused', () => {
   const outside = map({ 'Outside dependencies': ['- Oracle | limits: 1e6 per update', '- asset ERC20 (MockERC20 stand-in) | limits: 1e6 per update',
+    '- IPerspective (settable allow-list stand-in) | limits: none', '- strategy ERC4626 vaults (OZ ERC4626 stand-ins) | limits: none',
     '- Feed | limits: one answer per block', '- MockERC20s pool | limits: one answer per block'].join('\n') })
   const refused = ['Feed', 'MockERC20s pool']
     .map((name) => ({ rule: 'suite.outside', note: `scaffold: ${name} under ## Outside dependencies has no stand-in and is not deployed in setup()` }))
-  const mock = { ...at(16, 18), name: 'MockERC20', replaces: 'ERC20', limits: [] }
-  expect(harnessed({ ...FOUND, standIns: [...FOUND.standIns, mock] }, outside)).toEqual(refused)
-  expect(harnessed({ ...FOUND, deployed: [...FOUND.deployed, { ...at(25, 25), contract: 'MockERC20', args: [] }] }, outside)).toEqual(refused)
+  const mocks = [['MockERC20', 'ERC20'], ['StandInPerspective', 'Perspective'], ['StandInStrategy', 'Strategy']]
+    .map(([name = '', replaces = '']) => ({ ...at(16, 18), name, replaces, limits: [] }))
+  expect(harnessed({ ...FOUND, standIns: [...FOUND.standIns, ...mocks] }, outside)).toEqual(refused)
+  expect(harnessed({ ...FOUND, deployed: [...FOUND.deployed, ...mocks.map((m) => ({ ...at(25, 25), contract: m.name, args: [] }))] }, outside)).toEqual(refused)
+})
+
+test('an outside dependency marked not deployed passes', () => {
+  const outside = (cell: string): string => map({ 'Outside dependencies': `- Oracle | limits: 1e6 per update\n- Permit2 | limits: none | ${cell}` })
+  const refused = [{ rule: 'suite.outside', note: 'scaffold: Permit2 under ## Outside dependencies has no stand-in and is not deployed in setup()' }]
+  expect(harnessed(FOUND, outside('not deployed: an unused path'))).toEqual([])
+  expect(['not deployed:', 'not deployed: <why, when it is a behaviour or an unused path>'].map((c) => harnessed(FOUND, outside(c)))).toEqual([refused, refused])
 })
 
 test('D5: a clamp with no map row is listed, not refused', () => {

@@ -14,7 +14,7 @@
 
 ## Outside dependencies
 
-- <oracle, token or strategy> | limits: <the real limits it enforces> | at: <file under PROJECT_ROOT> L<start>-L<end>
+- <oracle, token or strategy> | limits: <the real limits it enforces> | at: <file under PROJECT_ROOT> L<start>-L<end> | not deployed: <why, when it is a behaviour or an unused path>
 
 ## Conversion points
 

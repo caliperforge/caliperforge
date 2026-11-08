@@ -254,7 +254,7 @@ const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 
 async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}, wrote: Record<string, Record<string, string>> = {}, report = true,
-  batched = false, ends: Record<string, Fired['ended']> = {}) {
+  batched = false, ends: Record<string, Partial<Fired>> = {}) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
   writeFileSync(join(handoffs, 'map.md'), map)
@@ -270,7 +270,7 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
     appendFileSync(join(handoffs, 'map.md'), appended[phase] ?? '')
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
     for (const [file, text] of Object.entries(wrote[phase] ?? {})) writeFileSync(join(handoffs, file), text)
-    return phase === 'scaffold' ? { misses: MISSES } : ends[phase] === undefined ? {} : { ended: ends[phase] }
+    return phase === 'scaffold' ? { misses: MISSES } : ends[phase] ?? {}
   }, [fizzed()], batched)
   return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs), rerun: () => run(skill, handoffs) }
 }
@@ -546,7 +546,7 @@ const SPLIT = `## Rows\n\n${[...Array<string>(10).fill('guards-1'), 'guards-2'].
 const TESTER = 'pragma solidity ^0.8.0;\nimport "./Properties.sol";\ncontract FuzzTester is Properties {}\n'
 const BATCHED = [...LEAN, 'invariants-plan', 'invariants-batch-1', 'invariants-batch-2']
 
-const v5 = (bodies = ['function a() public {}', 'function b() public {}'], ends: Record<string, Fired['ended']> = {}) => mapped(TWO, {}, {
+const v5 = (bodies = ['function a() public {}', 'function b() public {}'], ends: Record<string, Partial<Fired>> = {}) => mapped(TWO, {}, {
   'invariants-plan': { 'plan.md': SPLIT, '../../FuzzTester.sol': TESTER },
   'invariants-batch-1': { '../../PropertiesBatch1.sol': `contract PropertiesBatch1 { ${bodies[0] ?? ''} }\n` },
   'invariants-batch-2': { '../../PropertiesBatch2.sol': `contract PropertiesBatch2 { ${bodies[1] ?? ''} }\n`, 'invariants.md': FILLED.invariants ?? '' },
@@ -564,12 +564,15 @@ test('a v5 run fires one fresh session per batch', async () => {
 })
 
 test('a crashed batch refires alone; a rerun fires only it', async () => {
-  const ends: Record<string, Fired['ended']> = { 'invariants-batch-2': 'stopped' }
-  const { fires, sum, rerun } = await v5(undefined, ends)
+  const ends: Record<string, Partial<Fired>> = { 'invariants-batch-2': { ended: 'stopped', usage: { input: 0, cache: 0, output: 500, cost: 7 } } }
+  const { packets, fires, sum, rerun } = await v5(undefined, ends)
   expect(fires.map((f) => f.phase)).toEqual([...BATCHED, 'invariants-batch-2'])
   expect(sum).toEqual({ outcome: 'refuse', spans: ['seat.exit'], note: 'fizz_lean_generator invariants-batch-2 stopped' })
+  const [crashed, refired] = packets.slice(-2)
+  expect((crashed?.wall ?? 0) - (refired?.wall ?? 0)).toBe(500)
+  expect((crashed?.cost_wall?.usd ?? 0) - (refired?.cost_wall?.usd ?? 0)).toBe(7)
   const before = fires.length
-  ends['invariants-batch-2'] = 'completed'
+  ends['invariants-batch-2'] = {}
   expect(await rerun()).toMatchObject({ wall: null })
   expect(fires.slice(before).map((f) => f.phase)).toEqual(['invariants-batch-2'])
 })

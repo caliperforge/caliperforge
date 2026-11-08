@@ -122,6 +122,20 @@ interface Leg { fire: Fire; at: Phase; end: string }
 
 const batchOf = (n: number): string => `test/fizz/PropertiesBatch${String(n)}.sol`
 
+const spent = new WeakMap<Outcome, Sum>()
+
+export function crashed(outcome: Outcome, sum: Sum): Outcome {
+  spent.set(outcome, sum)
+  return outcome
+}
+
+function spentBy(ran: Sum | Outcome): Sum {
+  if (!('outcome' in ran)) return ran
+  const sum = spent.get(ran)
+  if (sum === undefined) throw new Error(`no session sum for ${ran.note}`)
+  return sum
+}
+
 async function batch(leg: Leg, packets: string[], n: number, sum: Sum, again = false, refused: Refused[] = []): Promise<Sum | Outcome> {
   const { fire, at, end } = leg
   const [phase, last] = [`invariants-batch-${String(n)}`, n === packets.length]
@@ -130,7 +144,7 @@ async function batch(leg: Leg, packets: string[], n: number, sum: Sum, again = f
     ...(refused.length > 0 ? [`Your batch was refused:\n${bulleted(refused)}`] : [])].join('\n')
   const ran = await fire(at.prompt, issue, sum, phase)
   const crashed = 'outcome' in ran ? !ran.spans.includes('bench.ceiling') : ran.wall?.startsWith('ruling:run.repeat_read') === true
-  if ('outcome' in ran || ran.wall !== null) return crashed && !again ? batch(leg, packets, n, 'outcome' in ran ? sum : ran, true) : ran
+  if ('outcome' in ran || ran.wall !== null) return crashed && !again ? batch(leg, packets, n, spentBy(ran), true) : ran
   const handed = [...unbatched(n, read(join(at.root, batchOf(n)))), ...(last ? handoff(at.skill, 'invariants', read(at.path)) : [])]
   if (handed.length === 0) return ran
   if (!again) return batch(leg, packets, n, ran, true, handed)

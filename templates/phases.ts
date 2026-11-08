@@ -17,7 +17,7 @@ import { costWalled, faulted, net, refired, refiring, tallied } from './generate
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
 import { grader } from './missed.ts'
-import { BATCHES, batches, bulleted, duplicated, implemented, packets, planned, skeleton } from './plan.ts'
+import { BATCHES, batches, bulleted, crashed, duplicated, implemented, packets, planned, skeleton } from './plan.ts'
 import type { Step } from './pr-path.ts'
 import { readings, trackers } from './probes.ts'
 import { met, misread, reach, unlocated, unmet, written } from './reach.ts'
@@ -68,7 +68,7 @@ function added(sum: Sum, fired: Fired, transcript: string, who: string, ceiling:
   const next = { ...sum, tokens: sum.tokens + fired.usage.input + fired.usage.output, seconds: sum.seconds + fired.seconds, usd: sum.usd + (fired.usage.cost ?? 0),
     transcripts: [...sum.transcripts, transcript], wall: costWalled(fired.stop_reason) }
   if (next.tokens >= ceiling) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${who} hit the ${String(ceiling)}-token ceiling at ${String(next.tokens)} tokens` }
-  if (next.wall === null && fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${who} ${fired.ended}` }
+  if (next.wall === null && fired.ended !== 'completed') return crashed({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${who} ${fired.ended}` }, next)
   return next
 }
 

@@ -14,6 +14,7 @@ import { drawn, suited } from './map.ts'
 import { duplicated, planned } from './plan.ts'
 import { readings, trackers } from './probes.ts'
 import { type Item, met, misread, type ProbeReadings, reach, unlocated, unmet, written } from './reach.ts'
+import { rebased } from './rebased.ts'
 import { callee, rows } from './slices.ts'
 import { smoke, unrun } from './smoke.ts'
 import { planted } from './rooted.ts'
@@ -152,6 +153,14 @@ function tabled(db: Db, root: string, plan: number, dir: string, fizz: string): 
     .map(([phase, check, result]) => [phase, check, result()] as const)
 }
 
+function unrooted(suites: string, dir: string): void {
+  const path = join(suites, 'medusa.json')
+  if (!existsSync(path)) return
+  const config: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  rebased(config, (value) => join('test/fizz', value))
+  writeFileSync(join(dir, 'medusa.json'), JSON.stringify(config, null, 2))
+}
+
 const misreads = (result: string): boolean => (/^refuse (.*?) \| /.exec(result)?.[1] ?? '').split(', ').some((rule) => rule.endsWith('.misread'))
 
 export function regraded(db: Db, root: string, plan: number, fizz: string): string {
@@ -159,6 +168,7 @@ export function regraded(db: Db, root: string, plan: number, fizz: string): stri
   const dir = join(root, '.cf/regrade', String(plan))
   try {
     planted(root, plan, dir, { suites, target: 'fizz' })
+    unrooted(suites, dir)
     const table = tabled(db, root, plan, dir, fizz).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
     const heading = `plan ${String(plan)} regraded from fuzz-bench/suites/${generator}/${target}`
     const refused = table.some((row) => row[2].startsWith('refuse throw') || row.length === 4)

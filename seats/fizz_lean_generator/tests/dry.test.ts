@@ -197,11 +197,34 @@ function regradable(files: Record<string, string> = {}): { db: Db; root: string;
 test('regrade rebuilds from the archive, every row, no run', () => {
   const { db, root, archive } = regradable()
   const before = tree(archive)
+  const rooted: boolean[] = []
+  vi.mocked(smoke).mockImplementationOnce((dir) => {
+    rooted.push(existsSync(join(dir, 'medusa.json')))
+    return { results: [], note: null, cache: null, clamped: [] }
+  })
   expect(regraded(db, root, 1, fizz())).toBe(table(ROWS, REGRADED))
   expect(vi.mocked(fetched)).toHaveBeenLastCalledWith(root, 1, join(root, '.cf/regrade/1'), { suites: archive, target: 'fizz' })
+  expect(rooted).toEqual([false])
   expect(tree(archive)).toEqual(before)
   expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
   expect(runRows(db)).toEqual([])
+})
+
+test('regrade lays the archived medusa.json under test/fizz/', () => {
+  const medusa = { fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', workers: 4 }, logging: { logDirectory: '' },
+    compilation: { platformConfig: { target: '../..', exportDirectory: '../../out' } }, slither: { cachePath: '/tmp/slither.json' } }
+  const { db, root, archive } = regradable({ 'test/fizz/medusa.json': JSON.stringify(medusa) })
+  const before = tree(archive)
+  const seen: unknown[] = []
+  vi.mocked(smoke).mockImplementationOnce((dir) => {
+    seen.push(JSON.parse(readFileSync(join(dir, 'medusa.json'), 'utf8')))
+    return { results: [], note: null, cache: null, clamped: [] }
+  })
+  regraded(db, root, 1, fizz())
+  expect(seen).toEqual([{ fuzzing: { corpusDirectory: 'test/fizz/fizz_data/corpus_medusa', workers: 4 }, logging: { logDirectory: '' },
+    compilation: { platformConfig: { target: '.', exportDirectory: 'out' } }, slither: { cachePath: '/tmp/slither.json' } }])
+  expect(tree(archive)).toEqual(before)
+  expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
 })
 
 test('a suite with an unaimed entry point lcov hits is misread', () => {

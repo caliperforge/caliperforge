@@ -11,6 +11,7 @@ import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
 import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { setUntested } from '../store/bench.ts'
+import { setting } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
@@ -134,7 +135,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
-  const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }
+  const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING, batched: generator === 'fizz_lean_v5' }
   const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue, stop)
     : await firing(bench, manifest, hash)(prompt, issue, START)
   if ('outcome' in sum && sum.outcome === 'needs_coo') put(root, plan.id, 'refusal.md', refusalText(step, sum))
@@ -224,7 +225,7 @@ export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Out
 export function unproven(suite: string, name: string): Outcome | number {
   const sols = existsSync(suite) ? readdirSync(suite, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`)) : []
   if (sols.length === 0) return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
-  const counted = sols.includes(PROPERTIES) ? [PROPERTIES] : sols
+  const counted = sols.includes(PROPERTIES) ? [PROPERTIES, ...sols.filter((p) => /^PropertiesBatch\d+\.sol$/.test(p))] : sols
   const properties = counted.reduce((n, p) => n + (readFileSync(join(suite, p), 'utf8').replace(COMMENT, '').match(PROPERTY)?.length ?? 0), 0)
   if (properties > 0) return properties
   return { outcome: 'refuse', spans: ['bench.no_properties'],
@@ -235,14 +236,14 @@ export function unproven(suite: string, name: string): Outcome | number {
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
   [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
 
-const TIMEOUT = 3600
-
 const WORKERS = 4
 
 function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
   const installed = !existsSync(join(src, 'medusa.json'))
   const path = join(src, installed ? suite : '', 'medusa.json')
   if (!existsSync(path)) return null
+  const seconds = setting(db, 'bench.score_seconds')
+  if (seconds === undefined) return { outcome: 'refuse', spans: ['bench.no_score_seconds'], note: 'no settings row bench.score_seconds' }
   let config: unknown
   try {
     config = JSON.parse(readFileSync(path, 'utf8'))
@@ -265,8 +266,7 @@ function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hour
   const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])
   if (typeof fuzzing === 'object' && fuzzing !== null) {
     const { timeout, workers } = fuzzing as Record<string, unknown>
-    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
-      workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
+    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? Number(seconds) : timeout, workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
     if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
     if (refuzz !== null) Object.assign(fuzzing, { timeout: refuzz.hours * 3600, testLimit: 0, corpusDirectory: refuzz.corpus })
   }

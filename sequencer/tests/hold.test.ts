@@ -485,8 +485,11 @@ test.each([
   ['scaffold', { phase: 'context', sum: { tokens: 5 }, smoked: 'smoked' }],
 ])('--from-phase %s rewrites what the run resumes after', (phase, kept) => {
   const { db, home } = graded('scaffold')
+  const batches = join(home, '.cf/work/7', HANDOFF, 'batches.json')
+  writeFileSync(batches, '{"packets":[],"done":[]}')
   expect(said(db, home, ['return', '7', '--to', '1', '--from-phase', phase, '--by', 'ceo'])).toEqual(['plan 7 queued at step 1\n', `  resumes at ${phase}\n`])
   expect(stopped(home)).toEqual(kept)
+  expect(existsSync(batches)).toBe(false)
 })
 
 test.each([

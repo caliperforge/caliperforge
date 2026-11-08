@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
-import { admitted, type Miss, type Packet } from '../../../providers/kind.ts'
+import { admitted, type Fired, type Miss, type Packet } from '../../../providers/kind.ts'
 import { get, put } from '../../../sequencer/workspace.ts'
 import { scores, underpowered } from '../../../store/bench.ts'
 import { eventsAfter } from '../../../store/events.ts'
@@ -253,7 +253,8 @@ test('a retry resumes at the first phase not yet passed', async () => {
 const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 
-async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}, wrote: Record<string, Record<string, string>> = {}, report = true) {
+async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}, wrote: Record<string, Record<string, string>> = {}, report = true,
+  batched = false, ends: Record<string, Partial<Fired>> = {}) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
   writeFileSync(join(handoffs, 'map.md'), map)
@@ -269,8 +270,8 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
     appendFileSync(join(handoffs, 'map.md'), appended[phase] ?? '')
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
     for (const [file, text] of Object.entries(wrote[phase] ?? {})) writeFileSync(join(handoffs, file), text)
-    return phase === 'scaffold' ? { misses: MISSES } : {}
-  }, [fizzed()])
+    return phase === 'scaffold' ? { misses: MISSES } : ends[phase] ?? {}
+  }, [fizzed()], batched)
   return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs), rerun: () => run(skill, handoffs) }
 }
 
@@ -538,6 +539,58 @@ test('invariants D6: a ghost both implementers declare is resent', async () => {
   expect(invariants).toHaveLength(2)
   expect(invariants[1]?.issue).toContain('Your handoff was refused:\n- plan.duplicate: plan: function ghost is declared by both implementers')
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'plan.duplicate').map((e) => e.outcome)).toEqual(['refuse'])
+})
+
+const TWO = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n- W.withdraw | reverts: cap | at: src/W.sol L9-L9\n'
+const SPLIT = `## Rows\n\n${[...Array<string>(10).fill('guards-1'), 'guards-2'].map((id, i) => `- p${String(i)} | relies: ${id} | implementer: global\n`).join('')}\n## Skipped\n\n- none\n`
+const TESTER = 'pragma solidity ^0.8.0;\nimport "./Properties.sol";\ncontract FuzzTester is Properties {}\n'
+const BATCHED = [...LEAN, 'invariants-plan', 'invariants-batch-1', 'invariants-batch-2']
+
+const v5 = (bodies = ['function a() public {}', 'function b() public {}'], ends: Record<string, Partial<Fired>> = {}) => mapped(TWO, {}, {
+  'invariants-plan': { 'plan.md': SPLIT, '../../FuzzTester.sol': TESTER },
+  'invariants-batch-1': { '../../PropertiesBatch1.sol': `contract PropertiesBatch1 { ${bodies[0] ?? ''} }\n` },
+  'invariants-batch-2': { '../../PropertiesBatch2.sol': `contract PropertiesBatch2 { ${bodies[1] ?? ''} }\n`, 'invariants.md': FILLED.invariants ?? '' },
+}, true, true, ends)
+
+test('a v5 run fires one fresh session per batch', async () => {
+  const { db, handoffs, fires } = await v5()
+  expect(fires.map((f) => f.phase)).toEqual(BATCHED)
+  expect(generated(db, 1).map((r) => r.phase).filter((p) => p?.startsWith('invariants-batch-'))).toEqual(['invariants-batch-1', 'invariants-batch-2'])
+  expect(fires.some((f) => f.issue.includes('## Global packet\n'))).toBe(false)
+  expect(fires[4]?.issue).toContain('Run Step 9d for batch 1 of 2: write only test/fizz/PropertiesBatch1.sol and reports/invariants-batch-1.md.\n')
+  expect(fires[4]?.issue).toContain(`## Batch packet\n\n## Rows\n\n- p0 | relies: guards-1`)
+  expect(fires[4]?.issue).toContain(`## Harness skeleton\n\n\`\`\`solidity\n${TESTER}\`\`\``)
+  expect(fires.slice(4).map((f) => f.issue.includes(`Before you end, write ${join(handoffs, 'invariants.md')}`))).toEqual([false, true])
+})
+
+test('a crashed batch refires alone; a rerun fires only it', async () => {
+  const ends: Record<string, Partial<Fired>> = { 'invariants-batch-2': { ended: 'stopped', usage: { input: 0, cache: 0, output: 500, cost: 7 } } }
+  const { packets, fires, sum, rerun } = await v5(undefined, ends)
+  expect(fires.map((f) => f.phase)).toEqual([...BATCHED, 'invariants-batch-2'])
+  expect(sum).toEqual({ outcome: 'refuse', spans: ['seat.exit'], note: 'fizz_lean_generator invariants-batch-2 stopped' })
+  const [crashed, refired] = packets.slice(-2)
+  expect((crashed?.wall ?? 0) - (refired?.wall ?? 0)).toBe(500)
+  expect((crashed?.cost_wall?.usd ?? 0) - (refired?.cost_wall?.usd ?? 0)).toBe(7)
+  const before = fires.length
+  ends['invariants-batch-2'] = {}
+  expect(await rerun()).toMatchObject({ wall: null })
+  expect(fires.slice(before).map((f) => f.phase)).toEqual(['invariants-batch-2'])
+})
+
+test('a v5 run compiles once after the last batch, then inherits', async () => {
+  vi.clearAllMocks()
+  const { handoffs } = await v5()
+  expect(vi.mocked(compiled).mock.calls.map((call) => call[1])).toEqual(['scaffold', 'smoke', 'coverage', 'invariants', 'merge'])
+  expect(readFileSync(join(handoffs, '../../FuzzTester.sol'), 'utf8')).toBe('pragma solidity ^0.8.0;\nimport "./Properties.sol";\nimport "./PropertiesBatch1.sol";\n'
+    + 'import "./PropertiesBatch2.sol";\ncontract FuzzTester is Properties, PropertiesBatch1, PropertiesBatch2 {}\n')
+  expect(JSON.parse(readFileSync(join(handoffs, 'manifest.json'), 'utf8'))).toEqual(['test/fizz/PropertiesBatch1.sol', 'test/fizz/PropertiesBatch2.sol'])
+})
+
+test('two batches declaring one function refuse, no compile', async () => {
+  vi.clearAllMocks()
+  const { sum } = await v5(['function f() public {}', 'function f() public {}'])
+  expect(sum).toEqual({ outcome: 'refuse', spans: ['plan.duplicate'], note: 'plan: function f is declared by test/fizz/PropertiesBatch1.sol, test/fizz/PropertiesBatch2.sol' })
+  expect(vi.mocked(compiled).mock.calls.map((call) => call[1])).not.toContain('merge')
 })
 
 test('no src: a map.md the agent writes checks no layer', async () => {

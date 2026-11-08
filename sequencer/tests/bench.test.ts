@@ -1721,7 +1721,7 @@ test('seeds D2 the union counts, the smallest seed is powered', () => {
 })
 
 /** pre_fix and fix on each of two seeds: four probes fail on both, mint and deposit_full differ by seed. */
-const PROBES = {...Object.fromEntries([1, 2, 3, 4].map((n) => [`property_probe${String(n)}`, [['fail', 'fail'], ['fail', 'fail']]])),
+const PROBES = { ...Object.fromEntries([1, 2, 3, 4].map((n) => [`property_probe${String(n)}`, [['fail', 'fail'], ['fail', 'fail']]])),
   'assert:eulerEarn_mint': [['pass', 'fail'], ['fail', 'fail']], 'assert:eulerEarn_deposit_full': [['fail', 'pass'], ['pass', 'fail']],
   ...Object.fromEntries(['clamped', 'full', 'twoSources'].map((s) => [`assert:publicAllocator_reallocateTo_${s}`, [['fail', 'pass'], ['fail', 'pass']]])),
   'assert:eulerEarn_withdraw': [['pass', 'pass'], ['pass', 'pass']], 'assert:eulerEarn_redeem': [[null, null], [null, null]] }

@@ -85,15 +85,19 @@ function entry({ rows: map, hits, metrics }: Read, { name }: Row): Judged {
       floored('lines', pct(lines.filter(([, n]) => n > 0).length, lines.length)), `reverts: ${reverts(m).join(', ') || 'none'}`] }
 }
 
-function guard({ root, hits, metrics, all }: Read, row: Row): Judged {
+const named = (re: RegExp, source: string): string[] => [...source.matchAll(new RegExp(re, 'g'))].map((m) => m[1] ?? '')
+
+function guard({ root, rows: map, metrics, all }: Read, row: Row): Judged {
   const at = span(row)
   if (at === undefined) return UNLOCATED
   const [file, start, end] = at
   const source = readFileSync(join(root, file), 'utf8').split('\n').slice(start - 1, end).join('\n')
-  const [m, literal, error] = [metrics(row.name), LITERAL.exec(source)?.[1], ERROR.exec(source)?.[1]]
-  const seen = (match: (reason: string) => boolean): boolean => Object.entries(all.revertReasonMetrics).some(([r, { count }]) => match(r) && count > 0)
-  const passing = ([...hits(file)].filter(([l]) => l > end).sort(([a], [b]) => a - b)[0]?.[1] ?? 0) > 0
-  const reverting = literal !== undefined ? seen((r) => r === literal) : error !== undefined ? seen((r) => new RegExp(`(?<!\\w)${error}(?!\\w)`).test(r)) : m.totalReverts > 0
+  const targeted = (map.get('Handlers') ?? []).some((h) => h.cells.get('target') === callee(row.name))
+  const [m, literals, errors] = [targeted ? metrics(row.name) : all, named(LITERAL, source), named(ERROR, source)]
+  const seen = (match: (reason: string) => boolean): boolean => Object.entries(m.revertReasonMetrics).some(([r, { count }]) => match(r) && count > 0)
+  const passing = m.totalCalls - m.totalReverts > 0
+  const reverting = literals.length + errors.length === 0 ? m.totalReverts > 0
+    : seen((r) => literals.includes(r) || errors.some((e) => new RegExp(`(?<!\\w)${e}(?!\\w)`).test(r)))
   return { met: passing && reverting, cells: [`passing: ${yes(passing)}`, `reverting: ${yes(reverting)}`], misread: false,
     note: [...(passing ? [] : ['passing never seen']), ...(reverting ? [] : ['reverting never seen'])].join(', ') }
 }

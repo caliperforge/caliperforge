@@ -74,8 +74,8 @@ export function longJobs(db: Db, root: string, now: Date): void {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
     }
-    if (ended.has(plan)) continue
     logged(db, { plan, kind: KIND, actor: 'walled', outcome: 'refuse', message: `walled at ${String(seconds)}s`, pointer: log, run: null })
+    if (ended.has(plan)) continue
     end(db, plan, 'halted', `long job walled at ${String(seconds)}s: ${job.command}`)
   }
 }

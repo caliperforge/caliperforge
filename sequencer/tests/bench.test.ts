@@ -890,8 +890,8 @@ test('D6 no generator is refused, an unstaffed one needs the ceo', async () => {
   expect((await generated(stub(0, 'completed', false), { generator: 'nobody' })).outcome).toMatchObject({ outcome: 'needs_ceo', spans: ['staffing'] })
 })
 
-const PAIRS = [{ property: 'p1', verdict: 'catch' }, { property: 'p2', verdict: 'catch' }, { property: 'p3', verdict: 'fp_candidate' },
-  { property: 'p4', verdict: 'silent' }]
+const PAIRS = [{ property: 'p1', pre_fix: 'fail', fix: 'pass' }, { property: 'p2', pre_fix: 'fail', fix: 'pass' }, { property: 'p3', pre_fix: 'pass', fix: 'fail' },
+  { property: 'p4', pre_fix: 'pass', fix: 'pass' }]
 
 const KILLS = [{ property: 'p1', kills: 3, untested: false }, { property: 'p4', kills: 0, untested: true }]
 
@@ -932,9 +932,9 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
 const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5, pre_fix_calls: null, fix_calls: null,
   not_powered: 'reduced_generate', gross_usd: 0, net_usd: 0 }
 
-/** The seeds and union score.json carries for PAIRS on each of the two seeds. */
-const SEEDED = { seeds: [1, 2].map((seed) => ({ seed, catch: 2, fp_candidate: 1, silent: 1, calls: { pre_fix: null, fix: null }, seconds: expect.any(Number) as number })),
-  union: { catch: 2, fp_candidate: 1, silent: 1 } }
+/** The broken, flaky, seeds and union score.json carries for PAIRS on each of the two seeds. */
+const SEEDED = { broken: 0, flaky: 0, seeds: [1, 2].map((seed) => ({ seed, catch: 2, false_positive: 1, broken: 0, silent: 1, not_run: 0, calls: { pre_fix: null, fix: null }, seconds: expect.any(Number) as number })),
+  union: { catch: 2, false_positive: 1, broken: 0, flaky: 0, silent: 1, not_run: 0 } }
 
 const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
 
@@ -1333,7 +1333,7 @@ test('1645b D2 failed is compile_failed before every other reason', () => {
 })
 
 test('1645b D3 one row not error scores as today, no build_error', () => {
-  const { row, json } = scoredRows([...PAIRS, ERRORS[0] ?? {}])
+  const { row, json } = scoredRows([...PAIRS, { ...ERRORS[0], property: 'p5' }])
   expect(row).toMatchObject({ catches: 2, false_positives: 1, not_powered: 'reduced_generate' })
   expect(json).not.toHaveProperty('build_error')
 })
@@ -1622,9 +1622,9 @@ const CORPUS = `import json, os, sys
 name = os.path.basename(sys.argv[2])
 corpus = json.load(open(os.path.join(sys.argv[2], 'medusa.json')))['fuzzing']['corpusDirectory']
 os.makedirs(corpus, exist_ok=True)
-verdict = 'catch' if os.listdir(corpus) else 'silent'
+pre_fix = 'fail' if os.listdir(corpus) else 'pass'
 os.makedirs(f'results/{name}', exist_ok=True)
-open(f'results/{name}/{name}.jsonl', 'w').write('\\n'.join(json.dumps({'property': p, 'verdict': verdict, 'calls': {'pre_fix': 10, 'fix': 20}}) for p in ['p1', 'p2', 'p3']))
+open(f'results/{name}/{name}.jsonl', 'w').write('\\n'.join(json.dumps({'property': p, 'pre_fix': pre_fix, 'fix': 'pass', 'calls': {'pre_fix': 10, 'fix': 20}}) for p in ['p1', 'p2', 'p3']))
 open(os.path.join(corpus, str(len(os.listdir(corpus)))), 'w').write('x')
 `
 
@@ -1659,16 +1659,18 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...score }])
   const calls = { pre_fix: 10, fix: 20 }
   const seconds = expect.any(Number) as number
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7,
-    seeds: [{ seed: 1, catch: 0, fp_candidate: 0, silent: 3, calls, seconds }, { seed: 2, catch: 3, fp_candidate: 0, silent: 0, calls, seconds }],
-    union: { catch: 3, fp_candidate: 0, silent: 0 } })
+  const none = { false_positive: 0, broken: 0, not_run: 0 }
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7, broken: 0, flaky: 0,
+    seeds: [{ seed: 1, catch: 0, ...none, silent: 3, calls, seconds }, { seed: 2, catch: 3, ...none, silent: 0, calls, seconds }],
+    union: { catch: 3, ...none, flaky: 0, silent: 0 } })
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: { catch: 3, flaky: 0, p1: ['silent', 'catch'] } })
   expect(runRows(db)).toEqual([])
 })
 
-test('refuzz D5 union: fp_candidate, then catch, then silent', () => {
+test('refuzz D5 union: pass→fail, fail→pass, pass→pass', () => {
   const { root, db } = scoring(writes('.jsonl', PAIRS), REFUZZ)
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ catches: 2, false_positives: 1, union: { catch: 2, fp_candidate: 1, silent: 1 } })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ catches: 2, false_positives: 1, union: { catch: 2, false_positive: 1, silent: 1 } })
 })
 
 test('refuzz D6 short calls pass; all error is compile_failed', () => {
@@ -1682,11 +1684,11 @@ test('refuzz D6 short calls pass; all error is compile_failed', () => {
 })
 
 test('refuzz D6 error rows with no property are compile_failed', () => {
-  const { root, db } = scoring(writes('.jsonl', [{ verdict: 'error', build_log_tail: 'Error: one' }, { verdict: 'error' }]), REFUZZ)
+  const { root, db } = scoring(writes('.jsonl', [{ verdict: 'error', pre_fix: null, fix: null, build_log_tail: 'Error: one' }, { verdict: 'error', pre_fix: null, fix: null }]), REFUZZ)
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toMatchObject([{ not_powered: 'compile_failed' }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ build_error: 'Error: one\nError: one', union: { catch: 0, fp_candidate: 0, silent: 0 } })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ build_error: 'Error: one\nError: one', union: { catch: 0, false_positive: 0, broken: 0, not_run: 1 } })
 })
 
 test('refuzz D7 null_check on hours 4 is capped at 4 × cap', () => {
@@ -1708,8 +1710,8 @@ test('seeds D1 a score runs run_pair twice, timing each seed', () => {
 const SPLIT = `import json, os
 open('seeded', 'a').write('x')
 k = len(open('seeded').read()) - 1
-rows = [{'property': 'p1', 'verdict': ['catch', 'silent'][k], 'calls': {'pre_fix': [600000, 400000][k], 'fix': [300000, 200000][k]}},
-  {'property': 'p2', 'verdict': ['silent', 'fp_candidate'][k]}]
+rows = [{'property': 'p1', 'pre_fix': ['fail', 'pass'][k], 'fix': 'pass', 'calls': {'pre_fix': [600000, 400000][k], 'fix': [300000, 200000][k]}},
+  {'property': 'p2', 'pre_fix': 'pass', 'fix': ['pass', 'fail'][k]}]
 os.makedirs('results/euler-earn-m01', exist_ok=True)
 open('results/euler-earn-m01/euler-earn-m01.jsonl', 'w').write('\\n'.join(json.dumps(r) for r in rows))
 `
@@ -1718,9 +1720,33 @@ test('seeds D2 the union counts, the smallest seed is powered', () => {
   const { root, db } = scoring(SPLIT)
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(scores(db)).toMatchObject([{ catches: 1, false_positives: 1, pre_fix_calls: 400000, fix_calls: 200000, not_powered: 'fix_calls' }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ union: { catch: 1, fp_candidate: 1, silent: 0 },
-    seeds: [{ seed: 1, catch: 1, fp_candidate: 0, silent: 1, calls: { pre_fix: 600000, fix: 300000 } }, { seed: 2, catch: 0, fp_candidate: 1, silent: 1, calls: { pre_fix: 400000, fix: 200000 } }] })
+  expect(scores(db)).toMatchObject([{ catches: 0, false_positives: 0, pre_fix_calls: 400000, fix_calls: 200000, not_powered: 'fix_calls' }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ flaky: 2, union: { catch: 0, false_positive: 0, broken: 0, flaky: 2, silent: 0, not_run: 0 },
+    seeds: [{ seed: 1, catch: 1, false_positive: 0, silent: 1, calls: { pre_fix: 600000, fix: 300000 } }, { seed: 2, catch: 0, false_positive: 1, silent: 1, calls: { pre_fix: 400000, fix: 200000 } }] })
+})
+
+/** pre_fix and fix on each of two seeds: four probes fail on both, mint and deposit_full differ by seed. */
+const PROBES = { ...Object.fromEntries([1, 2, 3, 4].map((n) => [`property_probe${String(n)}`, [['fail', 'fail'], ['fail', 'fail']]])),
+  'assert:eulerEarn_mint': [['pass', 'fail'], ['fail', 'fail']], 'assert:eulerEarn_deposit_full': [['fail', 'pass'], ['pass', 'fail']],
+  ...Object.fromEntries(['clamped', 'full', 'twoSources'].map((s) => [`assert:publicAllocator_reallocateTo_${s}`, [['fail', 'pass'], ['fail', 'pass']]])),
+  'assert:eulerEarn_withdraw': [['pass', 'pass'], ['pass', 'pass']], 'assert:eulerEarn_redeem': [[null, null], [null, null]] }
+
+const PROBED = `import json, os
+open('seeded', 'a').write('x')
+k = len(open('seeded').read()) - 1
+rows = [{'property': p, 'pre_fix': s[k][0], 'fix': s[k][1]} for p, s in json.loads(${JSON.stringify(JSON.stringify(PROBES))}).items()]
+os.makedirs('results/euler-earn-m01', exist_ok=True)
+open('results/euler-earn-m01/euler-earn-m01.jsonl', 'w').write('\\n'.join(json.dumps(r) for r in rows))
+`
+
+test('failing on both commits is broken, not a false positive', () => {
+  const { root, db } = scoring(PROBED)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ catches: 3, false_positives: 0 }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ catches: 3, false_positives: 0, broken: 4, flaky: 2,
+    seeds: [{ broken: 4, false_positive: 1 }, { broken: 5, false_positive: 1 }], union: { catch: 3, false_positive: 0, broken: 4, flaky: 2, silent: 1, not_run: 1 } })
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: { broken: 4, 'assert:eulerEarn_mint': ['false alarm', 'broken'],
+    'assert:eulerEarn_redeem': ['not run', 'not run'] } })
 })
 
 function said(db: Db, kind: string, message: unknown, outcome: Event['outcome'] = 'pass'): void {
@@ -1735,7 +1761,7 @@ function reported(log: (db: Db) => void) {
   return { json: JSON.parse(get(root, 1, 'report.json')) as Record<string, unknown>, md: get(root, 1, 'report.md') }
 }
 
-const RESULT = { p1: ['catch', 'catch'], p2: ['catch', 'catch'], p3: ['false alarm', 'false alarm'], p4: ['silent', 'silent'] }
+const RESULT = { catch: 2, false_positive: 1, broken: 0, flaky: 0, silent: 1, not_run: 0, p1: ['catch', 'catch'], p2: ['catch', 'catch'], p3: ['false alarm', 'false alarm'], p4: ['silent', 'silent'] }
 
 const TITLES = ['Result', 'Cost', 'Map health', 'Reach', 'Checks', 'Counted']
 
@@ -1761,6 +1787,7 @@ test('report D3 D6 every section is built from its events', () => {
       reach_fixes: [{ file: 'test/fizz/Properties.sol', note: 'bounded amount' }], network: ['curl https://example.com'] },
     counted: { counted: 'yes', why: '-', critic: ['pass'] } })
   expect([...md.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(TITLES)
+  expect(md).toContain('## Result\n\n- catch: 2\n- false_positive: 1\n- broken: 0\n- flaky: 0\n- silent: 1\n- not_run: 0\n- p1: catch; catch\n')
   expect(md).toContain('- p3: false alarm; false alarm\n')
   expect(md).toContain('- map_miss_top: file a.sol, line 4, count 2; file b.sol, line 9, count 1\n')
   expect(md).toContain('- counted: yes\n')

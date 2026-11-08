@@ -16,7 +16,7 @@ export function heldForCoo(db: Db, plan: PlanRow, ran: SpawnSyncReturns<string>,
   return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
 }
 
-export interface Row { property?: string; verdict?: string; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null }; build_log_tail?: unknown }
+export interface Row { property?: string; verdict?: string; pre_fix?: 'pass' | 'fail' | null; fix?: 'pass' | 'fail' | null; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null }; build_log_tail?: unknown }
 
 export function rows(path: string): Row[] {
   return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Row)
@@ -65,22 +65,33 @@ function paired(db: Db, plan: PlanRow, bench: string, target: string, suites: st
   return ran
 }
 
-/** A property's union verdict is the first of these that any seed gave it. */
-const UNION = ['fp_candidate', 'catch', 'silent'] as const
+const CLASSES = ['catch', 'false_positive', 'broken', 'silent', 'not_run'] as const
 
-export function seedsOf(runs: Row[][], seconds: number[]) {
-  const seeds = runs.map((pairs, at) => ({ seed: at + 1, ...tallied(pairs.map((r) => r.verdict)),
+export type Class = (typeof CLASSES)[number]
+
+const SIDES: Record<string, Class> = { 'fail→pass': 'catch', 'pass→fail': 'false_positive', 'fail→fail': 'broken', 'pass→pass': 'silent' }
+
+export function classOf(r: Row): Class {
+  return SIDES[`${r.pre_fix ?? '-'}→${r.fix ?? '-'}`] ?? 'not_run'
+}
+
+export function union(runs: Row[][], refuzz = false): Record<Class | 'flaky', number> {
+  const said = new Map<string | undefined, Class[]>()
+  for (const r of runs.flat()) said.set(r.property, [...(said.get(r.property) ?? []), classOf(r)])
+  const settled = (classes: Class[]): Class | 'flaky' | undefined => (refuzz ? classes.at(-1) : classes.every((c) => c === classes[0]) ? classes[0] : 'flaky')
+  return tallied(['catch', 'false_positive', 'broken', 'flaky', 'silent', 'not_run'], [...said.values()].map(settled))
+}
+
+export function seedsOf(runs: Row[][], seconds: number[], refuzz: boolean) {
+  const seeds = runs.map((pairs, at) => ({ seed: at + 1, ...tallied(CLASSES, pairs.map(classOf)),
     calls: { pre_fix: pairs[0]?.calls?.pre_fix ?? null, fix: pairs[0]?.calls?.fix ?? null }, seconds: seconds[at] ?? null }))
-  const said = new Map<string | undefined, (string | undefined)[]>()
-  for (const r of runs.flat()) said.set(r.property, [...(said.get(r.property) ?? []), r.verdict])
   const folded = (side: 'pre_fix' | 'fix', fold: (calls: number[]) => number): number | null =>
     (seeds.some((s) => s.calls[side] === null) ? null : fold(seeds.map((s) => s.calls[side] ?? 0)))
   const summed = (calls: number[]): number => calls.reduce((n, c) => n + c, 0)
-  return { seeds, union: tallied([...said.values()].map((verdicts) => UNION.find((v) => verdicts.includes(v)))),
+  return { seeds, union: union(runs, refuzz),
     calls: { pre_fix: folded('pre_fix', summed), fix: folded('fix', summed) }, least: { pre_fix: folded('pre_fix', (calls) => Math.min(...calls)), fix: folded('fix', (calls) => Math.min(...calls)) } }
 }
 
-function tallied(verdicts: (string | undefined)[]): Record<(typeof UNION)[number], number> {
-  return { catch: verdicts.filter((v) => v === 'catch').length, fp_candidate: verdicts.filter((v) => v === 'fp_candidate').length,
-    silent: verdicts.filter((v) => v === 'silent').length }
+function tallied<K extends string>(keys: readonly K[], said: (string | undefined)[]): Record<K, number> {
+  return Object.fromEntries(keys.map((key) => [key, said.filter((s) => s === key).length])) as Record<K, number>
 }

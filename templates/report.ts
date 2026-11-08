@@ -3,7 +3,7 @@ import type { Score } from '../store/bench.ts'
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { spend } from '../store/runs.ts'
-import type { Row } from './paired.ts'
+import { classOf, union, type Class, type Row } from './paired.ts'
 import { counted } from './powered.ts'
 
 export const KINDS = { map_miss: 'read.map_miss', slice_miss: 'read.slice_miss', map_unused: 'map.unused', reach: 'reach.boundary', checks: 'check.hit',
@@ -25,19 +25,19 @@ export interface Phase { phase: string; tokens: number; usd: number }
 
 const TITLES = { result: 'Result', cost: 'Cost', map: 'Map health', reach: 'Reach', checks: 'Checks', counted: 'Counted' }
 
-const SAID: Record<string, string> = { catch: 'catch', fp_candidate: 'false alarm', silent: 'silent' }
+const SAID: Record<Class, string> = { catch: 'catch', false_positive: 'false alarm', broken: 'broken', silent: 'silent', not_run: 'not run' }
 
 const TOP = 5
 
 type Section = object | '-'
 
-export function report(db: Db, root: string, plan: number, runs: Row[][], notPowered: Score['not_powered']): void {
+export function report(db: Db, root: string, plan: number, runs: Row[][], notPowered: Score['not_powered'], refuzz = false): void {
   const read = <T>(kind: keyof typeof KINDS): T[] => eventsOf(db, plan, KINDS[kind]).map((e) => JSON.parse(e.message) as T)
   const critic = eventsOf(db, plan, KINDS.critic).map((e) => e.outcome)
   const why = counted(notPowered, critic)
   const { gross, net, credited } = spend(db, plan)
   const sections: Record<keyof typeof TITLES, Section> = {
-    result: result(runs),
+    result: result(runs, refuzz),
     cost: { gross_usd: gross, net_usd: net, credited: or(credited), phases: or(read<Phase>('cost')), fix_turns: or(read<Turn>('fix_turns')) },
     map: { ...missed('map_miss', read<Miss>('map_miss')), ...missed('slice_miss', read<Miss>('slice_miss')), unused: or(read<Unused>('map_unused').map((u) => u.row)) },
     reach: read<Reach>('reach').at(-1) ?? '-',
@@ -55,12 +55,12 @@ function or<T>(list: T[]): T[] | '-' {
   return list.length === 0 ? '-' : list
 }
 
-function result(runs: Row[][]): Section {
+function result(runs: Row[][], refuzz: boolean): Section {
   const said: Record<string, string[]> = {}
   runs.forEach((pairs, at) => {
-    for (const r of pairs) (said[r.property ?? '-'] ??= runs.map(() => '-'))[at] = SAID[r.verdict ?? ''] ?? r.verdict ?? '-'
+    for (const r of pairs) (said[r.property ?? '-'] ??= runs.map(() => '-'))[at] = SAID[classOf(r)]
   })
-  return runs.length === 0 ? '-' : said
+  return runs.length === 0 ? '-' : { ...union(runs, refuzz), ...said }
 }
 
 function missed(name: string, misses: Miss[]): Record<string, unknown> {

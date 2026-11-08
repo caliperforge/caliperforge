@@ -183,13 +183,13 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const ran = profiled(db, plan, bench, target, suites, srcDir(root, plan.id), keys.seeds === undefined ? 2 : Number(keys.seeds))
   if ('outcome' in ran) return ran
-  const seeded = seedsOf(ran.runs, ran.seconds)
+  const seeded = seedsOf(ran.runs, ran.seconds, keys.refuzz !== undefined)
   const calls = keys.refuzz === undefined ? seeded.least : seeded.calls
-  const score = { catches: seeded.union.catch, false_positives: seeded.union.fp_candidate,
+  const score = { catches: seeded.union.catch, false_positives: seeded.union.false_positive,
     untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }
   kept(db, root, plan.id, { target, generator }, score, sha, { partial, ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
-    ...(keys.refuzz === undefined ? {} : { mode: 'refuzz', source: Number(keys.refuzz) }), seeds: seeded.seeds, union: seeded.union, ...(ran.retried ? { via_ir_retry: true } : {}) })
-  report(db, root, plan.id, ran.runs, score.not_powered)
+    ...(keys.refuzz === undefined ? {} : { mode: 'refuzz', source: Number(keys.refuzz) }), broken: seeded.union.broken, flaky: seeded.union.flaky, seeds: seeded.seeds, union: seeded.union, ...(ran.retried ? { via_ir_retry: true } : {}) })
+  report(db, root, plan.id, ran.runs, score.not_powered, keys.refuzz !== undefined)
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }

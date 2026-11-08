@@ -420,6 +420,7 @@ test.each([
 test.each([
   { answer: () => 'nothing on main brings back `.cf/work/1647/src/.git`', path: '.cf/work/1647/src/.git' },
   { answer: (h: string) => `write ${h}/.cf/work/354/ask.md`, path: '.cf/work/354/ask.md' },
+  { answer: () => 'read `.cf/work/2223/fuzz-bench/results/gone/`', path: '.cf/work/2223/fuzz-bench/results/gone/' },
 ])('D3 a ruling naming $path is dropped', async ({ answer, path }) => {
   let root = ''
   const got = await aliased(() => answer(root), ({ home }) => { root = home })
@@ -441,6 +442,19 @@ test('D1 a ruling citing a file in another job folder applies', async () => {
 test('D2 that file cited by absolute path and line applies', async () => {
   const got = await aliased((a) => `the source is ${a}/.cf/work/1942/run-12735.transcript.jsonl:12.`, transcript)
   expect(got.events).toEqual(PASS)
+})
+
+const RESULTS = 'the results are in `.cf/work/2223/fuzz-bench/results/euler-earn-m01/`'
+
+test('D1 a ruling citing a folder in another job folder applies', async () => {
+  const seen: Db[] = []
+  const got = await aliased(() => RESULTS, ({ db, home }) => {
+    mkdirSync(join(home, '.cf/work/2223/fuzz-bench/results/euler-earn-m01'), { recursive: true })
+    seen.push(db)
+  })
+  expect(got.events).toEqual(PASS)
+  expect(got.issue).toContain(`\n\n${RESULTS}\n\n${CARRIES}\n\n## Standing\n`)
+  expect(seen.map((db) => [filesOf(db, 7), fenceFor(db, 7, ['brief:files'])])).toEqual([[[], []]])
 })
 
 test.each([

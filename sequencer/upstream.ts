@@ -34,7 +34,10 @@ export function pinned(db: Db, plan: number, args: { repo: string; sha: string; 
   try {
     return { content: [{ type: 'text', text: fetched(db, plan, args, read, actor, true).toString('utf8') }] }
   } catch (e) {
-    return refused((e as Error).message)
+    const why = (e as Error).message
+    logged(db, { plan, kind: 'github_read', actor, outcome: 'refuse', message: `${args.repo}@${args.sha} ${args.path}: ${why}`,
+      pointer: null, run: null })
+    return refused(why)
   }
 }
 

@@ -62,7 +62,7 @@ test.each(['main', 'v1.0.0', 'aaaaaaa'])('ref %s is refused before any read', (s
   const { asked, read } = reader({})
   expect(pinned(db, 7, { repo: 'github.com/o/r', sha, path: 'a' }, read).isError).toBe(true)
   expect(asked).toEqual([])
-  expect(rows(db)).toEqual([])
+  expect(rows(db)).toMatchObject([{ kind: 'github_read', outcome: 'refuse', pointer: null, run: null }])
 })
 
 test.each(['gitlab.com/o/r', 'https://example.com/o/r', 'o/r'])('repo %s is refused before any read', (at) => {
@@ -70,7 +70,7 @@ test.each(['gitlab.com/o/r', 'https://example.com/o/r', 'o/r'])('repo %s is refu
   const { asked, read } = reader({})
   expect(pinned(db, 7, { repo: at, sha: SHA, path: 'a' }, read).isError).toBe(true)
   expect(asked).toEqual([])
-  expect(rows(db)).toEqual([])
+  expect(rows(db)).toMatchObject([{ kind: 'github_read', outcome: 'refuse', pointer: null, run: null }])
 })
 
 test('a file over the cap is refused; a path ref leaves the pin', () => {
@@ -78,7 +78,7 @@ test('a file over the cap is refused; a path ref leaves the pin', () => {
   const { asked, read } = reader({ type: 'file', encoding: 'base64', size: CAP + 1, path: 'a?ref=main', content: '' })
   expect(pinned(db, 7, { repo: 'github.com/o/r', sha: SHA, path: 'a?ref=main' }, read).isError).toBe(true)
   expect(asked).toEqual([['api', `repos/o/r/contents/a%3Fref%3Dmain?ref=${SHA}`]])
-  expect(rows(db)).toEqual([])
+  expect(rows(db)).toMatchObject([{ kind: 'github_read', outcome: 'refuse', pointer: null, run: null }])
 })
 
 const PIN = '4120d171a397c153ced2e1d7e683d5a8c7f84b98'

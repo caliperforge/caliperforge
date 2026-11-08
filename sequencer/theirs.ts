@@ -7,7 +7,7 @@ import { unhoused } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import type { Check, Target } from './card.ts'
 import { coded } from './size.ts'
-import { diffOf, git, MAIN, maybe, srcDir } from './workspace.ts'
+import { diffOf, git, MAIN, maybe, srcDir, tried } from './workspace.ts'
 
 const Login = z.object({ login: z.string() })
 
@@ -117,13 +117,9 @@ function branches(dir: string, target: Target, paths: string[], same: Same): Hit
   })
 }
 
-/** An orphan branch shares no history with main, so it holds no work on ours; `merge-base` throws on one. */
+/** An orphan branch shares no history with main, so it holds no work on ours; `merge-base` exits non-zero on one. */
 function baseOf(dir: string, ref: string): string | null {
-  try {
-    return git(dir, ['merge-base', MAIN, ref]).trim()
-  } catch {
-    return null
-  }
+  return tried(dir, ['merge-base', MAIN, ref])?.trim() ?? null
 }
 
 function hit(paths: string[], touched: string[], named: boolean, no: number): Found | null {

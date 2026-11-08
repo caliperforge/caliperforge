@@ -11,14 +11,17 @@ const ID = /\/actions\/runs\/(\d+)/
 
 const Runs = z.array(z.object({ status: z.string(), url: z.string() }))
 
+const Status = z.object({ status: z.string() })
+
 /** Every fork shares one Actions pool, so a run step 6 will never read is cancelled before it holds a slot. */
 export function cancel(fork: string, branch: string, gh: Gh): void {
   const runs = Runs.parse(JSON.parse(gh(['run', 'list', '--repo', fork, '--branch', branch, '--limit', '100', '--json', 'status,url'])))
   for (const run of runs.filter((r) => r.status !== 'completed')) {
+    const id = ID.exec(run.url)?.[1] ?? ''
     try {
-      gh(['run', 'cancel', ID.exec(run.url)?.[1] ?? '', '--repo', fork])
-    } catch {
-      // The run finished between the list and the cancel.
+      gh(['run', 'cancel', id, '--repo', fork])
+    } catch (e) {
+      if (Status.parse(JSON.parse(gh(['run', 'view', id, '--repo', fork, '--json', 'status']))).status !== 'completed') throw e
     }
   }
 }

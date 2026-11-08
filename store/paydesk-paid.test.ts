@@ -44,7 +44,7 @@ function swept(): { tmp: string; said: string; argv: string[][]; ledger: string[
   ].join('\n'))
   chmodSync(join(tmp, 'pay'), 0o755)
   writeFileSync(join(tmp, 'scan.json'), JSON.stringify(SCAN))
-  writeFileSync(join(tmp, 'ledger.jsonl'), `${ledgerLine('acme/seen', 1)}\nnot json\n${ledgerLine('acme/old', 8)}\n`)
+  writeFileSync(join(tmp, 'ledger.jsonl'), `${ledgerLine('acme/seen', 1)}\n\n${ledgerLine('acme/old', 8)}\n`)
   const said = execFileSync(process.execPath, [CF, 'paydesk', 'paid', join(tmp, 'scan.json'), '--cap', '0.04', '--ledger', join(tmp, 'ledger.jsonl'),
     '--out', join(tmp, 'out.jsonl'), '--account', 'test'], { encoding: 'utf8', env: { ...process.env, PAY_BIN: join(tmp, 'pay') } })
   const lines = (file: string): string[] => readFileSync(file, 'utf8').trimEnd().split('\n')
@@ -106,10 +106,12 @@ test('D6 no tx in stderr is null in parsed and the ledger', () => {
   expect(SPENT[0]?.tx).toBe(TX)
 })
 
-test('D3 recent ignores malformed lines and old rows', () => {
+test('recent skips blank and old rows, throws on malformed ones', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'paydesk-recent-'))
   const ledger = join(tmp, 'ledger.jsonl')
-  writeFileSync(ledger, ['{', 'null', '{"fqn":"acme/nat","at":"never"}', '{"at":"2026-10-15T00:00:00Z"}', ledgerLine('acme/old', 8), ledgerLine('acme/new', 6)].join('\n'))
+  writeFileSync(ledger, ['', 'null', '{"fqn":"acme/nat","at":"never"}', '{"at":"2026-10-15T00:00:00Z"}', ledgerLine('acme/old', 8), ledgerLine('acme/new', 6)].join('\n'))
   expect(recent(ledger, new Date())).toStrictEqual(new Set(['acme/new']))
   expect(recent(join(tmp, 'missing.jsonl'), new Date())).toStrictEqual(new Set())
+  writeFileSync(ledger, '{\n')
+  expect(() => recent(ledger, new Date())).toThrow(SyntaxError)
 })

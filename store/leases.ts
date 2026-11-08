@@ -85,8 +85,11 @@ export function alive(pid: number): boolean {
     process.kill(pid, 0)
     return true
   } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
     // EPERM is a process another user owns, which is a process still.
-    return (error as { code?: string }).code === 'EPERM'
+    if (code === 'EPERM') return true
+    if (code === 'ESRCH') return false
+    throw error
   }
 }
 

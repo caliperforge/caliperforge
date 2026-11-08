@@ -75,20 +75,20 @@ export function classOf(r: Row): Class {
   return SIDES[`${r.pre_fix ?? '-'}→${r.fix ?? '-'}`] ?? 'not_run'
 }
 
-/** A test keeps its class when every seed gave it the same one, and is flaky otherwise. */
-export function union(runs: Row[][]): Record<Class | 'flaky', number> {
+export function union(runs: Row[][], refuzz = false): Record<Class | 'flaky', number> {
   const said = new Map<string | undefined, Class[]>()
   for (const r of runs.flat()) said.set(r.property, [...(said.get(r.property) ?? []), classOf(r)])
-  return tallied(['catch', 'false_positive', 'broken', 'flaky', 'silent', 'not_run'], [...said.values()].map((classes) => (classes.every((c) => c === classes[0]) ? classes[0] : 'flaky')))
+  const settled = (classes: Class[]): Class | 'flaky' | undefined => (refuzz ? classes.at(-1) : classes.every((c) => c === classes[0]) ? classes[0] : 'flaky')
+  return tallied(['catch', 'false_positive', 'broken', 'flaky', 'silent', 'not_run'], [...said.values()].map(settled))
 }
 
-export function seedsOf(runs: Row[][], seconds: number[]) {
+export function seedsOf(runs: Row[][], seconds: number[], refuzz: boolean) {
   const seeds = runs.map((pairs, at) => ({ seed: at + 1, ...tallied(CLASSES, pairs.map(classOf)),
     calls: { pre_fix: pairs[0]?.calls?.pre_fix ?? null, fix: pairs[0]?.calls?.fix ?? null }, seconds: seconds[at] ?? null }))
   const folded = (side: 'pre_fix' | 'fix', fold: (calls: number[]) => number): number | null =>
     (seeds.some((s) => s.calls[side] === null) ? null : fold(seeds.map((s) => s.calls[side] ?? 0)))
   const summed = (calls: number[]): number => calls.reduce((n, c) => n + c, 0)
-  return { seeds, union: union(runs),
+  return { seeds, union: union(runs, refuzz),
     calls: { pre_fix: folded('pre_fix', summed), fix: folded('fix', summed) }, least: { pre_fix: folded('pre_fix', (calls) => Math.min(...calls)), fix: folded('fix', (calls) => Math.min(...calls)) } }
 }
 

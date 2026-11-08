@@ -183,7 +183,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const ran = profiled(db, plan, bench, target, suites, srcDir(root, plan.id), keys.seeds === undefined ? 2 : Number(keys.seeds))
   if ('outcome' in ran) return ran
-  const seeded = seedsOf(ran.runs, ran.seconds)
+  const seeded = seedsOf(ran.runs, ran.seconds, keys.refuzz !== undefined)
   const calls = keys.refuzz === undefined ? seeded.least : seeded.calls
   const score = { catches: seeded.union.catch, false_positives: seeded.union.false_positive,
     untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }

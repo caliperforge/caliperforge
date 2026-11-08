@@ -1649,15 +1649,15 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(readdirSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01')).sort()).toEqual(['euler-earn-m01.seed-1.jsonl', 'euler-earn-m01.seed-2.jsonl'])
-  const score = { catches: 0, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null, pre_fix_calls: 20, fix_calls: 40, not_powered: null,
+  const score = { catches: 3, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null, pre_fix_calls: 20, fix_calls: 40, not_powered: null,
     gross_usd: 0, net_usd: 0 }
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...score }])
   const calls = { pre_fix: 10, fix: 20 }
   const seconds = expect.any(Number) as number
   const none = { false_positive: 0, broken: 0, not_run: 0 }
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7, broken: 0, flaky: 3,
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7, broken: 0, flaky: 0,
     seeds: [{ seed: 1, catch: 0, ...none, silent: 3, calls, seconds }, { seed: 2, catch: 3, ...none, silent: 0, calls, seconds }],
-    union: { catch: 0, ...none, flaky: 3, silent: 0 } })
+    union: { catch: 3, ...none, flaky: 0, silent: 0 } })
   expect(runRows(db)).toEqual([])
 })
 

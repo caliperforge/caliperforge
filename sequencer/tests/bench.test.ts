@@ -741,6 +741,11 @@ test('D1 a property outside Properties.sol is refused', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
+test('properties in PropertiesBatch<N>.sol count too', async () => {
+  const { outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol', 'test/fizz/PropertiesBatch1.sol', 'test/fizz/PropertiesBatch12.sol', 'test/fizz/Other.sol'], null, false, suite(1)))
+  expect(outcome).toMatchObject({ outcome: 'pass', note: expect.stringMatching(/, 3 properties$/) as string })
+})
+
 test('a fizz suite under 3 properties or 8 agents goes to step 0', async () => {
   for (const [properties, agents, why] of [[1, 8, 'few_properties'], [2, 8, 'few_properties'], [3, 5, 'reduced_generate'], [1, 5, 'reduced_generate']] as const) {
     const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol'], null, false, suite(properties), agents))

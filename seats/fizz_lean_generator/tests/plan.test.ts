@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { handoff } from '../../../templates/handoff.ts'
 import { excerpts, LAYERS } from '../../../templates/map.ts'
 import { phasesOf } from '../../../templates/phases.ts'
-import { batches, collided, duplicated, packets, planned } from '../../../templates/plan.ts'
+import { batches, collided, duplicated, inherits, packets, planned, unbatched } from '../../../templates/plan.ts'
 import { slices } from '../../../templates/slices.ts'
 
 const skill = join(import.meta.dirname, '../skill')
@@ -141,6 +141,26 @@ test('two batch files declaring the same function are refused', () => {
     .toEqual([{ rule: 'plan.duplicate', note: `plan: function f is declared by ${a}, ${b}` }])
   expect(collided({ [a]: 'function f() {}', [b]: 'function g() {}' })).toEqual([])
   expect(collided({ [a]: 'function f() {}\nfunction f(uint256 x) {}', [b]: 'function g() {}' })).toEqual([])
+})
+
+test('a batch file with an open brace or no contract is refused', () => {
+  const notes = (n: number, text: string): string[] => unbatched(n, text).map((r) => r.note)
+  expect(notes(2, 'contract PropertiesBatch2 {\n  function f() public {} // }\n}\n')).toEqual([])
+  expect(notes(2, 'contract PropertiesBatch2 {\n  function f() public {\n}\n')).toEqual(['batch 2: PropertiesBatch2.sol has an unclosed brace or comment'])
+  expect(notes(2, 'contract PropertiesBatch1 {}\n')).toEqual(['batch 2: PropertiesBatch2.sol declares no contract PropertiesBatch2'])
+  expect(unbatched(2, '').map((r) => r.rule)).toEqual(['batch.syntax', 'batch.syntax'])
+})
+
+test('FuzzTester imports and inherits each batch contract', () => {
+  const batched = ['PropertiesBatch1', 'PropertiesBatch2']
+  const listed = 'pragma solidity ^0.8.0;\nimport "./Properties.sol";\n\ncontract FuzzTester is Properties {}\n'
+  const merged = 'pragma solidity ^0.8.0;\nimport "./Properties.sol";\nimport "./PropertiesBatch1.sol";\nimport "./PropertiesBatch2.sol";\n\n'
+    + 'contract FuzzTester is Properties, PropertiesBatch1, PropertiesBatch2 {}\n'
+  expect(inherits(listed, batched)).toBe(merged)
+  expect(inherits(merged, batched)).toBe(merged)
+  expect(inherits('pragma solidity ^0.8.0;\ncontract FuzzTester {}\n', ['PropertiesBatch1']))
+    .toBe('pragma solidity ^0.8.0;\nimport "./PropertiesBatch1.sol";\ncontract FuzzTester is PropertiesBatch1 {}\n')
+  expect(inherits('contract Other {}\n', batched)).toBeNull()
 })
 
 test('D9: the new blocks add no handoff phase', () => {

@@ -135,7 +135,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
-  const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }
+  const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING, batched: generator === 'fizz_lean_v5' }
   const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue, stop)
     : await firing(bench, manifest, hash)(prompt, issue, START)
   if ('outcome' in sum && sum.outcome === 'needs_coo') put(root, plan.id, 'refusal.md', refusalText(step, sum))
@@ -225,7 +225,7 @@ export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Out
 export function unproven(suite: string, name: string): Outcome | number {
   const sols = existsSync(suite) ? readdirSync(suite, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`)) : []
   if (sols.length === 0) return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
-  const counted = sols.includes(PROPERTIES) ? [PROPERTIES] : sols
+  const counted = sols.includes(PROPERTIES) ? [PROPERTIES, ...sols.filter((p) => /^PropertiesBatch\d+\.sol$/.test(p))] : sols
   const properties = counted.reduce((n, p) => n + (readFileSync(join(suite, p), 'utf8').replace(COMMENT, '').match(PROPERTY)?.length ?? 0), 0)
   if (properties > 0) return properties
   return { outcome: 'refuse', spans: ['bench.no_properties'],

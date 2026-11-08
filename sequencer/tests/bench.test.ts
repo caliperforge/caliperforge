@@ -9,7 +9,7 @@ import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/inde
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
-import { rescore } from '../../cli/bench.ts'
+import { medusaFile, rescore } from '../../cli/bench.ts'
 import { record, scores, supersede, type Score } from '../../store/bench.ts'
 import { eventsAfter, eventsOf, logged, runRows, type Event } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
@@ -996,6 +996,20 @@ function installed(config: string, ...files: string[]): unknown {
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   return JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))
 }
+
+test('a standalone medusa.json is the scored one but for workers', () => {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { timeout: 0, workers: 10, shrinkLimit: 5000,
+    corpusDirectory: 'test/fizz/fizz_data/corpus_medusa' }, slither: { useSlither: true } }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const suite = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')) as { fuzzing: object }
+  expect(suite).toEqual({ fuzzing: { timeout: 7200, workers: 4, shrinkLimit: 500, corpusDirectory: 'fizz_data/corpus_medusa' }, slither: { useSlither: false } })
+  const out = join(root, 'measure.json')
+  expect(medusaFile(db, srcDir(root, 1), 'test/fizz', 6, out)).toEqual([])
+  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ ...suite, fuzzing: { ...suite.fuzzing, workers: 6 } })
+  expect(medusaFile(db, srcDir(root, 1), 'test/fizz', 10, out)).toEqual([])
+  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ ...suite, fuzzing: { ...suite.fuzzing, workers: 10 } })
+})
 
 test('D1 D2 the copy turns slither off and caps shrinking', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0, shrinkLimit: 5000, testing: { stopOnFailedTest: false } },

@@ -1893,6 +1893,24 @@ test('score and report carry gross, net and the credited runs', () => {
   expect(get(root, 1, 'report.md')).toContain(`## Cost\n\n- gross_usd: 7\n- net_usd: 1\n- credited: ${String(two)}; ${String(four)}\n`)
 })
 
+test('report sets the live scored lean v4 row beside v5', () => {
+  const { root, db } = scoring(writes('.jsonl', PAIRS), { target: 'euler-earn-m01', generator: 'fizz_lean_v5', files: FILES })
+  for (const id of [2, 3, 4, 5]) putPlan(db, { id, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'queued', queued_at: AT, step: 2, retries: 0 })
+  const lean: Score = { plan: 2, target: 'euler-earn-m01', generator: 'fizz_lean', catches: 3, false_positives: 6, untested: null, tokens: 1, seconds: 4140, x_ray: null,
+    pre_fix_calls: null, fix_calls: null, not_powered: null, gross_usd: 50, net_usd: 41.81 }
+  record(db, lean)
+  record(db, { ...lean, plan: 3, catches: 9 })
+  supersede(db, 3)
+  record(db, { ...lean, plan: 4, catches: 0, not_powered: 'wall' })
+  record(db, { ...lean, plan: 5, target: 'euler-earn-m02' })
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ compare: { fizz_lean: { plan: 2, net_usd: 41.81, catches: 3, false_positives: 6, seconds: 4140 },
+    fizz_lean_v5: { plan: 1, net_usd: 0, catches: 2, false_positives: 1, seconds: 56.5 } } })
+  const md = get(root, 1, 'report.md')
+  expect(md.slice(md.indexOf('## Lean v4 vs v5'))).toBe('## Lean v4 vs v5\n\n| generator | plan | net_usd | catches | false_positives | wall_clock_s |\n| --- | --- | --- | --- | --- | --- |\n'
+    + '| fizz_lean | 2 | 41.81 | 3 | 6 | 4140 |\n| fizz_lean_v5 | 1 | 0 | 2 | 1 | 56.5 |\n')
+})
+
 test('counted D6 only an unbuilt or unpowered run is not counted', () => {
   for (const reason of ['compile_failed', 'wall', 'reduced_generate', 'few_properties'] as const) expect(counted(reason, ['pass'])).toBe(reason)
   expect(counted(null, ['pass'])).toBeNull()

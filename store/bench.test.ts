@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { planRow } from '../runner/index.ts'
-import { record, scores, setUntested, supersede, underpowered, type Score } from './bench.ts'
+import { live, record, scores, setUntested, supersede, underpowered, type Score } from './bench.ts'
 import { migrate, open, type Db } from './index.ts'
 import { get } from './lanes.ts'
 
@@ -203,6 +203,17 @@ it('D6 underpowered lists live rows with a reason only', () => {
   record(d, { plan: old, ...fizz, fix_calls: 1000, not_powered: 'fix_calls' })
   supersede(d, old)
   expect(underpowered(d).map((s) => [s.plan, s.not_powered])).toEqual([[low, 'pre_fix_calls'], [walled, 'wall']])
+})
+
+it('live lists rows not superseded, in id order', () => {
+  const d = db()
+  const [one, two, three] = [planRow(d), planRow(d), planRow(d)]
+  record(d, { plan: two, ...fizz })
+  record(d, { plan: one, ...fizz })
+  supersede(d, one)
+  record(d, { plan: one, ...fizz, catches: 5 })
+  record(d, { plan: three, ...fizz, not_powered: 'wall' })
+  expect(live(d).map((s) => [s.plan, s.catches])).toEqual([[two, 3], [one, 5], [three, 3]])
 })
 
 it('D4 a live row beside a superseded one is kept', () => {

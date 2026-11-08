@@ -1,5 +1,5 @@
 import { put } from '../sequencer/workspace.ts'
-import type { Score } from '../store/bench.ts'
+import { live, type Score } from '../store/bench.ts'
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { spend } from '../store/runs.ts'
@@ -31,6 +31,12 @@ const TOP = 5
 
 type Section = object | '-'
 
+type Cells = Pick<Score, 'plan' | 'net_usd' | 'catches' | 'false_positives' | 'seconds'>
+
+type Compare = Record<'fizz_lean' | 'fizz_lean_v5', Cells | '-'>
+
+const HEADER = ['generator', 'plan', 'net_usd', 'catches', 'false_positives', 'wall_clock_s']
+
 export function report(db: Db, root: string, plan: number, runs: Row[][], notPowered: Score['not_powered'], refuzz = false, probes: Record<string, string> = {}): void {
   const read = <T>(kind: keyof typeof KINDS): T[] => eventsOf(db, plan, KINDS[kind]).map((e) => JSON.parse(e.message) as T)
   const critic = eventsOf(db, plan, KINDS.critic).map((e) => e.outcome)
@@ -45,11 +51,32 @@ export function report(db: Db, root: string, plan: number, runs: Row[][], notPow
     checks: { hits: or(hits(read<Hit>('checks'))), reach_fixes: or(read<ReachFix>('reach_fixes')), network: or(eventsOf(db, plan, KINDS.network).map((e) => e.message)) },
     counted: { counted: why === null ? 'yes' : 'no', why: why ?? '-', critic: or(critic) },
   }
-  put(root, plan, 'report.json', JSON.stringify(sections))
-  put(root, plan, 'report.md', Object.entries(TITLES).map(([key, title]) => {
+  const compare = compared(db, plan)
+  put(root, plan, 'report.json', JSON.stringify(compare === null ? sections : { ...sections, compare }))
+  const md = Object.entries(TITLES).map(([key, title]) => {
     const section = sections[key as keyof typeof TITLES]
     return `## ${title}\n\n${section === '-' ? '-' : Object.entries(section).map(([name, value]) => `- ${name}: ${flat(value)}`).join('\n')}\n`
-  }).join('\n'))
+  })
+  if (compare !== null) md.push(table(compare))
+  put(root, plan, 'report.md', md.join('\n'))
+}
+
+function compared(db: Db, plan: number): Compare | null {
+  const rows = live(db)
+  const own = rows.find((s) => s.plan === plan)
+  if (own?.generator !== 'fizz_lean_v5') return null
+  const v4 = rows.findLast((s) => s.target === own.target && s.generator === 'fizz_lean' && s.not_powered !== 'wall')
+  return { fizz_lean: v4 === undefined ? '-' : cells(v4), fizz_lean_v5: cells(own) }
+}
+
+function cells({ plan, net_usd, catches, false_positives, seconds }: Score): Cells {
+  return { plan, net_usd, catches, false_positives, seconds }
+}
+
+function table(compare: Compare): string {
+  const line = (row: (string | number | null)[]): string => `| ${row.map((c) => String(c ?? '-')).join(' | ')} |`
+  return [`## Lean v4 vs v5\n`, line(HEADER), line(HEADER.map(() => '---')),
+    ...Object.entries(compare).map(([generator, c]) => line([generator, ...(c === '-' ? HEADER.slice(1).map(() => '-') : Object.values(c))]))].join('\n') + '\n'
 }
 
 function or<T>(list: T[]): T[] | '-' {

@@ -174,15 +174,18 @@ const entered = (map: string): string[] => named(map, 'Selected entry points').m
 
 const aims = (found: Suite, name: string, clamped: boolean): boolean => found.handlers.some((h) => h.target === name && h.clamped === clamped)
 
+const word = (text: string): RegExp => new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`)
+
 export function harnessed(found: Suite, map: string): Refused[] {
   const [unclamped, outside] = [excused(map, 'Unclamped'), named(map, 'Outside dependencies')]
   const cited = [...named(map, 'Limits'), ...outside]
+  const known = [...found.standIns.flatMap((s) => [s.name, s.replaces]), ...found.deployed.map((d) => d.contract)]
   return [
     ...entered(map).flatMap((name) => [
       ...(aims(found, name, false) ? [] : [`scaffold: ${name} has no raw handler`]),
       ...(aims(found, name, true) || unclamped.includes(name) ? [] : [`scaffold: ${name} has no clamped handler and no ## Unclamped row`]),
     ]).map((note) => ({ rule: 'suite.clamped', note })),
-    ...outside.filter((name) => !found.standIns.some((s) => s.replaces === name) && !found.deployed.some((d) => d.contract === name))
+    ...outside.filter((name) => !known.some((k) => word(k).test(name)))
       .map((name) => ({ rule: 'suite.outside', note: `scaffold: ${name} under ## Outside dependencies has no stand-in and is not deployed in setup()` })),
     ...found.standIns.flatMap((s) => s.limits.filter((l) => l.map === null || !cited.includes(l.map))
       .map((l) => ({ rule: 'suite.stand_in', note: `scaffold: ${s.name} limit "${l.limit}" cites no ## Limits or ## Outside dependencies row` }))),
@@ -210,6 +213,5 @@ export function probed(found: Suite, map: string): Refused[] {
 
 export function unsourced(found: Suite, map: string): string[] {
   const sources = [...listed(map, 'Limits'), ...listed(map, 'Outside dependencies')]
-  const word = (text: string): RegExp => new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`)
   return found.handlers.flatMap((h) => h.clamps.filter((c) => !sources.some((s) => word(c.range).test(s))).map((c) => `${h.name}: ${c.text}`))
 }

@@ -182,6 +182,24 @@ test('an unaimed entry point that lcov hits is misread', () => {
   expect([misaimed(unaimed, ACCEPT, ''), misaimed(unaimed, ACCEPT, lcov(8, 0) + lcov(10, 4)), misaimed(EULER, ACCEPT, lcov(8, 3))]).toEqual([[], [], []])
 })
 
+test('a view read is skipped when a handler is aimed', () => {
+  const built = JSON.parse(BASE_AST) as { ast: Node }
+  const body = below(built.ast).find((n) => n.id === 273) as Node & { statements: [Node] }
+  const [accept] = body.statements
+  const read = structuredClone(accept)
+  const access = (statement: Node): Node[] => below(statement).filter((n) => n.nodeType === 'MemberAccess')
+  const view = { typeString: 'function (uint256) view external returns (uint136,uint64)' }
+  for (const n of access(read)) Object.assign(n, { memberName: 'pendingCap', typeDescriptions: view })
+  body.statements.unshift(read)
+  expect(suite(based(JSON.stringify(built))).handlers).toEqual(EULER.handlers)
+  for (const n of access(accept)) n.typeDescriptions = view
+  const unaimed = suite(based(JSON.stringify(built)))
+  expect(unaimed.handlers).toEqual(EULER.handlers.map((h) => ({ ...h, target: null })))
+  expect(misaimed(unaimed, ACCEPT, lcov(8, 3))).toEqual([
+    { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },
+  ])
+})
+
 test.runIf(process.env.CF_BENCH_LIVE === '1')('a fresh forge build of Base reads as its fixture', () => {
   const root = based(null)
   expect(compiled(root)).toEqual([])

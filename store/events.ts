@@ -41,6 +41,13 @@ export function loggedSince(db: Db, kind: string, at: string): boolean {
   return db.prepare('SELECT 1 FROM events WHERE kind = ? AND julianday(at) >= julianday(?)').get(kind, at) !== undefined
 }
 
+/** The issue url the plan was refiled to, from its `refiled` event or the note a `cf gh refile` command step left. */
+export function refiled(db: Db, plan: number): string | null {
+  const message = db.prepare(`SELECT message FROM events WHERE plan = ? AND (kind = 'refiled' OR message LIKE 'cf gh refile %: https://%')
+    ORDER BY id DESC LIMIT 1`).pluck().get(plan) as string | undefined
+  return message?.split(' ').at(-1) ?? null
+}
+
 export function lookedSince(db: Db, plan: number, at: string): boolean {
   return db.prepare("SELECT 1 FROM events WHERE plan = ? AND kind = 'director' AND julianday(at) > julianday(?)").get(plan, at) !== undefined
 }

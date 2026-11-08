@@ -13,11 +13,13 @@ import { pushedRow } from '../../store/deliverables.ts'
 import { record } from '../../store/files.ts'
 import { builder } from '../../templates/pr-path.ts'
 import { question } from '../../templates/research.ts'
-import { ofKind, runLogged, runRows } from '../../store/events.ts'
+import { refile } from '../../cli/refile.ts'
+import { measure } from '../steps.ts'
+import { logged, ofKind, runLogged, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { allPlans, dropPlan, finish } from '../../store/plans.ts'
+import { allPlans, dropPlan, end, finish, putPlan } from '../../store/plans.ts'
 import { afterOf, recordListing } from '../../store/tickets.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -403,6 +405,53 @@ test('D1, D2: a closed After: waits for its plan to land', async () => {
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
   const b = partPlan(w, 1)
   expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
+})
+
+const MOVED = 'https://github.com/caliperforge/fuzz-bench/issues/61'
+
+function noted(w: World, id: number, output: string): void {
+  logged(w.db, { plan: id, kind: 'build', actor: 'typescript_specialist', outcome: 'pass',
+    message: `cf gh refile caliperforge/caliperforge#901 caliperforge/fuzz-bench: ${output}`, pointer: null, run: null })
+}
+
+test.each([
+  { by: 'refile()', recorded: (w: World) => {
+    refile(w.db, w.root, 'caliperforge/caliperforge#901', 'caliperforge/fuzz-bench',
+      (args) => args[0] === 'repo' ? { hasIssuesEnabled: true } : { title: 't', body: 'b', labels: [] }, () => `${MOVED}\n`)
+  } },
+  { by: 'a step note', recorded: (w: World) => { noted(w, partPlan(w, 0) ?? 0, MOVED) } },
+])('a part After a refiled part queues once the move lands: $by', async ({ recorded }) => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'a']), [])
+  waiting902(w)
+  recorded(w)
+  end(w.db, partPlan(w, 0) ?? 0, 'done')
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(partPlan(w, 1)).toBeNull()
+  const { pipe_id, lane, seat } = plan(w.db, ID)
+  putPlan(w.db, { id: 99, pipe_id, target_id: null, template: 'pr_path', state: 'running',
+    queued_at: '2026-11-08T00:00:00.000Z', step: 6, retries: 0, lane, seat, origin: MOVED })
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(partPlan(w, 1)).toBeNull()
+  pushed(w, 99)
+  finish(w.db, plan(w.db, 99))
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  const b = partPlan(w, 1) ?? 0
+  expect(plan(w.db, b)).toMatchObject({ state: 'queued' })
+  const measured = measure(w.db, w.root, plan(w.db, b))
+  expect(measured).toMatchObject({ outcome: 'pass' })
+  expect(measured.held).toBeUndefined()
+})
+
+test('a part After a part moved to a fork stays unqueued', async () => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'a']), [])
+  waiting902(w)
+  const a = partPlan(w, 0) ?? 0
+  noted(w, a, 'Fork: caliperforge/atelier')
+  end(w.db, a, 'done')
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(partPlan(w, 1)).toBeNull()
 })
 
 test('D5: a split whose parts all say none queues them at once', async () => {

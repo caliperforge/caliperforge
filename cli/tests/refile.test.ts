@@ -3,7 +3,7 @@ import { released } from '../../sequencer/fixer.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { internalPlan, world } from '../../sequencer/tests/world.ts'
 import { get, SELF } from '../../sequencer/workspace.ts'
-import { logged } from '../../store/events.ts'
+import { logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { end, planRows, waiting } from '../../store/plans.ts'
 import type { Read, Run } from '../gh.ts'
@@ -32,6 +32,7 @@ test('D1 refile opens the newest block on to, closes the old', () => {
     [['issue', 'create', '--repo', TO, '--title', 'the old title', '--body-file', '-'], 'the old body\n\n## Why it moved\n\nnewer block'],
     [['issue', 'close', '7', '--repo', SELF, '--comment', `Moved to ${URL}`], undefined],
   ])
+  expect(ofKind(w.db, 'refiled')).toEqual([{ plan: 2, kind: 'refiled', actor: 'refile', outcome: 'pass', message: URL }])
 })
 
 test('D2 refile with no coo_lite event moves the source body', () => {
@@ -122,6 +123,7 @@ test('D1 an issues-off repo of ours gets a Fork: line, no issue', () => {
   expect(looked.mock.calls).toEqual([[['repo', 'view', TO, '--json', 'hasIssuesEnabled']]])
   expect(exec).not.toHaveBeenCalled()
   expect(get(w.root, 2, 'ask.md')).toBe(`${ask}\nFork: ${TO}\n`)
+  expect(ofKind(w.db, 'refiled')).toEqual([])
 })
 
 test('D2 an issues-off repo outside ours throws untouched', () => {

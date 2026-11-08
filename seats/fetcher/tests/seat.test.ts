@@ -17,6 +17,11 @@ test('D4: the prompt opens with its name and closes on a run fence', () => {
   for (const part of ['# Output', 'node', '- run:', 'commit:', '# HEAD']) expect(prompt).toContain(part)
 })
 
+test('the prompt hands back a long job as Run and Output lines', () => {
+  const prompt = seat(root, 'fetcher').prompt
+  for (const part of ['## Long job', '600 s', '**Run:**', '**Output:**', '`job.log`', '`# Long job`']) expect(prompt).toContain(part)
+})
+
 test('D4: the digests hold', () => {
   expect(check(root, '2026-10-21')).toEqual([])
 })

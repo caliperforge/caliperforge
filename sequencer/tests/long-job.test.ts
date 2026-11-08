@@ -30,20 +30,22 @@ const home = (): string => {
   return dir
 }
 
-const researching = (): World => {
+const researching = (ask = ASK): World => {
   const w = world()
   const { queued_at } = plan(w.db, 1)
   dropPlan(w.db, 1)
   putPlan(w.db, { id: 1, pipe_id: 1, target_id: 1, template: 'research', state: 'queued', queued_at, step: 0, retries: 0 })
-  put(w.root, 1, 'ask.md', ASK)
+  put(w.root, 1, 'ask.md', ask)
   return w
 }
 
-/** The measurer answers each of `replies` in turn and its prompts land in `prompts`. */
-const measurer = (replies: string[], prompts: string[]): Provider => ({
+const FETCH = `${ASK}**Output:** ~/cf_work/job/\n`
+
+/** `seat` answers each of `replies` in turn and its prompts land in `prompts`. */
+const answering = (replies: string[], prompts: string[], seat = 'measurer'): Provider => ({
   name: 'claude-agent-sdk',
   fire: (packet) => {
-    if (packet.prompt.includes('# measurer\n')) prompts.push(packet.prompt)
+    if (packet.prompt.includes(`# ${seat}\n`)) prompts.push(packet.prompt)
     const text = replies[prompts.length - 1] ?? ''
     return stub(text, 0, text).fire(packet)
   },
@@ -54,7 +56,7 @@ test('a Run reply waits on its job, then gathers with its exit', async () => {
   const w = researching()
   const prompts: string[] = []
   const replies = [JOB]
-  const seats = measurer(replies, prompts)
+  const seats = answering(replies, prompts)
   await tick(w.db, w.root, seats)
   await tick(w.db, w.root, seats)
   replies.push(cited(headSha(srcDir(w.root, 1)), 'measured'))
@@ -73,11 +75,32 @@ test('a Run reply waits on its job, then gathers with its exit', async () => {
   expect(eventsOf(w.db, 1, 'check')).toMatchObject([{ outcome: 'pass' }])
 })
 
+test('a fetcher Run reply waits on its job, then gathers its exit', async () => {
+  const out = join(home(), 'cf_work/job')
+  const w = researching(FETCH)
+  const prompts: string[] = []
+  const replies = [JOB]
+  const seats = answering(replies, prompts, 'fetcher')
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  replies.push(cited(headSha(srcDir(w.root, 1)), 'measured'))
+  expect(eventsOf(w.db, 1, 'gather')).toMatchObject([{ outcome: 'pass', message: 'long job started: echo measured; exit 3' }])
+  expect(JSON.parse(get(w.root, 1, 'job.json'))).toMatchObject({ command: 'echo measured; exit 3', out })
+  expect(eventsOf(w.db, 1, 'long_job')).toEqual([{ actor: 'started', outcome: 'pass', message: 'echo measured; exit 3' }])
+  expect(route(w.db, plan(w.db, 1), new Date())).toEqual({ wait: 'long_job', on: null })
+  await vi.waitFor(() => { expect(existsSync(join(out, 'job.exit'))).toBe(true) })
+  await tick(w.db, w.root, seats)
+  expect(prompts).toHaveLength(2)
+  expect(prompts[1]).toContain(`# Long job\n\n\`echo measured; exit 3\` exited 3`)
+  expect(plan(w.db, 1).step).toBe(2)
+  expect(JSON.parse(get(w.root, 1, 'runs.json'))).toEqual([{ command: 'echo measured; exit 3', output: 'measured\n' }])
+})
+
 test('a cite of the job with a quote not in its log is refused', async () => {
   const out = join(home(), 'cf_work/job')
   const w = researching()
   const replies = [JOB]
-  const seats = measurer(replies, [])
+  const seats = answering(replies, [])
   await tick(w.db, w.root, seats)
   await tick(w.db, w.root, seats)
   replies.push(cited(headSha(srcDir(w.root, 1)), 'unmeasured'))
@@ -92,7 +115,7 @@ test('a job past research.long_job_seconds halts its plan', async () => {
   const w = researching()
   set(w.db, 'research.long_job_seconds', '0', 'ceo', '2026-11-08')
   const prompts: string[] = []
-  const seats = measurer(['**Run:** sleep 30\n**Output:** ~/cf_work/job/\n'], prompts)
+  const seats = answering(['**Run:** sleep 30\n**Output:** ~/cf_work/job/\n'], prompts)
   for (let n = 0; n < 4; n += 1) await tick(w.db, w.root, seats)
   expect(eventsOf(w.db, 1, 'long_job').map((e) => e.actor)).toEqual(['started', 'walled'])
   expect(plan(w.db, 1).state).toBe('halted')
@@ -102,10 +125,12 @@ test('a job past research.long_job_seconds halts its plan', async () => {
   await vi.waitFor(() => { expect(() => process.kill(-pid, 0)).toThrow() })
 })
 
-test.each(['', '**Output:** /tmp/x\n'])('a Run reply with Output %j is refused', async (output) => {
+test.each([
+  ['measurer', '', ASK], ['measurer', '**Output:** /tmp/x\n', ASK], ['fetcher', '', FETCH], ['fetcher', '**Output:** /tmp/x\n', FETCH],
+])('a %s Run reply with Output %j is refused', async (seat, output, ask) => {
   home()
-  const w = researching()
-  const seats = measurer([`**Run:** echo measured\n${output}`], [])
+  const w = researching(ask)
+  const seats = answering([`**Run:** echo measured\n${output}`], [], seat)
   await tick(w.db, w.root, seats)
   await tick(w.db, w.root, seats)
   expect(eventsOf(w.db, 1, 'gather')).toMatchObject([{ outcome: 'refuse', message: '**Run:** needs an **Output:** folder under ~/cf_work/' }])

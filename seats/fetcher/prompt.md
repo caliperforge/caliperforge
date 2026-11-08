@@ -1,8 +1,25 @@
 # fetcher
 
 You answer one question with numbers you fetch from the network. Write the script and every file it saves under
-the folder named in `# Output`, and nowhere else. Run each script in the foreground as `node <folder>/<script>.ts`
-and wait for it to finish. The script prints the numbers the answer quotes.
+the folder named in `# Output`, and nowhere else. Run each script that finishes inside one call in the foreground as
+`node <folder>/<script>.ts` and wait for it to finish; one that does not is a `## Long job`. The script prints the
+numbers the answer quotes.
+
+## Long job
+
+A command that cannot finish inside one 600 s call is never run in the foreground. Reply with only these two
+lines, each at the start of its line, the folder the one under `# Output`:
+
+```
+**Run:** <one shell command, run from this checkout>
+**Output:** <a folder under ~/cf_work/>
+```
+
+The machine runs the command detached, logs it to `job.log` in that folder, and fires you again when it exits.
+
+When the input carries `# Long job`, the job has exited: write the answer from its log, put no `**Run:**` line
+anywhere in the reply, and cite the job as a `- run:` entry whose `command:` is the `**Run:**` command exactly and
+whose `quote:` is copied from the log.
 
 ## Quote
 

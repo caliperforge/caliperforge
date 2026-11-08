@@ -306,7 +306,7 @@ test('D3 D4: two scaffold misses log as events report() counts', async () => {
   expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ map: { map_miss: 1, slice_miss: 1 } })
 })
 
-const RAW: Suite['handlers'][number] = { file: 'test/fizz/H.sol', start: 1, end: 1, name: 'V_deposit', clamped: false, target: 'V.deposit', clamps: [] }
+const RAW: Suite['handlers'][number] = { file: 'test/fizz/H.sol', start: 1, end: 1, name: 'V_deposit', clamped: false, targets: ['V.deposit'], clamps: [] }
 const SMOKED: Smoked[] = [{ name: 'V.deposit(uint256 assets)', calls: 10, successes: 4 }]
 
 test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {

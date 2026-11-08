@@ -81,7 +81,7 @@ test('every check prints in phase order, missing inputs cannot run', () => {
 })
 
 test('a throwing check refuses and every later row still prints', () => {
-  const { db, root } = planted({ [`${META}/corpus_medusa/call_sequences/1.json`]: '[]' })
+  const { db, root } = planted({ [`${META}/corpus_medusa/call_sequences/1.json`]: '[]', 'out/V.json': '{}' })
   vi.mocked(trackers).mockImplementationOnce(() => { throw new Error('forge inspect Harness exited 1: boom\nmore') })
   const rows = ROWS.map((row) => row[1] === 'probe readings' ? [...row.slice(0, 2), 'refuse throw | forge inspect Harness exited 1: boom'] : row)
   expect(dried(db, root, 1, fizz())).toBe(table(rows))
@@ -115,7 +115,7 @@ test('a smoke with a slither cache names it in its row', () => {
 
 test('an unlocated item refuses the reach and boundary rows', () => {
   const corpus = `${META}/corpus_medusa`
-  const { db, root } = planted({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{}' })
+  const { db, root } = planted({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{}', 'out/V.json': '{}' })
   const key = 'Selected entry points C.transfer(address to)'
   vi.mocked(reach).mockReturnValueOnce([{ key, met: false, cells: ['at: none'], note: `${key}: no at`, reverts: [], located: false, misread: false }])
   const refused = `refuse reach.unlocated | 1 row(s) have no at: <file> L<start>-L<end> in map.md: ${key}`
@@ -182,8 +182,8 @@ const SUITES = 'fuzz-bench/suites/fizz_lean/euler-earn-m01'
 const REGRADED = `plan 1 regraded from ${SUITES}`
 const SCORED = ROWS.flatMap((row) => row[1] === 'reach smoke' ? [...['reach scored', 'boundary scored'].map((check) => ['coverage', check, NEEDS('scored/corpus_medusa/coverage/lcov.info')]), row] : [row])
 
-/** A done bench plan with no src/ whose archived suite holds SRC and `files`; `planted` lays it at test/fizz. */
-function regradable(files: Record<string, string> = {}): { db: Db; root: string; archive: string } {
+/** A done bench plan with no src/ whose archived suite holds SRC and `files`; `planted` lays it at test/fizz, and out/ when `built`. */
+function regradable(files: Record<string, string> = {}, built = true): { db: Db; root: string; archive: string } {
   const root = mkdtempSync(join(tmpdir(), 'cf-regrade-'))
   cpSync(join(repo, 'seats/fizz_lean_generator/skill'), join(root, 'seats/fizz_lean_generator/skill'), { recursive: true })
   const db = fresh(join(repo, 'schema'))
@@ -191,7 +191,10 @@ function regradable(files: Record<string, string> = {}): { db: Db; root: string;
   put(root, 1, 'target.yml', 'target: euler-earn-m01\ngenerator: fizz_lean\n')
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1 }))
   const archive = written(join(planDir(root, 1), SUITES), Object.fromEntries(Object.entries({ ...SRC, ...files }).map(([path, text]) => [path.slice('test/fizz/'.length), text])))
-  vi.mocked(fetched).mockImplementation((...[, , into, { suites }]) => { cpSync(suites, join(into, 'test/fizz'), { recursive: true }) })
+  vi.mocked(fetched).mockImplementation((...[, , into, { suites }]) => {
+    cpSync(suites, join(into, 'test/fizz'), { recursive: true })
+    if (built) mkdirSync(join(into, 'out'))
+  })
   return { db, root, archive }
 }
 
@@ -250,6 +253,16 @@ test("regrade judges reach on the scored corpus and on smoke's", () => {
   expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
 })
 
+test('a regrade with no out/ refuses the coverage rows', () => {
+  const corpus = `${META}/corpus_medusa`
+  const { db, root } = regradable({ [`${corpus}/call_sequences/1.json`]: '[]', [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{}' }, false)
+  const unbuilt = 'refuse reach.unbuilt | coverage: no out/ to read the suite from; forge did not finish building it'
+  const now = new Set(['probe readings', 'reach scored', 'boundary scored', 'reach smoke', 'boundary smoke'])
+  const rows = SCORED.map(([phase = '', check = '', result = '']) => [phase, check, now.has(check) ? unbuilt : result])
+  expect(regraded(db, root, 1, fizz())).toBe(table(rows, REGRADED))
+  expect(ofKind(db, 'bench.regrade').map((e) => e.outcome)).toEqual(['refuse'])
+})
+
 test('a suite with an unaimed entry point lcov hits is misread', () => {
   const map = '## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Signatures\n\n- V.deposit(uint256 assets) | at: src/V.sol L7-L9\n'
   const { db, root } = regradable({ [`${META}/handoff/map.md`]: map, [`${META}/corpus_medusa/coverage/lcov.info`]: 'SF:/repo/src/V.sol\nDA:8,3\nend_of_record\n' })
@@ -276,7 +289,7 @@ test('the plan row reads a suite built after coverage rewrote out/', () => {
   const { db, root } = regradable({ [`${META}/handoff/plan.md`]: `# Plan\n\n## Rows\n\n${gl04}`, [`${META}/corpus_medusa/call_sequences/1.json`]: '[]' })
   let built = false
   const handlers = Object.entries({ deposit: 582, mint: 609, redeem: 660, transfer: 679, withdraw: 694 }).map(([fn, line]) =>
-    ({ file: 'test/fizz/handlers/EulerEarnHandler.sol', start: line, end: line, name: `EulerEarnHandler.eulerEarn_${fn}`, clamped: false, target: null, clamps: [] }))
+    ({ file: 'test/fizz/handlers/EulerEarnHandler.sol', start: line, end: line, name: `EulerEarnHandler.eulerEarn_${fn}`, clamped: false, targets: [], clamps: [] }))
   vi.mocked(compiled).mockImplementation(() => { built = true; return [] })
   vi.mocked(trackers).mockImplementation(() => { built = false; return new Map() })
   vi.mocked(suite).mockImplementation(() => built ? { ...EMPTY, handlers } : EMPTY)

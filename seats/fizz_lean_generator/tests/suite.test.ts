@@ -17,9 +17,9 @@ const FOUND: Suite = {
   deployed: [{ ...at(23, 23), contract: 'V', args: [] }, { ...at(24, 24), contract: 'MockOracle', args: ['1e18'] }],
   actors: [{ ...at(19, 19), name: 'Harness.alice', roles: ['keccak256("FEEDER")'] }],
   handlers: [
-    { ...at(32, 35), name: 'Harness.v_deposit', clamped: false, target: 'V.deposit', clamps: [] },
-    { ...at(37, 39), name: 'Harness.v_deposit_clamped', clamped: true, target: 'V.deposit', clamps: [{ text: 'bound(assets, 0, 1e24)', range: '1e24' }] },
-    { ...at(41, 43), name: 'Harness.v_withdraw', clamped: false, target: 'V.withdraw', clamps: [] },
+    { ...at(32, 35), name: 'Harness.v_deposit', clamped: false, targets: ['V.deposit'], clamps: [] },
+    { ...at(37, 39), name: 'Harness.v_deposit_clamped', clamped: true, targets: ['V.deposit'], clamps: [{ text: 'bound(assets, 0, 1e24)', range: '1e24' }] },
+    { ...at(41, 43), name: 'Harness.v_withdraw', clamped: false, targets: ['V.withdraw'], clamps: [] },
   ],
   standIns: [{ ...at(6, 14), name: 'MockOracle', replaces: 'Oracle',
     limits: [{ limit: 'price within 1e6 of start', map: 'Oracle' }, { limit: 'deposits under 1e24', map: 'V.CAP' }] }],
@@ -131,8 +131,8 @@ const EULER: Suite = {
   deployed: [FACTORY, { ...lines(16), contract: 'EulerEarn', args: ['admin', '0', 'address(asset)', '"Euler Earn Asset"', '"eeAST"', 'bytes32(0)'], via: 'factory' }],
   actors: ['admin', 'evc', 'perspective', 'asset'].map((name, i) => ({ ...lines(7 + i), name: `Base.${name}`, roles: [] })),
   handlers: [
-    { ...lines(19, 21), name: 'Base.eulerEarn_acceptCap', clamped: false, target: 'EulerEarn.acceptCap', clamps: [] },
-    { ...lines(23, 25), name: 'Base.eulerEarn_acceptCap_clamped', clamped: true, target: 'EulerEarn.acceptCap', clamps: [{ text: 'id % 4', range: '4' }] },
+    { ...lines(19, 21), name: 'Base.eulerEarn_acceptCap', clamped: false, targets: ['EulerEarn.acceptCap'], clamps: [] },
+    { ...lines(23, 25), name: 'Base.eulerEarn_acceptCap_clamped', clamped: true, targets: ['EulerEarn.acceptCap'], clamps: [{ text: 'id % 4', range: '4' }] },
   ],
   standIns: [],
   probes: [],
@@ -198,12 +198,23 @@ test('a view read is skipped when a handler is aimed', () => {
   expect(suite(based(JSON.stringify(built))).handlers).toEqual(EULER.handlers)
   for (const n of access(accept)) n.typeDescriptions = view
   const unaimed = suite(based(JSON.stringify(built)))
-  expect(unaimed.handlers).toEqual(EULER.handlers.map((h) => ({ ...h, target: null })))
+  expect(unaimed.handlers).toEqual(EULER.handlers.map((h) => ({ ...h, targets: [] })))
   expect(misaimed(unaimed, ACCEPT, lcov(8, 3))).toEqual([
     { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },
   ])
   wrapped((accept as Node & { expression: Loose }).expression)
   expect(suite(based(JSON.stringify(built))).handlers).toEqual(unaimed.handlers)
+})
+
+test('a handler aims every target its helpers reach', () => {
+  const built = JSON.parse(BASE_AST) as { ast: Node }
+  const body = (id: number): Node & { statements: [Node, ...Node[]] } => below(built.ast).find((n) => n.id === id) as Node & { statements: [Node, ...Node[]] }
+  const submit = structuredClone(body(273).statements[0])
+  for (const n of below(submit).filter((n) => n.nodeType === 'MemberAccess')) Object.assign(n, { memberName: 'submitCap' })
+  body(263).statements.unshift(submit)
+  const found = suite(based(JSON.stringify(built)))
+  expect(found.handlers.map((h) => h.targets)).toEqual([['EulerEarn.acceptCap'], ['EulerEarn.submitCap', 'EulerEarn.acceptCap']])
+  expect(harnessed(found, ACCEPT)).toEqual([])
 })
 
 function recalled(change: (call: Loose) => void): string {
@@ -223,13 +234,13 @@ const encoded = (memberName: string) => (call: Loose): void => {
 }
 
 test.each([
-  { name: 'call options', change: wrapped, target: 'EulerEarn.acceptCap' },
-  { name: 'abi.encodeCall', change: encoded('encodeCall'), target: 'EulerEarn.acceptCap' },
-  { name: 'abi.encode', change: encoded('encode'), target: null },
-])('a call through $name aims $target', ({ change, target }) => {
+  { name: 'call options', change: wrapped, targets: ['EulerEarn.acceptCap'] },
+  { name: 'abi.encodeCall', change: encoded('encodeCall'), targets: ['EulerEarn.acceptCap'] },
+  { name: 'abi.encode', change: encoded('encode'), targets: [] },
+])('a call through $name aims $targets', ({ change, targets }) => {
   const found = suite(based(recalled(change)))
-  expect(found.handlers).toEqual(EULER.handlers.map((h) => ({ ...h, target })))
-  expect(misaimed(found, ACCEPT, lcov(8, 3))).toEqual(target === null ? [
+  expect(found.handlers).toEqual(EULER.handlers.map((h) => ({ ...h, targets })))
+  expect(misaimed(found, ACCEPT, lcov(8, 3))).toEqual(targets.length === 0 ? [
     { rule: 'suite.misread', note: 'scaffold: EulerEarn.acceptCap has no raw handler, yet lcov.info hits src/EulerEarn.sol L7-L9' },
   ] : [])
 })

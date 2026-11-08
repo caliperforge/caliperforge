@@ -29,6 +29,8 @@ const BUILT = ['out', 'cache']
 
 const ENTRY = 'Selected entry points '
 
+const UNBUILT: Refused[] = [{ rule: 'reach.unbuilt', note: 'coverage: no out/ to read the suite from; forge did not finish building it' }]
+
 type Row = [phase: string, check: string, result: () => string]
 
 interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string; scored: string | null; fix: () => Touched | string }
@@ -102,13 +104,14 @@ function reaching(at: Copy, name: string, corpus: string): [probe: Row, reach: R
   let [probes, items]: [ProbeReadings | undefined, Item[] | undefined] = [undefined, undefined]
   const probing = (): ProbeReadings => probes ??= readings(suite(dir).probes, trackers(dir, corpus))
   const reached = (): Item[] => items ??= reach(dir, read(map), lcov, report, probing())
-  return [['coverage', 'probe readings', checked(at, [sequences], () => { probing(); return [] })],
-    ['coverage', `reach ${name}`, checked(at, [lcov, report, sequences], () => {
+  const built = (run: () => Refused[]) => (): Refused[] => existsSync(join(dir, 'out')) ? run() : UNBUILT
+  return [['coverage', 'probe readings', checked(at, [sequences], built(() => { probing(); return [] }))],
+    ['coverage', `reach ${name}`, checked(at, [lcov, report, sequences], built(() => {
       writeFileSync(map, written(read(map), reached()))
       return [...unlocated(reached()), ...misread(reached()), ...unmet(read(map), reached()).map((i) => ({ rule: 'reach.unmet', note: i.note }))]
-    })],
-    ['coverage', `boundary ${name}`, checked(at, [lcov, report, sequences], () => [...unlocated(reached()), ...misread(reached()),
-      ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))])]]
+    }))],
+    ['coverage', `boundary ${name}`, checked(at, [lcov, report, sequences], built(() => [...unlocated(reached()), ...misread(reached()),
+      ...met(read(map), reached()).reasons.map((note) => ({ rule: 'reach.boundary', note }))]))]]
 }
 
 function coverage(at: Copy): Row[] {
@@ -181,7 +184,7 @@ export function regraded(db: Db, root: string, plan: number, fizz: string): stri
     if (existsSync(archived)) cpSync(archived, scored, { recursive: true })
     const table = tabled(db, root, plan, dir, fizz, scored).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
     const heading = `plan ${String(plan)} regraded from fuzz-bench/suites/${generator}/${target}`
-    const refused = table.some((row) => row[2].startsWith('refuse throw') || row.length === 4)
+    const refused = table.some((row) => row[2].startsWith('refuse throw') || row[2].startsWith('refuse reach.unbuilt') || row.length === 4)
     logged(db, { plan, kind: 'bench.regrade', actor: 'bench', outcome: refused ? 'refuse' : 'pass', message: heading, pointer: null, run: null })
     return `${heading}\n${table.map((row) => `${row.join('\t')}\n`).join('')}`
   } finally {

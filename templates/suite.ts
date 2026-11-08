@@ -9,7 +9,7 @@ import { rows } from './slices.ts'
 export interface Suite {
   deployed: (At & { contract: string; args: string[]; via?: 'factory' })[]
   actors: (At & { name: string; roles: string[] })[]
-  handlers: (At & { name: string; clamped: boolean; target: string | null; clamps: { text: string; range: string }[] })[]
+  handlers: (At & { name: string; clamped: boolean; targets: string[]; clamps: { text: string; range: string }[] })[]
   standIns: (At & { name: string; replaces: string; limits: { limit: string; map: string | null }[] })[]
   probes: (At & { name: string; cites: string | null; trackers: string[]; calls: string[] })[]
   trackers: (At & { name: string; type: string; writers: string[] })[]
@@ -90,13 +90,14 @@ const roles = (setup: Part, who: string): string[] => calls(setup.node).filter((
 const handler = ({ node }: Part): boolean => ['public', 'external'].includes(node.visibility ?? '') && !['view', 'pure'].includes((node as Solc).stateMutability ?? '')
   && node.name !== 'setup' && !PROPERTY.test(node.name ?? '')
 
-function aimed(f: Part, functions: Part[], live: Set<string>, seen = new Set<number>()): string | null {
+function targets(f: Part, functions: Part[], live: Set<string>, seen = new Set<number>()): string[] {
   seen.add(f.node.id)
   const callees = calls(f.node).map(callee)
-  const direct = callees.find((e) => e?.nodeType === 'MemberAccess' && live.has(contractOf(e.expression)) && !/\b(?:view|pure)\b/.test(type(e)))
-  if (direct !== undefined) return `${contractOf(direct.expression)}.${direct.memberName ?? ''}`
-  return callees.map((e) => functions.find((g) => g.node.id === e?.referencedDeclaration)).filter((g): g is Part => g !== undefined && !seen.has(g.node.id))
-    .map((g) => aimed(g, functions, live, seen)).find((t) => t !== null) ?? null
+  const direct = callees.filter((e): e is Node => e?.nodeType === 'MemberAccess' && live.has(contractOf(e.expression)) && !/\b(?:view|pure)\b/.test(type(e)))
+    .map((e) => `${contractOf(e.expression)}.${e.memberName ?? ''}`)
+  const helpers = callees.map((e) => functions.find((g) => g.node.id === e?.referencedDeclaration)).filter((g): g is Part => g !== undefined && !seen.has(g.node.id))
+    .flatMap((g) => targets(g, functions, live, seen))
+  return [...new Set([...direct, ...helpers])]
 }
 
 function range(n: Solc): Node | undefined {
@@ -154,7 +155,7 @@ export function suite(root: string): Suite {
   return {
     deployed,
     actors: actors.map((a) => ({ ...a.at(a.node), name: a.name, roles: setups.flatMap((s) => roles(s, a.node.name ?? '')) })),
-    handlers: functions.filter(handler).map((h) => ({ ...h.at(h.node), name: h.name, clamped: h.name.endsWith(CLAMPED), target: aimed(h, functions, live), clamps: clamps(h) })),
+    handlers: functions.filter(handler).map((h) => ({ ...h.at(h.node), name: h.name, clamped: h.name.endsWith(CLAMPED), targets: targets(h, functions, live), clamps: clamps(h) })),
     standIns: standIns.map(standIn),
     probes: probes.map(probe),
     trackers: vars.filter((v) => v.node.constant !== true && !actors.includes(v) && contractOf(v.node) === '').map((v) => ({ ...v.at(v.node), name: v.name, type: type(v.node),
@@ -173,7 +174,7 @@ const excused = (map: string, section: string): string[] => listed(map, section)
 const entered = (map: string): string[] => named(map, 'Selected entry points').map((row) => row.split('(')[0] ?? '')
   .filter((name) => !excused(map, 'Skipped entry points').includes(name))
 
-const aims = (found: Suite, name: string, clamped: boolean): boolean => found.handlers.some((h) => h.target === name && h.clamped === clamped)
+const aims = (found: Suite, name: string, clamped: boolean): boolean => found.handlers.some((h) => h.targets.includes(name) && h.clamped === clamped)
 
 const word = (text: string): RegExp => new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`)
 

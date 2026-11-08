@@ -66,6 +66,32 @@ test('a guard reads passing from the next DA line', () => {
   expect(at(judged(PROBES, REPORT, MAP, lcov), 'Guards V.withdraw')).toMatchObject({ met: true, cells: ['passing: yes', 'reverting: yes'] })
 })
 
+const reported = (fns: Record<string, [calls: number, reverts: number, reason: string]>): string => {
+  const report = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'revert_report.json')
+  writeFileSync(report, JSON.stringify({ contractRevertMetrics: { FuzzTester: { functionRevertMetrics: Object.fromEntries(Object.entries(fns).map(([fn, [calls, reverts, reason]]) =>
+    [fn, { totalCalls: calls, totalReverts: reverts, revertReasonMetrics: reverts === 0 ? {} : { [reason]: { count: reverts } } }])) } } }))
+  return report
+}
+
+test('a guard reads a qualified error from any handler', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-fizz-reach-'))
+  mkdirSync(join(root, 'src'))
+  writeFileSync(join(root, 'src/E.sol'), 'function _supplyStrategy() internal {\n    revert ErrorsLib.AllCapsReached();\n}\n')
+  const name = 'EulerEarn._deposit / _supplyStrategy (shared by deposit, mint)'
+  const map = `## Guards\n\n- ${name} | at: src/E.sol L2-L2\n\n## Handlers\n\n- FuzzTester.eulerEarn_deposit | target: EulerEarn.deposit\n`
+  const items = reach(root, map, join(fixtures, 'lcov.info'), reported({ eulerEarn_deposit: [10, 4, 'AllCapsReached()'] }), PROBES)
+  expect(at(items, `Guards ${name}`)?.cells).toEqual(['passing: no', 'reverting: yes'])
+})
+
+test('entry figures read only the handlers aimed at it', () => {
+  const map = '## Signatures\n\n- EulerEarn.submitMarketRemoval(address id) | at: src/V.sol L8-L11\n\n'
+    + '## Selected entry points\n\n- EulerEarn.submitMarketRemoval(address id) | tier: 1\n\n'
+    + '## Handlers\n\n- FuzzTester.m_remove | target: EulerEarn.submitMarketRemoval\n- FuzzTester.m_remove_clamped | target: EulerEarn.submitCap\n'
+  const report = reported({ m_remove: [6477, 6472, 'NotEnabled()'], m_remove_clamped: [7824, 0, ''] })
+  expect(at(judged(PROBES, report, map), 'Selected entry points EulerEarn.submitMarketRemoval(address id)')).toMatchObject({ met: true,
+    cells: expect.arrayContaining(['calls: 6477', 'successes: 5', 'success: 0% (below 10)']) as string[] })
+})
+
 test('handlers reading 0 calls on hit lines are reach.misread', () => {
   const report = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'revert_report.json')
   writeFileSync(report, JSON.stringify({ contractRevertMetrics: { FuzzTester: { functionRevertMetrics: {} } } }))

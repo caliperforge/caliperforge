@@ -63,7 +63,7 @@ export function suited(found: Suite, text: string): string {
   const rows: Record<string, string[]> = {
     Deployed: found.deployed.map((d) => `${d.contract} | args: ${d.args.join(', ') || 'none'} | ${cited(d)}`),
     Actors: found.actors.map((a) => `${a.name} | roles: ${a.roles.join(', ') || 'none'} | ${cited(a)}`),
-    Handlers: found.handlers.map((h) => `${h.name} | target: ${h.target ?? 'none'} | clamps: ${h.clamps.map((c) => c.text).join('; ') || 'none'} | ${cited(h)}`),
+    Handlers: found.handlers.map((h) => `${h.name} | target: ${h.targets[0] ?? 'none'} | clamps: ${h.clamps.map((c) => c.text).join('; ') || 'none'} | ${cited(h)}`),
     'Stand-ins': found.standIns.map((s) => `${s.name} | replaces: ${s.replaces} | limits: ${s.limits.map((l) => `${l.limit} (map: ${l.map ?? 'none'})`).join('; ')} | ${cited(s)}`),
     Trackers: found.trackers.map((t) => `${t.name} | type: ${t.type} | writers: ${t.writers.join(', ') || 'none'} | ${cited(t)}`),
     Build: Object.entries(found.build).map(([key, value]) => `${key} | value: ${value ?? 'none'}`),

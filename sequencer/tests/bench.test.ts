@@ -934,7 +934,7 @@ const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, se
   not_powered: 'reduced_generate', gross_usd: 0, net_usd: 0 }
 
 /** The broken, flaky, seeds and union score.json carries for PAIRS on each of the two seeds. */
-const SEEDED = { broken: 0, flaky: 0, seeds: [1, 2].map((seed) => ({ seed, catch: 2, false_positive: 1, broken: 0, silent: 1, not_run: 0, calls: { pre_fix: null, fix: null }, seconds: expect.any(Number) as number })),
+const SEEDED = { broken: 0, flaky: 0, seeds: [1, 2].map((seed) => ({ seed, catch: 2, false_positive: 1, broken: 0, silent: 1, not_run: 0, calls: { pre_fix: null, fix: null }, compile_s: null, fuzz_s: null, seconds: expect.any(Number) as number })),
   union: { catch: 2, false_positive: 1, broken: 0, flaky: 0, silent: 1, not_run: 0 } }
 
 const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
@@ -982,7 +982,7 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 7200, workers: 4, shrinkLimit: 500 },
-    compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } }, slither: { useSlither: false } })
+    compilation: { platform: 'crytic-compile', platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
 })
@@ -1028,27 +1028,27 @@ function compiled(args: string[]): string {
 
 test('D1 a foundry.toml forces the foundry framework', () => {
   expect(installed(compiled(['--foundry-compile-all']), 'foundry.toml', 'hardhat.config.ts')).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
 })
 
-test('D2 no foundry.toml keeps the args as written', () => {
+test('D2 no foundry.toml forces no framework', () => {
   expect(installed(compiled(['--foundry-compile-all']))).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-compile-all'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
 })
 
 test('D3 a forced framework already in args is kept', () => {
   expect(installed(compiled(['--compile-force-framework', 'hardhat']), 'foundry.toml')).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat', '--foundry-ignore-compile'] } }, slither: { useSlither: false } })
 })
 
-test('D1 D2 D3 --foundry-ignore-compile is --foundry-compile-all', () => {
+test('D1 D2 --foundry-ignore-compile is kept on the scored copy', () => {
   const forced = installed(compiled(['--foundry-ignore-compile']), 'foundry.toml')
   const kept = installed(compiled(['--foundry-ignore-compile']))
   expect(forced).toEqual({ compilation: { platform: 'crytic-compile', platformConfig: { target: '../..',
-    args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
+    args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
   expect(kept).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-compile-all'] } }, slither: { useSlither: false } })
-  for (const copy of [forced, kept]) expect(JSON.stringify(copy)).not.toContain('--foundry-ignore-compile')
+    platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
+  for (const copy of [forced, kept]) expect(JSON.stringify(copy)).not.toContain('--foundry-compile-all')
 })
 
 test('--ignore-compile is dropped beside a custom out', () => {
@@ -1057,7 +1057,7 @@ test('--ignore-compile is dropped beside a custom out', () => {
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), compiled(['--foundry-compile-all', '--ignore-compile']))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   const copy: unknown = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))
-  expect(copy).toMatchObject({ compilation: { platformConfig: { args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } } })
+  expect(copy).toMatchObject({ compilation: { platformConfig: { args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } } })
 })
 
 const TOML = '[profile.default]\nsrc = "src"\n'
@@ -1116,13 +1116,13 @@ test('D1 an out dir HEAD foundry.toml lacks is dropped', () => {
     writeFileSync(join(src, 'foundry.toml'), FUZZ)
   }, `import os, sys\n'--foundry-out-directory' in open(os.path.join(sys.argv[2], 'medusa.json')).read() and sys.exit('out-fuzz/build-info is not a directory')\n${
     writes('.jsonl', PAIRS)}`)
-  expect(args).toEqual(['--compile-force-framework', 'foundry'])
+  expect(args).toEqual(['--foundry-ignore-compile', '--compile-force-framework', 'foundry'])
   expect(score).toMatchObject({ foundry_out_dropped: 'out-fuzz' })
 })
 
 test('D2 an out dir the carried foundry.toml sets is kept', () => {
   const { args, score } = outFuzz((src) => { writeFileSync(join(src, 'foundry.toml'), FUZZ) })
-  expect(args).toEqual(['--foundry-out-directory', 'out-fuzz', '--compile-force-framework', 'foundry'])
+  expect(args).toEqual(['--foundry-out-directory', 'out-fuzz', '--foundry-ignore-compile', '--compile-force-framework', 'foundry'])
   expect(score).not.toHaveProperty('foundry_out_dropped')
 })
 
@@ -1239,7 +1239,7 @@ test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
   expect(scored(db, root, planById(db, 1)).note).toContain(balances[0])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 7200, workers: 4,
-      shrinkLimit: 500 }, compilation: { platformConfig: { target: '../..' } }, slither: { useSlither: false } })
+      shrinkLimit: 500 }, compilation: { platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
 })
 
 test('rescore D1 D2 a done plan scores again on its suite', () => {
@@ -1694,7 +1694,7 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   const seconds = expect.any(Number) as number
   const none = { false_positive: 0, broken: 0, not_run: 0 }
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7, broken: 0, flaky: 0,
-    seeds: [{ seed: 1, catch: 0, ...none, silent: 3, calls, seconds }, { seed: 2, catch: 3, ...none, silent: 0, calls, seconds }],
+    seeds: [{ seed: 1, catch: 0, ...none, silent: 3, calls, compile_s: null, fuzz_s: null, seconds }, { seed: 2, catch: 3, ...none, silent: 0, calls, compile_s: null, fuzz_s: null, seconds }],
     union: { catch: 3, ...none, flaky: 0, silent: 0 } })
   expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: { catch: 3, flaky: 0, p1: ['silent', 'catch'] } })
   expect(runRows(db)).toEqual([])
@@ -1731,11 +1731,11 @@ test('refuzz D7 null_check on hours 4 is capped at 4 × cap', () => {
 })
 
 test('seeds D1 a score runs run_pair twice, timing each seed', () => {
-  const { root, db } = scoring(`import time\ntime.sleep(0.2)\n${writes('.jsonl', PAIRS)}`)
+  const { root, db } = scoring(`import time\ntime.sleep(0.2)\n${writes('.jsonl', PAIRS.map((r) => ({ ...r, compile_s: 3.5, fuzz_s: 60 })))}`)
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(readdirSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01')).sort()).toEqual(['euler-earn-m01.seed-1.jsonl', 'euler-earn-m01.seed-2.jsonl'])
   const score = JSON.parse(get(root, 1, 'score.json')) as typeof SEEDED
-  expect(score).toMatchObject(SEEDED)
+  expect(score).toMatchObject({ ...SEEDED, seeds: SEEDED.seeds.map((s) => ({ ...s, compile_s: 3.5, fuzz_s: 60 })) })
   for (const { seconds } of score.seeds) expect(seconds).toBeGreaterThanOrEqual(0.2)
 })
 

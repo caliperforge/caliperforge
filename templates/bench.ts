@@ -28,6 +28,7 @@ import { COMMENT, sampled, unprobed } from './probes.ts'
 import { field, rebased } from './rebased.ts'
 import { report } from './report.ts'
 import { archived, placed, recloned, rooted, scrapped } from './rooted.ts'
+import { reusing } from './smoke.ts'
 import { unstopped } from './stopped.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
@@ -251,8 +252,9 @@ export function medusa(db: Db, plan: number | null, src: string, suite: string, 
   if (!installed) rebased(config, (value) => moved(suite, value))
   const platform = field(field(config, 'compilation'), 'platformConfig')
   const args = field(platform, 'args') ?? []
-  if (Array.isArray(args)) args.splice(0, args.length, ...(args as unknown[]).flatMap((arg) => arg === '--ignore-compile' ? [] : [arg === '--foundry-ignore-compile' ? '--foundry-compile-all' : arg]))
-  if (existsSync(join(src, 'foundry.toml')) && typeof platform === 'object' && platform !== null && Array.isArray(args) && !args.includes('--compile-force-framework')) Object.assign(platform, { args: [...(args as unknown[]), '--compile-force-framework', 'foundry'] })
+  if (typeof platform === 'object' && platform !== null && Array.isArray(args)) Object.assign(platform, reusing({ compilation: { platformConfig: { args: (args as string[]).filter((arg) => arg !== '--ignore-compile') } } })?.platformConfig)
+  const ignored = field(platform, 'args')
+  if (existsSync(join(src, 'foundry.toml')) && Array.isArray(ignored) && !ignored.includes('--compile-force-framework')) Object.assign(platform as object, { args: [...(ignored as unknown[]), '--compile-force-framework', 'foundry'] })
   if (refuzz !== null && field(config, 'fuzzing') === undefined) Object.assign(config as object, { fuzzing: {} })
   const fuzzing = field(config, 'fuzzing')
   const balances = field(fuzzing, 'targetContractsBalances')

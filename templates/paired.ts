@@ -16,7 +16,7 @@ export function heldForCoo(db: Db, plan: PlanRow, ran: SpawnSyncReturns<string>,
   return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
 }
 
-export interface Row { property?: string; verdict?: string; pre_fix?: 'pass' | 'fail' | null; fix?: 'pass' | 'fail' | null; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null }; build_log_tail?: unknown }
+export interface Row { property?: string; verdict?: string; pre_fix?: 'pass' | 'fail' | null; fix?: 'pass' | 'fail' | null; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null }; compile_s?: number | null; fuzz_s?: number | null; build_log_tail?: unknown }
 
 export function rows(path: string): Row[] {
   return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Row)
@@ -84,7 +84,7 @@ export function union(runs: Row[][], refuzz = false): Record<Class | 'flaky', nu
 
 export function seedsOf(runs: Row[][], seconds: number[], refuzz: boolean) {
   const seeds = runs.map((pairs, at) => ({ seed: at + 1, ...tallied(CLASSES, pairs.map(classOf)),
-    calls: { pre_fix: pairs[0]?.calls?.pre_fix ?? null, fix: pairs[0]?.calls?.fix ?? null }, seconds: seconds[at] ?? null }))
+    calls: { pre_fix: pairs[0]?.calls?.pre_fix ?? null, fix: pairs[0]?.calls?.fix ?? null }, compile_s: pairs[0]?.compile_s ?? null, fuzz_s: pairs[0]?.fuzz_s ?? null, seconds: seconds[at] ?? null }))
   const folded = (side: 'pre_fix' | 'fix', fold: (calls: number[]) => number): number | null =>
     (seeds.some((s) => s.calls[side] === null) ? null : fold(seeds.map((s) => s.calls[side] ?? 0)))
   const summed = (calls: number[]): number => calls.reduce((n, c) => n + c, 0)

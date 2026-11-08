@@ -14,6 +14,7 @@ import { record, scores, supersede, type Score } from '../../store/bench.ts'
 import { eventsAfter, eventsOf, logged, runRows, type Event } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import { addRun } from '../../store/brief.ts'
+import { dropSettings } from '../../store/drift.ts'
 import { type Db, upsertRule } from '../../store/index.ts'
 import { dial, set } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
@@ -980,7 +981,7 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 3600, workers: 4, shrinkLimit: 500 },
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 7200, workers: 4, shrinkLimit: 500 },
     compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } }, slither: { useSlither: false } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
@@ -999,7 +1000,7 @@ function installed(config: string, ...files: string[]): unknown {
 test('D1 D2 the copy turns slither off and caps shrinking', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0, shrinkLimit: 5000, testing: { stopOnFailedTest: false } },
     slither: { useSlither: true, cachePath: 'test/fizz/fizz_data/slither_results.json' } }))).toEqual({
-    fuzzing: { timeout: 3600, workers: 4, testLimit: 0, shrinkLimit: 500, testing: { stopOnFailedTest: false } },
+    fuzzing: { timeout: 7200, workers: 4, testLimit: 0, shrinkLimit: 500, testing: { stopOnFailedTest: false } },
     slither: { useSlither: false, cachePath: 'fizz_data/slither_results.json' } })
 })
 
@@ -1185,6 +1186,21 @@ test('D3 a set timeout and workers at most 4 are kept', () => {
     fuzzing: { timeout: 600, workers: 2, shrinkLimit: 500 }, slither: { useSlither: false } })
 })
 
+test('the score timeout is read from settings, refused without it', () => {
+  const tuned = scoring()
+  set(tuned.db, 'bench.score_seconds', '5400', 'ceo', AT)
+  writeFileSync(join(srcDir(tuned.root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { workers: 2 } }))
+  expect(scored(tuned.db, tuned.root, planById(tuned.db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(readFileSync(join(planDir(tuned.root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')))
+    .toMatchObject({ fuzzing: { timeout: 5400 } })
+  const { root, db } = scoring()
+  dropSettings(db, 'bench.score_seconds')
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { workers: 2 } }))
+  expect(scored(db, root, planById(db, 1)))
+    .toEqual({ outcome: 'refuse', spans: ['bench.no_score_seconds'], note: 'no settings row bench.score_seconds' })
+  expect(scores(db)).toEqual([])
+})
+
 test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
   const { root, db } = scoring()
   const balances = ['0xffffffffffffffffffffffffffffffffffffffffffffffff', '0x21e19e0c9bab2400000', 'lots']
@@ -1205,7 +1221,7 @@ test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
     targetContractsBalances: balances }, compilation: { platformConfig: { target: '../..' } } }))
   expect(scored(db, root, planById(db, 1)).note).toContain(balances[0])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 3600, workers: 4,
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 7200, workers: 4,
       shrinkLimit: 500 }, compilation: { platformConfig: { target: '../..' } }, slither: { useSlither: false } })
 })
 

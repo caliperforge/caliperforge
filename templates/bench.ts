@@ -11,6 +11,7 @@ import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
 import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { setUntested } from '../store/bench.ts'
+import { setting } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
@@ -236,14 +237,14 @@ export function unproven(suite: string, name: string): Outcome | number {
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
   [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
 
-const TIMEOUT = 3600
-
 const WORKERS = 4
 
 function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
   const installed = !existsSync(join(src, 'medusa.json'))
   const path = join(src, installed ? suite : '', 'medusa.json')
   if (!existsSync(path)) return null
+  const seconds = setting(db, 'bench.score_seconds')
+  if (seconds === undefined) return { outcome: 'refuse', spans: ['bench.no_score_seconds'], note: 'no settings row bench.score_seconds' }
   let config: unknown
   try {
     config = JSON.parse(readFileSync(path, 'utf8'))
@@ -266,8 +267,7 @@ function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hour
   const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])
   if (typeof fuzzing === 'object' && fuzzing !== null) {
     const { timeout, workers } = fuzzing as Record<string, unknown>
-    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
-      workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
+    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? Number(seconds) : timeout, workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
     if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
     if (refuzz !== null) Object.assign(fuzzing, { timeout: refuzz.hours * 3600, testLimit: 0, corpusDirectory: refuzz.corpus })
   }

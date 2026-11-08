@@ -12,7 +12,7 @@ import type { PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { criticCheck } from './critic.ts'
 import { compiled, extract } from './extract.ts'
-import { type Check, FIX, fixed, type Fixed } from './fixturn.ts'
+import { fixing } from './fixing.ts'
 import { costWalled, faulted, net, refired, refiring, tallied } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
@@ -105,24 +105,6 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
 
 const FACTS = ['Limits', 'Outside dependencies', 'Conversion points']
 
-function fixing(bench: Bench, manifest: Seat, hash: string, handoffs: string, phase: string, sum: Sum) {
-  const { db, plan, name, dir } = bench
-  const at = { fire: firing(bench, { ...manifest, ...FIX }, hash), dir, handoffs }
-  const fixes = {
-    sum,
-    log: (kind: string, outcome: 'pass' | 'refuse', message: string): void => { logged(db, { plan: plan.id, kind, actor: name, outcome, message, pointer: null, run: null }) },
-    fix: async (check: Check): Promise<Fixed | Sum | Outcome> => {
-      const got = await fixed(at, check, phase, fixes.sum)
-      if ('outcome' in got || got.sum.wall !== null) return 'outcome' in got ? got : got.sum
-      for (const row of got.turns) fixes.log(KINDS.fix_turns, 'pass', JSON.stringify(row))
-      if (got.not_clean !== null) fixes.log(KINDS.critic, 'refuse', got.not_clean)
-      fixes.sum = got.sum
-      return got
-    },
-  }
-  return fixes
-}
-
 function rebuilt(root: string, phase: string, check: () => Refused[]): Refused[] {
   const broken = compiled(root, phase)
   return broken.length > 0 ? broken : check()
@@ -184,7 +166,9 @@ async function reached(bench: Bench, manifest: Seat, hash: string, skill: string
   const got = await fixes.fix({ name: 'reach', rules: machine(skill, 'coverage'), facts: '', run: () => unmet(read(map), items).map((i) => ({ rule: 'reach.unmet', note: i.note })) })
   if (!('turns' in got)) return got
   const left = met(read(map), items)
-  fixes.log(KINDS.reach, left.met ? 'pass' : 'refuse', JSON.stringify(left))
+  const boundary = fixes.only.includes('reach.boundary')
+  if (boundary) for (const note of left.reasons) fixes.log(KINDS.report_only, 'pass', JSON.stringify({ rule: 'reach.boundary', note }))
+  fixes.log(KINDS.reach, left.met || boundary ? 'pass' : 'refuse', JSON.stringify(left))
   return fixes.sum
 }
 

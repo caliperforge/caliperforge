@@ -10,7 +10,7 @@ import { record } from '../../store/bench.ts'
 import { addRun } from '../../store/brief.ts'
 import { eventsAfter, logged, ofKind } from '../../store/events.ts'
 import { type Db, upsertRule } from '../../store/index.ts'
-import { dial, lanes } from '../../store/lanes.ts'
+import { dial, lanes, set } from '../../store/lanes.ts'
 import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan, type PlanRow } from '../../store/plans.ts'
 import { fingerprint, refused as refuse } from '../../store/refusals.ts'
 import { runTokens, spend } from '../../store/runs.ts'
@@ -147,6 +147,22 @@ test('file D5 --stop-after context lands in target.yml', () => {
   const dir = benchRoot()
   const id = Number(fileBench(fresh(schema), dir, 'euler-earn-m01', false, 'fizz_lean_generator', AT, 'context')[0])
   expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz_lean\nstop_after: context\n`)
+})
+
+test('file records bench.report_only_checks in target.yml', () => {
+  const [dir, d] = [benchRoot(), fresh(schema)]
+  set(d, 'bench.report_only_checks', ' suite.outside, reach.unmet,,reach.boundary', 'ceo', AT)
+  const id = Number(fileBench(d, dir, 'euler-earn-m01', false, 'fizz_lean_generator', AT, 'context')[0])
+  expect(get(dir, id, 'target.yml'))
+    .toBe(`${YML}target: euler-earn-m01\ngenerator: fizz_lean\nstop_after: context\nreport_only_checks: suite.outside,reach.unmet,reach.boundary\n`)
+})
+
+test('file refuses an unlisted report-only check, files nothing', () => {
+  const d = fresh(schema)
+  set(d, 'bench.report_only_checks', 'suite.outside,suite.clamped', 'ceo', AT)
+  expect(() => fileBench(d, benchRoot(), 'euler-earn-m01', false, 'fizz_generator', AT))
+    .toThrow('bench.report_only_checks takes suite.outside, reach.unmet, reach.boundary, not suite.clamped')
+  expect(allPlans(d)).toEqual([])
 })
 
 /** A fizz_lean_generator plan on smoke-01 whose regrades end in `outcomes`. */

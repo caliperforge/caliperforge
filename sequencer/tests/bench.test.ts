@@ -1836,6 +1836,16 @@ test('report D4 no events shows -, counted no with critic -', () => {
   expect(md).toContain('- counted: no\n- why: no_critic\n- critic: -\n')
 })
 
+test('report_only_checks survives scored and lists after Counted', () => {
+  const { root, db } = scoring(undefined, { ...KEYS, files: FILES, report_only_checks: 'suite.outside,reach.unmet' })
+  said(db, KINDS.report_only, { rule: 'suite.outside', note: 'scaffold: Permit2 has no stand-in' })
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(get(root, 1, 'target.yml')).toBe(`${REFRESHED}report_only_checks: suite.outside,reach.unmet\n`)
+  const md = get(root, 1, 'report.md')
+  expect([...md.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual([...TITLES, 'Report-only checks'])
+  expect(md).toContain('## Report-only checks\n\n- checks: suite.outside; reach.unmet\n- rows: rule suite.outside, note scaffold: Permit2 has no stand-in\n')
+})
+
 /** A run_pair that writes a fail→pass row for every `function property_*` in the suite it is handed. */
 const PROPERTIED = `import json, os, re, sys
 name = os.path.basename(sys.argv[2])

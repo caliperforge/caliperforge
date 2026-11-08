@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { admitted, type Fired, type Miss, type Packet } from '../../../providers/kind.ts'
-import { get, put } from '../../../sequencer/workspace.ts'
+import { get, planDir, put } from '../../../sequencer/workspace.ts'
 import { scores, underpowered } from '../../../store/bench.ts'
 import { eventsAfter } from '../../../store/events.ts'
 import type { Db } from '../../../store/index.ts'
@@ -432,6 +432,57 @@ test('reach D4: all met logs one pass and fires no fix', async () => {
   expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'invariants-plan', 'invariants'])
   expect(vi.mocked(reach).mock.lastCall?.slice(2, 4)).toEqual(['coverage/lcov.info', 'coverage/revert_report.json'].map((f) => join(handoffs, '../corpus_medusa', f)))
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'reach.boundary').map((e) => [e.outcome, e.message])).toEqual([['pass', '{"met":true,"reasons":[]}']])
+})
+
+const OUTSIDE = '\n## Outside dependencies\n\n- Permit2 | role: x\n'
+const ONLY = 'suite.outside,reach.unmet,reach.boundary'
+const PERMIT2 = { rule: 'suite.outside', note: 'scaffold: Permit2 under ## Outside dependencies has no stand-in and is not deployed in setup()' }
+const ROWS = [PERMIT2, { rule: 'reach.unmet', note: UNMET.note }, { rule: 'reach.boundary', note: UNMET.note }]
+const ENTERED = '## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n'
+
+/** `mapped(map)` and its report on a plan whose target.yml lists all three report-only checks, the target.yml removed after. */
+async function reportOnly(map: string) {
+  const { root } = benched(() => ({}))
+  put(root, 1, 'target.yml', `report_only_checks: ${ONLY}\n`)
+  try {
+    const run = await mapped(map)
+    report(run.db, run.root, 1, [], null)
+    return run
+  } finally {
+    rmSync(join(planDir(root, 1), 'target.yml'))
+  }
+}
+
+test('report-only checks fire no fix turn and log each row', async () => {
+  vi.mocked(reach).mockReturnValueOnce([UNMET])
+  const { db, fires } = await reportOnly(`## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n${OUTSIDE}`)
+  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'invariants-plan', 'invariants'])
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'fix.turn' || (e.kind === 'critic' && e.outcome === 'refuse'))).toEqual([])
+  expect(eventsAfter(db, 0).filter((e) => ['check.report_only', 'reach.boundary'].includes(e.kind)).map((e) => [e.kind, e.outcome, e.message])).toEqual([
+    ...ROWS.map((row) => ['check.report_only', 'pass', JSON.stringify(row)]), ['reach.boundary', 'pass', JSON.stringify({ met: false, reasons: [UNMET.note] })],
+  ])
+})
+
+test('a report-only check still fixes an unlisted suite row', async () => {
+  vi.mocked(suite).mockReturnValueOnce(EMPTY).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
+  vi.mocked(smoke).mockReturnValueOnce({ results: SMOKED, note: null, cache: null, clamped: [] })
+  const { db, fires } = await reportOnly(`${ENTERED}${OUTSIDE}`)
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants-plan', 'invariants'])
+  expect(fires[2]?.issue).toContain('suite found:\n- scaffold: V.deposit has no raw handler\n')
+  expect(fires[2]?.issue).not.toContain(PERMIT2.note)
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'check.report_only').map((e) => e.message)).toEqual([JSON.stringify(PERMIT2)])
+})
+
+test('report-only rows list in report.md only when listed', async () => {
+  vi.mocked(reach).mockReturnValueOnce([UNMET])
+  const { db, root } = await reportOnly(`## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n${OUTSIDE}`)
+  const { report_only: listed, ...unlisted } = JSON.parse(get(root, 1, 'report.json')) as Record<string, unknown>
+  expect(listed).toEqual({ checks: ONLY.split(','), rows: ROWS })
+  const md = get(root, 1, 'report.md')
+  expect(md).toMatch(/\n## Counted\n\n(- .*\n)+\n## Report-only checks\n\n- checks: suite\.outside; reach\.unmet; reach\.boundary\n- rows: rule suite\.outside, note scaffold: Permit2 .*; rule reach\.boundary, note Guards V\.deposit: passing never seen\n$/)
+  report(db, root, 1, [], null)
+  expect(JSON.parse(get(root, 1, 'report.json'))).toStrictEqual(unlisted)
+  expect(get(root, 1, 'report.md')).toBe(md.slice(0, md.indexOf('\n## Report-only checks')))
 })
 
 test('an unlocated reach item refuses before any fix turn', async () => {

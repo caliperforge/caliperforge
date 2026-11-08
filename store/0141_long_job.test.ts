@@ -62,7 +62,7 @@ it('0141 keeps a 0140 plan and decision, one plan per issue', () => {
   waiting(d, [{ plan, why: 'bench_night' }])
   decided(d, row(plan, 'bench_night'), '2026-11-08 00:00:00')
   const plans = planRows(d)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0141_long_job.sql', '0142_refuzz_night.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0141_long_job.sql', '0142_refuzz_night.sql', '0143_bench_report_only.sql'])
   expect(planRows(d)).toEqual(plans)
   expect(decisions(d, plan)).toEqual([row(plan, 'bench_night')])
   expect(() => issued(d, planById(d, plan).pipe_id)).toThrow(/UNIQUE/)

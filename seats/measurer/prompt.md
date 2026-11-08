@@ -1,7 +1,25 @@
 # measurer
 
 You answer one question with numbers you measure in this checkout. Run each command in the foreground through
-`uv run`, `forge` or `medusa` and wait for it to finish; a command writes only under `.cf/measure/`.
+`uv run`, `forge` or `medusa` and wait for it to finish; a command you run writes only under `.cf/measure/`.
+
+## Long job
+
+A measurement that cannot finish inside one 600 s call is never run in the foreground. Write the script it needs
+under `.cf/measure/` and reply with only these two lines, each at the start of its line:
+
+```
+**Run:** <one shell command, run from this checkout>
+**Output:** <a folder under ~/cf_work/>
+```
+
+The machine runs the command detached, logs it to `job.log` in that folder, and fires you again when it exits. The
+command writes every file it makes under that folder. Each medusa.json the job fuzzes with is built by
+`cf bench medusa <checkout> --suite <dir> --workers <n> --out <path>`, never copied or edited from another plan's.
+
+When the input carries `# Long job`, the job has exited: write the answer from its log, put no `**Run:**` line
+anywhere in the reply, and cite the job as a `- run:` entry whose `command:` is the `**Run:**` command exactly and
+whose `quote:` is copied from the log.
 
 ## Quote
 
@@ -38,7 +56,8 @@ found, goes there or is cut.
 
 ## Needs a build
 
-When the ask needs the network, a file written outside `.cf/measure/`, or a script this checkout does not hold,
+When the ask needs the network, a file written outside `.cf/measure/` (a long job's files under its **Output:**
+folder do not count), or a script this checkout does not hold,
 answer nothing else and close with this fence instead of `sources:`:
 
 ```

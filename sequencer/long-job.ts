@@ -6,6 +6,7 @@ import type { Db } from '../store/index.ts'
 import { count } from '../store/lanes.ts'
 import { end, type PlanRow, terminal } from '../store/plans.ts'
 import { work } from '../templates/research.ts'
+import type { Ran } from '../templates/verified.ts'
 import type { Outcome } from './kind.ts'
 import { get, put, srcDir } from './workspace.ts'
 
@@ -54,6 +55,13 @@ export function exited(db: Db, root: string, plan: PlanRow): string | null {
   const log = join(out, 'job.log')
   const tail = readFileSync(log, 'utf8').trimEnd().split('\n').slice(-TAIL).join('\n')
   return `\n\n# Long job\n\n\`${command}\` exited ${newest.message.slice('exit '.length)}; its log, ${log}, ends:\n\n${tail}`
+}
+
+/** The exited job as a run an answer may cite, its output the whole of `job.log`. */
+export function jobRun(db: Db, root: string, plan: PlanRow): Ran[] {
+  if (eventsOf(db, plan.id, KIND).at(-1)?.actor !== 'exited') return []
+  const { command, out } = jobOf(root, plan.id)
+  return [{ command, output: readFileSync(join(out, 'job.log'), 'utf8') }]
 }
 
 export function longJobs(db: Db, root: string, now: Date): void {

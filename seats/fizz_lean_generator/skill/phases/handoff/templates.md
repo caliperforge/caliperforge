@@ -60,6 +60,16 @@
 
 - <map row id> | reason: <why>
 
+# Batch
+
+## File
+
+- test/fizz/PropertiesBatch<N>.sol | contract: PropertiesBatch<N> | inherited by: FuzzTester | check: AST/syntax only, no full build
+
+## Implemented
+
+- <SP id> | function: <the property function it declares> | at: test/fizz/PropertiesBatch<N>.sol L<start>-L<end>
+
 # Handoff: context
 
 phase: context

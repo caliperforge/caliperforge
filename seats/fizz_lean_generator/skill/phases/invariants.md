@@ -15,6 +15,12 @@
 - In Step 9b, each discovery agent's `{INVARIANT_CONTEXT}` is the path `{PROJECT_ROOT}/{META_DIR}/reports/slices/<agent>.md`, `<agent>` being the stem of its agent file.
 - The first leg runs Steps 9a-9c and stops when the Synthesizer has written `{META_DIR}/handoff/plan.md` from the `# Plan` block. The second leg runs Steps 9d-9e, gives 7A the issue's `## Global packet` and 7B its `## Specific packet`, and stops on the handoff.
 - The machine checks plan.md after the first leg: each Aggregates and Conversion points row of map.md sits in some row's relies: or in a ## Skipped row with a reason (plan.unused); each reads: name is a tracker or handler the suite holds (plan.tracker); each converted: yes row fills tolerance: or delta: (plan.converted); each implementer: is global or specific (plan.implementer).
+- The batch leg runs Step 9d once per batch, each batch a fresh agent working only from the issue's `## Batch packet`: its SP rows, their map excerpts, the harness skeleton and the shared-helper rules.
+- A batch writes only test/fizz/PropertiesBatch<N>.sol, <N> being the batch number the issue names, declaring `contract PropertiesBatch<N>`; it edits no other suite file, PROPERTIES.md included, and writes its report to {PROJECT_ROOT}/{META_DIR}/reports/invariants-batch-<N>.md from the `# Batch` block.
+- A batch runs only the AST/syntax check on its own file, never {FUZZ_BUILD_CMD} or another full build: Step 9e's build is the machine's one compile after the last batch.
+- The machine writes the batch manifest after the last batch, one entry per test/fizz/PropertiesBatch<N>.sol, and makes FuzzTester inherit every PropertiesBatch<N> it lists.
+- The machine checks the batch manifest for a function declared in two batch files (plan.duplicate).
+- The machine compiles the suite once, after the collision check (handoff.ast).
 
 ## Step 9: Generate Invariants (5 Parallel Discovery Agents + Synthesizer + 2 Implementers)
 

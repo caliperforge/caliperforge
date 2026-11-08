@@ -45,6 +45,9 @@ const contractOf = (node: Node | undefined): string => type(node).startsWith(CON
 
 const calls = (node: Node): Solc[] => below(node).filter((n) => n.nodeType === 'FunctionCall')
 
+const callee = (n: Solc): Node | undefined => n.expression?.nodeType === 'FunctionCallOptions' ? n.expression.expression
+  : n.expression?.memberName === 'encodeCall' && n.expression.expression?.name === 'abi' ? n.arguments?.[0] : n.expression
+
 const read = (path: string): string | null => existsSync(path) ? readFileSync(path, 'utf8') : null
 
 function contracts(root: string, file: string, unit: Node): Contract[] {
@@ -88,7 +91,7 @@ const handler = ({ node }: Part): boolean => ['public', 'external'].includes(nod
 
 function aimed(f: Part, functions: Part[], live: Set<string>, seen = new Set<number>()): string | null {
   seen.add(f.node.id)
-  const callees = calls(f.node).map((n) => n.expression)
+  const callees = calls(f.node).map(callee)
   const direct = callees.find((e) => e?.nodeType === 'MemberAccess' && live.has(contractOf(e.expression)) && !/\b(?:view|pure)\b/.test(type(e)))
   if (direct !== undefined) return `${contractOf(direct.expression)}.${direct.memberName ?? ''}`
   return callees.map((e) => functions.find((g) => g.node.id === e?.referencedDeclaration)).filter((g): g is Part => g !== undefined && !seen.has(g.node.id))

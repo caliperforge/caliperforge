@@ -212,7 +212,7 @@ test('regrade rebuilds from the archive, every row, no run', () => {
 
 test('regrade lays the archived medusa.json under test/fizz/', () => {
   const medusa = { fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', workers: 4 }, logging: { logDirectory: '' },
-    compilation: { platformConfig: { target: '../..', exportDirectory: '../../out' } }, slither: { cachePath: '/tmp/slither.json' } }
+    compilation: { platformConfig: { target: '../..', exportDirectory: '../../out' } }, slither: { cachePath: '/tmp/slither.json', useSlither: true } }
   const { db, root, archive } = regradable({ 'test/fizz/medusa.json': JSON.stringify(medusa) })
   const before = tree(archive)
   const seen: unknown[] = []
@@ -221,8 +221,8 @@ test('regrade lays the archived medusa.json under test/fizz/', () => {
     return { results: [], note: null, cache: null, clamped: [] }
   })
   regraded(db, root, 1, fizz())
-  expect(seen).toEqual([{ fuzzing: { corpusDirectory: 'test/fizz/fizz_data/corpus_medusa', workers: 4 }, logging: { logDirectory: '' },
-    compilation: { platformConfig: { target: '.', exportDirectory: 'out' } }, slither: { cachePath: '/tmp/slither.json' } }])
+  expect(seen).toEqual([{ fuzzing: { corpusDirectory: 'test/fizz/fizz_data/corpus_medusa', workers: 4, shrinkLimit: 500 }, logging: { logDirectory: '' },
+    compilation: { platformConfig: { target: '.', exportDirectory: 'out' } }, slither: { cachePath: '/tmp/slither.json', useSlither: false } }])
   expect(tree(archive)).toEqual(before)
   expect(existsSync(join(root, '.cf/regrade/1'))).toBe(false)
 })

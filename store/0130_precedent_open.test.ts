@@ -28,7 +28,7 @@ it('D5 0130 keeps 0129 rows and accepts a NULL merged_at', () => {
   expect(() => db.prepare(SOURCE).run(8, null)).toThrow('NOT NULL constraint failed: precedent_sources.merged_at')
   const rows = () => [db.prepare('SELECT * FROM precedent_sources').all(), db.prepare('SELECT * FROM precedent_threads').all()]
   const before = rows()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql', '0134_parity.sql', '0135_runs_mode_handback.sql', '0136_openings_mismatch.sql', '0137_bench_phase_missed.sql', '0138_bench_cost_wall.sql', '0139_bench_gross_net.sql', '0140_bench_score_seconds.sql'])
   expect(rows()).toEqual(before)
   db.prepare(SOURCE).run(8, null)
   expect(db.prepare('SELECT merged_at FROM precedent_sources WHERE number = 8').pluck().get()).toBeNull()

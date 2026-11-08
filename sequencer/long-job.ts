@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { eventsOf, logged, ofKind } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { count } from '../store/lanes.ts'
+import { alive } from '../store/leases.ts'
 import { end, type PlanRow, terminal } from '../store/plans.ts'
 import { work } from '../templates/research.ts'
 import type { Ran } from '../templates/verified.ts'
@@ -21,6 +22,13 @@ const OUTPUT = /^\*\*Output:\*\*(.*)$/m
 interface Job { command: string; out: string; pid: number; at: string }
 
 const jobOf = (root: string, plan: number): Job => JSON.parse(get(root, plan, 'job.json')) as Job
+
+/** The plan's job has exited, or its process group is alive and inside `research.long_job_seconds`. */
+export function awaited(db: Db, root: string, plan: number, now: Date): boolean {
+  const job = jobOf(root, plan)
+  if (existsSync(join(job.out, 'job.exit'))) return true
+  return alive(-job.pid) && now.getTime() - Date.parse(job.at) < count(db, 'research.long_job_seconds') * 1000
+}
 
 /** Starts a fetcher or measurer reply's `**Run:**` command detached, writing to `folder` when given, else the reply's `**Output:**` folder. */
 export function launched(db: Db, root: string, plan: PlanRow, reply: string, folder?: string): Outcome {

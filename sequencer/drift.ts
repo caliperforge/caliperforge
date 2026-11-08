@@ -10,6 +10,7 @@ import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById, rewind } from '../store/plans.ts'
 import { added, registry } from './registry.ts'
+import { awaited } from './long-job.ts'
 import { HELD } from './settle.ts'
 import { cloned, conflicted, drop, maybe, planDir, put, snapshot } from './workspace.ts'
 
@@ -98,7 +99,7 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
     const same = was !== null && was.step === step && was.tree === tree && now.getTime() - Date.parse(was.seen) <= window
     const since = same ? was.since : now.toISOString()
     const spent = now.getTime() - Date.parse(since)
-    if (spent < window) {
+    if (spent < window || (wait_reason === 'long_job' && awaited(db, root, id, now))) {
       put(root, id, 'stuck.json', JSON.stringify({ step, tree, since, seen: now.toISOString() }))
       return []
     }

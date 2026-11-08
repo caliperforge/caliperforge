@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,6 +7,7 @@ import type { Provider } from '../../providers/kind.ts'
 import { stalled } from '../../store/drift.ts'
 import { eventsOf, logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
+import { set } from '../../store/lanes.ts'
 import { take } from '../../store/leases.ts'
 import { woke } from '../director.ts'
 import { drift, stuck } from '../drift.ts'
@@ -209,6 +211,44 @@ test('directorRepeatReturnSeen', () => {
   expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_repeat_return', state: 'seen' }])
   d.exec("UPDATE settings SET value = '0' WHERE key = 'director.apply'")
   expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_repeat_return', state: 'off' }])
+})
+
+function longJob(pid: number, exited = false): { d: Db; root: string } {
+  const { d, root } = stalling()
+  d.exec("UPDATE plans SET wait_reason = 'long_job'")
+  logged(d, { plan: 1, kind: 'long_job', actor: 'started', outcome: 'pass', message: 'sleep 30', pointer: null, run: null })
+  const out = mkdtempSync(join(tmpdir(), 'job-'))
+  if (exited) writeFileSync(join(out, 'job.exit'), '0\n')
+  put(root, 1, 'job.json', JSON.stringify({ command: 'sleep 30', out, pid, at: at(0).toISOString() }))
+  set(d, 'research.long_job_seconds', '7200', 'ceo', at(0).toISOString())
+  return { d, root }
+}
+
+const gone = (): number => spawnSync('true').pid
+
+test('stuckLongJobLive', () => {
+  const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
+  try {
+    const { d, root } = longJob(child.pid ?? 0)
+    for (const minutes of [0, 30, 61]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+    expect(JSON.parse(maybe(root, 1, 'stuck.json') ?? '{}')).toMatchObject({ since: at(0).toISOString() })
+    expect(stuck(d, root, STUCK, at(121))).toEqual([1])
+    expect(d.prepare('SELECT state, held_why FROM plans WHERE id = 1').get())
+      .toMatchObject({ state: 'blocked_on_ceo', held_why: expect.stringContaining('waits: long_job; ') as string })
+  } finally {
+    child.kill('SIGKILL')
+  }
+})
+
+test('stuckLongJobGone', () => {
+  const { d, root } = longJob(gone())
+  for (const minutes of [0, 30]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(stuck(d, root, STUCK, at(61))).toEqual([1])
+})
+
+test('stuckLongJobExited', () => {
+  const { d, root } = longJob(gone(), true)
+  for (const minutes of [0, 30, 61]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
 })
 
 test('stuckOff', () => {

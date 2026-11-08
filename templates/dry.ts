@@ -117,7 +117,7 @@ function invariants(at: Copy): Row[] {
   const { dir, fizz, handoffs, map } = at
   const [plan, reports] = [join(handoffs, 'plan.md'), join(handoffs, '../reports')]
   const [global, specific] = [join(reports, 'invariants-global-property-implementer.md'), join(reports, 'invariants-specific-property-implementer.md')]
-  return [handed(at, 'invariants'), ['invariants', 'plan', checked(at, [plan], () => {
+  return [handed(at, 'invariants'), ['invariants', 'ast', checked(at, [], () => compiled(dir, 'invariants'))], ['invariants', 'plan', checked(at, [plan], () => {
     const found = suite(dir)
     const unreached = (rows(read(map)).get('Reach') ?? []).filter((r) => r.name.startsWith(ENTRY) && r.cells.get('met') === 'no').map((r) => callee(r.name.slice(ENTRY.length)))
     return planned(read(plan), read(map), [...found.trackers, ...found.handlers].map((t) => t.name), unreached).refused

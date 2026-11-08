@@ -17,6 +17,7 @@ import { resumesAt } from '../templates/resumed.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
 import { registerReturn } from './cf-return.ts'
+import { unleased } from './leased.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add, note } from './queue.ts'
 
@@ -132,6 +133,7 @@ function holds(cf: Command, { root, db, out }: Cli): void {
 
 const ON = ['--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands'] as const
 const UNTIL = ['--until <time>', 'when it goes back in its lane'] as const
+const WAIT = ['--wait <minutes>', 'wait this long for a live tick to let go'] as const
 
 function releasing(handle: Db, id: string, options: { on?: string; until?: string }): { on: number | null; at: Date | null } {
   const on = options.on === undefined ? null : Number(options.on)
@@ -171,19 +173,20 @@ function parks(cf: Command, { root, db, out }: Cli): void {
     .requiredOption('--by <holder>', `who it waits on: ${HOLDERS.join(' or ')}`)
     .requiredOption('--why <text>', 'why it is held; with --by ceo, the decision block')
     .requiredOption('--as <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
-    .option(...ON).option(...UNTIL)
-    .action((id: string, options: { by: string; why: string; as: string; on?: string; until?: string }) => {
+    .option(...ON).option(...UNTIL).option(...WAIT)
+    .action((id: string, options: { by: string; why: string; as: string; on?: string; until?: string; wait?: string }) => {
       const by = holderOf(options.by)
       const actor = holderOf(options.as)
       const why = by === 'ceo' ? fenced(options.why) : options.why
       const handle = db()
       const n = Number(id)
-      if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; hold it once the tick lets go`)
-      const { on, at } = releasing(handle, id, options)
-      hold(handle, root, n, options.why, new Date(), on, at)
-      held(handle, n, by, why)
-      logged(handle, { plan: n, kind: 'hold', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
-      out(`plan ${id} held on the ${by}\n`)
+      return unleased(handle, n, options.wait, `plan ${id} is mid-step in a live tick; hold it once the tick lets go`, () => {
+        const { on, at } = releasing(handle, id, options)
+        hold(handle, root, n, options.why, new Date(), on, at)
+        held(handle, n, by, why)
+        logged(handle, { plan: n, kind: 'hold', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
+        out(`plan ${id} held on the ${by}\n`)
+      })
     })
 
   cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').requiredOption(...BY)
@@ -226,17 +229,19 @@ function closes(cf: Command, { root, db, out }: Cli): void {
     .requiredOption('--why <text>', 'why it is closed')
     .requiredOption(...BY)
     .option('--as <state>', 'refused or done', 'refused')
-    .option('--landed <sha>', 'the commit on main the plan landed as')
-    .action((id: string, options: { why: string; by: string; as: string; landed?: string }) => {
+    .option('--landed <sha>', 'the commit on main the plan landed as').option(...WAIT)
+    .action((id: string, options: { why: string; by: string; as: string; landed?: string; wait?: string }) => {
       const by = holderOf(options.by)
-      if (options.as !== 'refused' && options.as !== 'done') throw new Error(`--as takes refused or done, not ${options.as}`)
+      const state = options.as
+      if (state !== 'refused' && state !== 'done') throw new Error(`--as takes refused or done, not ${state}`)
       if (options.landed !== undefined && options.as !== 'done') throw new Error('--landed takes --as done')
       const handle = db()
       const n = Number(id)
-      if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; close it once the tick lets go`)
-      const landed = options.landed === undefined ? null : landing(handle, root, n, options.landed)
-      closed(handle, n, options.as, by, options.why, landed)
-      out(`plan ${id} ${options.as}\n`)
+      return unleased(handle, n, options.wait, `plan ${id} is mid-step in a live tick; close it once the tick lets go`, () => {
+        const landed = options.landed === undefined ? null : landing(handle, root, n, options.landed)
+        closed(handle, n, state, by, options.why, landed)
+        out(`plan ${id} ${state}\n`)
+      })
     })
 }
 

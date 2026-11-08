@@ -9,7 +9,7 @@ import { loadReviews, specHash } from '../reviews/bench.ts'
 import { read } from '../reviews/verdict.ts'
 import { benchPacket, spec } from '../runner/packet.ts'
 import type { Outcome } from '../sequencer/kind.ts'
-import { exited, launched, RUN } from '../sequencer/long-job.ts'
+import { exited, jobRun, launched, RUN } from '../sequencer/long-job.ts'
 import { prose } from '../sequencer/prose.ts'
 import { WIRE, type Wire } from '../sequencer/push.ts'
 import { ran } from '../sequencer/seat.ts'
@@ -242,7 +242,7 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
   const sources = sourced(db, root, plan, reply, read)
   if (sources.outcome === 'refuse') return sources
-  if (measure) put(root, plan.id, 'runs.json', JSON.stringify(transcripts(db, plan.id, step.step).flatMap(outputs)))
+  if (measure) put(root, plan.id, 'runs.json', JSON.stringify([...transcripts(db, plan.id, step.step).flatMap(outputs), ...jobRun(db, root, plan)]))
   put(root, plan.id, 'answer.md', (sources.reply ?? reply).replace(FENCE, '').trim())
   return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }

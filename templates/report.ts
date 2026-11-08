@@ -1,13 +1,15 @@
-import { put } from '../sequencer/workspace.ts'
+import { maybe, put } from '../sequencer/workspace.ts'
 import { live, type Score } from '../store/bench.ts'
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { spend } from '../store/runs.ts'
+import { fields } from './bench.ts'
+import type { Refused } from './handoff.ts'
 import { classOf, union, type Class, type Row } from './paired.ts'
 import { counted } from './powered.ts'
 
 export const KINDS = { map_miss: 'read.map_miss', slice_miss: 'read.slice_miss', map_unused: 'map.unused', reach: 'reach.boundary', checks: 'check.hit',
-  reach_fixes: 'reach.fix', fix_turns: 'fix.turn', network: 'run.offline', cost: 'cost.phase', critic: 'critic' } as const
+  reach_fixes: 'reach.fix', fix_turns: 'fix.turn', network: 'run.offline', cost: 'cost.phase', critic: 'critic', report_only: 'check.report_only' } as const
 
 export interface Miss { file: string; line: number }
 
@@ -23,7 +25,7 @@ export interface Turn { turn: number; tokens: number; usd: number }
 
 export interface Phase { phase: string; tokens: number; usd: number }
 
-const TITLES = { result: 'Result', probes: 'Probe readings', cost: 'Cost', map: 'Map health', reach: 'Reach', checks: 'Checks', counted: 'Counted' }
+const TITLES = { result: 'Result', probes: 'Probe readings', cost: 'Cost', map: 'Map health', reach: 'Reach', checks: 'Checks', counted: 'Counted', report_only: 'Report-only checks' }
 
 const SAID: Record<Class, string> = { catch: 'catch', false_positive: 'false alarm', broken: 'broken', silent: 'silent', not_run: 'not run' }
 
@@ -42,7 +44,8 @@ export function report(db: Db, root: string, plan: number, runs: Row[][], notPow
   const critic = eventsOf(db, plan, KINDS.critic).map((e) => e.outcome)
   const why = counted(notPowered, critic)
   const { gross, net, credited } = spend(db, plan)
-  const sections: Record<keyof typeof TITLES, Section> = {
+  const only = fields(maybe(root, plan, 'target.yml') ?? '').report_only_checks
+  const sections: Partial<Record<keyof typeof TITLES, Section>> = {
     result: result(runs, refuzz),
     probes: Object.keys(probes).length === 0 ? '-' : probes,
     cost: { gross_usd: gross, net_usd: net, credited: or(credited), phases: or(read<Phase>('cost')), fix_turns: or(read<Turn>('fix_turns')) },
@@ -50,12 +53,13 @@ export function report(db: Db, root: string, plan: number, runs: Row[][], notPow
     reach: read<Reach>('reach').at(-1) ?? '-',
     checks: { hits: or(hits(read<Hit>('checks'))), reach_fixes: or(read<ReachFix>('reach_fixes')), network: or(eventsOf(db, plan, KINDS.network).map((e) => e.message)) },
     counted: { counted: why === null ? 'yes' : 'no', why: why ?? '-', critic: or(critic) },
+    ...(only === undefined ? {} : { report_only: { checks: only.split(','), rows: or(read<Refused>('report_only')) } }),
   }
   const compare = compared(db, plan)
   put(root, plan, 'report.json', JSON.stringify(compare === null ? sections : { ...sections, compare }))
-  const md = Object.entries(TITLES).map(([key, title]) => {
+  const md = Object.entries(TITLES).flatMap(([key, title]) => {
     const section = sections[key as keyof typeof TITLES]
-    return `## ${title}\n\n${section === '-' ? '-' : Object.entries(section).map(([name, value]) => `- ${name}: ${flat(value)}`).join('\n')}\n`
+    return section === undefined ? [] : [`## ${title}\n\n${section === '-' ? '-' : Object.entries(section).map(([name, value]) => `- ${name}: ${flat(value)}`).join('\n')}\n`]
   })
   if (compare !== null) md.push(table(compare))
   put(root, plan, 'report.md', md.join('\n'))

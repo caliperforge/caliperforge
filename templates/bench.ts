@@ -46,7 +46,7 @@ const PROPERTY = /\bfunction\s+(?:invariant|property|echidna)_\w*\s*\(/g
 
 const PROPERTIES = 'Properties.sol'
 
-const CARRIED = ['null_check', 'refuzz', 'hours', 'seeds']
+const CARRIED = ['null_check', 'refuzz', 'hours', 'seeds', 'report_only_checks']
 
 function ask(skill: string | undefined, xray: string | undefined, tmp: string): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `

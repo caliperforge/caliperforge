@@ -6,6 +6,7 @@ import { staffing } from '../sequencer/staffing.ts'
 import { render, sessionDir, split } from '../sequencer/subagents.ts'
 import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { supersede } from '../store/bench.ts'
+import { setting } from '../store/drift.ts'
 import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type Holder } from '../store/plans.ts'
@@ -13,6 +14,7 @@ import { refusalRows } from '../store/refusals.ts'
 import { generated, lastTranscript, runTokens } from '../store/runs.ts'
 import { copied, medusa } from '../templates/bench.ts'
 import { dried, regraded } from '../templates/dry.ts'
+import { REPORT_ONLY } from '../templates/fixing.ts'
 import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
 import { placed, rooted } from '../templates/rooted.ts'
@@ -29,6 +31,9 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
     const list = phasesOf(join(root, 'seats/fizz_lean_generator/skill')).slice(0, -1)
     if (seat !== 'fizz_lean_generator' || !list.includes(stop)) throw new Error(`--stop-after takes one of ${list.join(', ')} on fizz_lean_generator`)
   }
+  const only = (setting(db, 'bench.report_only_checks') ?? '').split(',').map((name) => name.trim()).filter((name) => name !== '')
+  const stray = only.find((name) => !REPORT_ONLY.includes(name))
+  if (stray !== undefined) throw new Error(`bench.report_only_checks takes ${REPORT_ONLY.join(', ')}, not ${stray}`)
   const pipe = pipeNamed(db, 'bench')
   if (pipe === null) throw new Error('no pipe "bench"')
   const dir = mkdtempSync(join(tmpdir(), 'cf-fuzz-bench-'))
@@ -47,7 +52,8 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
       const id = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 0 })
       briefed(db, id, { title: `Bench: score ${key} on ${name} (catch / miss / false alarm)`, what: null, why: null, ends: null })
       if (gated && why !== undefined) logged(db, { plan: id, kind: 'bench.regrade_waived', actor: 'coo', outcome: 'pass', message: why, pointer: null, run: null })
-      put(root, id, 'target.yml', `${copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key)}${stop === undefined ? '' : `stop_after: ${stop}\n`}`)
+      put(root, id, 'target.yml', `${copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key)}${stop === undefined ? '' : `stop_after: ${stop}\n`}${
+        only.length === 0 ? '' : `report_only_checks: ${only.join(',')}\n`}`)
       return id
     })
   } finally {

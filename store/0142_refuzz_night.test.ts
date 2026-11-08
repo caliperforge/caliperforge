@@ -34,7 +34,7 @@ it('0142 puts a drifted refuzz window back to 22:00-06:00', () => {
   const d = before('0142')
   hours(d, refuzz(d).id, '00:00', '23:59')
   const drifted = refuzz(d)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0142_refuzz_night.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0142_refuzz_night.sql', '0143_bench_report_only.sql'])
   expect(refuzz(d)).toEqual({ ...drifted, window_start: '22:00', window_end: '06:00' })
 })
 

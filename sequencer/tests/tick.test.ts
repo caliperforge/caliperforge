@@ -9,7 +9,7 @@ import { measure, type Read } from '../../cli/measure.ts'
 import { all } from '../../cli/inbox.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
 import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, planRows, requeue, resume, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
-import { amend, width } from '../../store/lanes.ts'
+import { amend, set, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
 import { clear } from '../../store/refusals.ts'
@@ -1003,6 +1003,7 @@ test('a scheduled-only tree runs no workflows, undispatched', async () => {
 
 test('an unrun plan short of pre_review is refused', async () => {
   const w = await TEX_CI()
+  set(w.db, 'bench.report_only_checks', 'suite.outside,reach.unmet,reach.boundary', 'ceo', '2026-11-08')
   addReview(w.db, 'pre_review', 3, 1, { outcome: 'refuse', subject_digest: 'a'.repeat(64), spans: [], origin_kind: 'rail',
     origin_ref: 'tight', message: 'red', defect_class: null }, 0, 0, null)
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, () => '[]'))).toBeNull()

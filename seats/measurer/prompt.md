@@ -16,6 +16,9 @@ under `.cf/measure/` and reply with only these two lines, each at the start of i
 The machine runs the command detached, logs it to `job.log` in that folder, and fires you again when it exits. The
 command writes every file it makes under that folder. Each medusa.json the job fuzzes with is built by
 `cf bench medusa <checkout> --suite <dir> --workers <n> --out <path>`, never copied or edited from another plan's.
+The measurement table has one row per worker count, with a `compile_s` column and a `fuzz_s` column. `compile_s` is
+the number `cf bench medusa` prints after `compile_s:`, 0 when the build was reused. `fuzz_s` is the wall seconds of
+that count's medusa run alone.
 
 When the input carries `# Long job`, the job has exited: write the answer from its log, put no `**Run:**` line
 anywhere in the reply, and cite the job as a `- run:` entry whose `command:` is the `**Run:**` command exactly and

@@ -20,6 +20,7 @@ const TAIL = 2000
 const FORCED = [...BUILD, '--force']
 const CRYTIC = ['.', IGNORE, '--export-format', 'solc']
 const STAMP = 'cache/fizz-build-info.json'
+const PREBUILT = 'cache/fizz-medusa-build.json'
 const INFO = 'out/build-info'
 const SKIPPED = ['out', 'cache', '.git']
 const OUT = 'cache/fizz-slither-out'
@@ -43,16 +44,17 @@ export function unrun(map: string, results: Smoked[]): Refused[] {
     note: `smoke: ${r.name} is raw-only and made 0 successful calls in ${String(r.calls)}; it needs a clamped handler` }))
 }
 
-interface Config { fuzzing?: object; slither?: { useSlither?: boolean; cachePath?: string }; compilation?: { platformConfig?: { args?: string[] } } }
+export interface Config { fuzzing?: object; slither?: { useSlither?: boolean; cachePath?: string }; compilation?: { platformConfig?: { args?: string[] } } }
 
-function reusing({ compilation }: Config): Config['compilation'] {
+export function reusing({ compilation }: Config): Config['compilation'] {
   const args = (compilation?.platformConfig?.args ?? []).filter((arg) => arg !== '--foundry-compile-all')
   return { ...compilation, platformConfig: { ...compilation?.platformConfig, args: args.includes(IGNORE) ? args : [...args, IGNORE] } }
 }
 
-function sources(root: string, scoped = false): string {
+function sources(root: string, dirs?: string[]): string {
+  const inside = (path: string, dir: string): boolean => path.startsWith(`${dir}${sep}`)
   const paths = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter((path) => path.endsWith('.sol')
-    && (scoped ? path.startsWith(`src${sep}`) : !SKIPPED.some((dir) => path.startsWith(`${dir}${sep}`))))
+    && (dirs === undefined ? !SKIPPED.some((dir) => inside(path, dir)) : dirs.some((dir) => inside(path, dir))))
   if (existsSync(join(root, 'foundry.toml'))) paths.push('foundry.toml')
   const hash = createHash('sha256')
   for (const path of paths.sort()) hash.update(`${path}\n`).update(readFileSync(join(root, path)))
@@ -61,10 +63,22 @@ function sources(root: string, scoped = false): string {
 
 interface Stamp { sources: string; files: string[] }
 
-function held(root: string, hash: string): boolean {
-  if (!existsSync(join(root, STAMP))) return false
-  const stamp = JSON.parse(readFileSync(join(root, STAMP), 'utf8')) as Stamp
+function held(root: string, hash: string, at = STAMP): boolean {
+  if (!existsSync(join(root, at))) return false
+  const stamp = JSON.parse(readFileSync(join(root, at), 'utf8')) as Stamp
   return stamp.sources === hash && stamp.files.every((file) => existsSync(join(root, INFO, file)))
+}
+
+export function prebuilt(root: string, suite: string): number {
+  const hash = sources(root, ['src', suite])
+  if (held(root, hash, PREBUILT)) return 0
+  const args = ['build', '--build-info', '--force', 'src', suite]
+  const started = Date.now()
+  const forged = spawnSync('forge', args, { cwd: root, encoding: 'utf8' })
+  if (forged.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(forged.status)}: ${(forged.error?.message ?? forged.stderr).slice(-TAIL)}`)
+  mkdirSync(join(root, 'cache'), { recursive: true })
+  writeFileSync(join(root, PREBUILT), JSON.stringify({ sources: hash, files: readdirSync(join(root, INFO)).sort() } satisfies Stamp))
+  return Math.round((Date.now() - started) / 1000)
 }
 
 function built(root: string, hash: string, compile: number): Refused | undefined {
@@ -126,7 +140,7 @@ export function primed(root: string, compile = COMPILE): { off: string | null; c
     writeFileSync(path, JSON.stringify(reporting, null, 2))
     return { off: null, clamped }
   }
-  const slither = slithered(root, sources(root, true), compile)
+  const slither = slithered(root, sources(root, ['src']), compile)
   writeFileSync(path, JSON.stringify({ ...reporting, slither: block(config, slither) }, null, 2))
   return { off: 'note' in slither ? slither.note : null, clamped }
 }
@@ -134,7 +148,7 @@ export function primed(root: string, compile = COMPILE): { off: string | null; c
 export function smoke(root: string, fizz: string, meta: string, map: string, wall = Number(SECONDS) + 60, compile = COMPILE): Ran | Refused {
   const refused = built(root, sources(root), compile)
   if (refused !== undefined) return refused
-  const slither = slithered(root, sources(root, true), compile)
+  const slither = slithered(root, sources(root, ['src']), compile)
   const [path, report] = [join(root, 'medusa.json'), join(root, meta, REPORT)]
   const { config, clamped } = funded(JSON.parse(readFileSync(path, 'utf8')) as Config)
   const kept = { ...config, slither: block(config, slither) }

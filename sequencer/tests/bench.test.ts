@@ -1004,11 +1004,14 @@ test('a standalone medusa.json is the scored one but for workers', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   const suite = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')) as { fuzzing: object }
   expect(suite).toEqual({ fuzzing: { timeout: 7200, workers: 4, shrinkLimit: 500, corpusDirectory: 'fizz_data/corpus_medusa' }, slither: { useSlither: false } })
-  const out = join(root, 'measure.json')
-  expect(medusaFile(db, srcDir(root, 1), 'test/fizz', 6, out)).toEqual([])
-  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ ...suite, fuzzing: { ...suite.fuzzing, workers: 6 } })
-  expect(medusaFile(db, srcDir(root, 1), 'test/fizz', 10, out)).toEqual([])
-  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ ...suite, fuzzing: { ...suite.fuzzing, workers: 10 } })
+  const bin = mkdtempSync(join(tmpdir(), 'cf-forge-'))
+  writeFileSync(join(bin, 'forge'), '#!/bin/sh\nmkdir -p out/build-info\n', { mode: 0o755 })
+  vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+  const [out, ignored] = [join(root, 'measure.json'), { ...suite, compilation: { platformConfig: { args: ['--foundry-ignore-compile'] } } }]
+  expect(medusaFile(db, srcDir(root, 1), 'test/fizz', 6, out)).toEqual({ clamped: [], compile: expect.any(Number) as number })
+  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ ...ignored, fuzzing: { ...suite.fuzzing, workers: 6 } })
+  expect(medusaFile(db, srcDir(root, 1), 'test/fizz', 10, out)).toEqual({ clamped: [], compile: 0 })
+  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ ...ignored, fuzzing: { ...suite.fuzzing, workers: 10 } })
 })
 
 test('D1 D2 the copy turns slither off and caps shrinking', () => {

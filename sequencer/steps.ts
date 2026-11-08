@@ -32,6 +32,7 @@ import { publish } from './site.ts'
 import { landed } from './landed.ts'
 import { unlanded } from './unlanded.ts'
 import { benchWait } from './night.ts'
+import { running } from './long-job.ts'
 
 interface StepMap {
   steps: Step[]
@@ -74,6 +75,7 @@ export function blocked(db: Db, plan: PlanRow, now: Date = new Date()): Wait | n
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) || up(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) && waitsFor(db, plan) === null ? null : 'ready_proof'
   if (target(db, plan)?.state === 'parked' && !rechecks(db, plan)) return 'target_parked'
+  if (running(db, plan)) return 'long_job'
   return benchWait(db, plan, step, now) ?? (overlapping(db, plan) === null ? null : 'file_overlap')
 }
 

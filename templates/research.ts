@@ -9,6 +9,7 @@ import { loadReviews, specHash } from '../reviews/bench.ts'
 import { read } from '../reviews/verdict.ts'
 import { benchPacket, spec } from '../runner/packet.ts'
 import type { Outcome } from '../sequencer/kind.ts'
+import { exited, launched, RUN } from '../sequencer/long-job.ts'
 import { prose } from '../sequencer/prose.ts'
 import { WIRE, type Wire } from '../sequencer/push.ts'
 import { ran } from '../sequencer/seat.ts'
@@ -214,7 +215,8 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
   const { out } = folder
-  const measure = measured || out !== undefined || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
+  const job = exited(db, root, plan)
+  const measure = measured || out !== undefined || job !== null || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
   const runs = out !== undefined ? 'fetcher' : measure ? 'measurer' : null
   const seat = runs === null ? step : { ...step, seat: runs, runs }
   if (out !== undefined) mkdirSync(out, { recursive: true })
@@ -222,12 +224,13 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
     maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${last === null ? '' : `\n\n# Your last answer — repair what the ask and the refusal name, keep the rest\n\n${
     last}\n\n# Its sources, [source:n] counting from 1\n\n${get(root, plan.id, 'sources.json')}`}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
-    out === undefined ? '' : `\n\n# Output\n\n${out}`}${runs === null ? BEFORE : ''}`
+    out === undefined ? '' : `\n\n# Output\n\n${out}`}${job ?? ''}${runs === null ? BEFORE : ''}`
   const fires: Provider = runs === null ? { ...provider, fire: (packet) => provider.fire({ ...packet, idle: Number.POSITIVE_INFINITY }) } : provider
   const draft = join(srcDir(root, plan.id), '.cf/draft.md')
   rmSync(draft, { force: true })
   const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
+  if (runs === 'measurer' && RUN.test(fired.text)) return launched(db, root, plan, fired.text)
   const needs = NEEDS.exec(fired.text)?.[1]
   if (!measure && needs === 'needs_run') return gathering(db, root, plan, step, provider, read, true)
   if (measure && needs === 'needs_build') {

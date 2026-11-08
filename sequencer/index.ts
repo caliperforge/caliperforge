@@ -31,6 +31,7 @@ import { ripe, sitedata } from './site.ts'
 import { relane } from './relane.ts'
 import { evict, noting } from './evict.ts'
 import { landless } from './landless.ts'
+import { longJobs } from './long-job.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -46,6 +47,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   accounts(db, root, now)
   ripe(db, now)
   relane(db)
+  longJobs(db, root, now)
   if (registry !== undefined) await watched(db, root, registry, now, read, labels)
   if (labels !== undefined) { (lines ?? []).push(...landless(db, root, labels), ...intake(db, root, labels), ...refill(db, root, labels, now)); await harvested(db, root, provider, now, labels) }
   if (labels !== undefined) await parities(db, root, provider, now, labels)

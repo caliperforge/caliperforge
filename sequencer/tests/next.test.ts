@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { logged } from '../../store/events.ts'
 import { record as recordFiles } from '../../store/files.ts'
 import { amend, dial, set, width } from '../../store/lanes.ts'
 import { held, holder, take } from '../../store/leases.ts'
@@ -63,6 +64,15 @@ const TABLE: Record<string, Row> = {
       return w
     },
     want: { fire: mapOf('comms').at(0) },
+  },
+  'a research plan whose long job runs': {
+    state: () => {
+      const w = stepTo(world(), 1, 1)
+      amend(w.db, 1, { template: 'research' })
+      logged(w.db, { plan: 1, kind: 'long_job', actor: 'started', outcome: 'pass', message: 'sleep 30', pointer: null, run: null })
+      return w
+    },
+    want: { wait: 'long_job', on: null },
   },
   'a target not yet approved': { state: () => stepTo(world(), 1, 1), want: { wait: 'target_approval', on: null } },
   'a ready step with no proof': { state: () => stepTo(world(), 1, 6), want: { wait: 'ready_proof', on: null } },
@@ -151,5 +161,5 @@ for (const [name, { state, id = 1, mine = false, want }] of Object.entries(TABLE
 
 test('the table has a row for every reason a plan waits', () => {
   const decided = new Set(Object.values(TABLE).map(({ want }) => 'fire' in want ? 'fire' : want.wait))
-  expect(decided).toEqual(new Set([...WAIT.filter((w) => w !== 'no_step_map' && w !== 'bench_night' && w !== 'long_job'), 'fire']))
+  expect(decided).toEqual(new Set([...WAIT.filter((w) => w !== 'no_step_map' && w !== 'bench_night'),'fire']))
 })

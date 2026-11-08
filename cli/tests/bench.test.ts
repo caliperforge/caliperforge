@@ -136,7 +136,7 @@ test('file D3 another generator still files a no_suite target', () => {
   expect(fileBench(d, dir, 'smoke-01', false, 'house_generator', AT)).toHaveLength(1)
 })
 
-test.each([['nope', 'fizz_lean_generator'], ['invariants', 'fizz_lean_generator'], ['context', 'fizz_generator']])('file D5 --stop-after %s on %s is refused', (stop, seat) => {
+test.each([['nope', 'fizz_lean_generator'], ['invariants', 'fizz_lean_generator'], ['invariants', 'fizz_lean_v5'], ['context', 'fizz_generator']])('file D5 --stop-after %s on %s is refused', (stop, seat) => {
   const d = fresh(schema)
   expect(() => fileBench(d, benchRoot(), 'euler-earn-m01', false, seat, AT, stop))
     .toThrow('--stop-after takes one of context, scaffold, coverage on fizz_lean_generator')
@@ -171,6 +171,19 @@ test('lean file --why files and logs one waiver per plan', () => {
   const ids = fileBench(d, dir, undefined, true, 'fizz_lean_generator', AT, undefined, 'regrade is down')
   expect(ids).toHaveLength(2)
   expect(ofKind(d, 'bench.regrade_waived')).toEqual(ids.map((plan) => ({ plan, kind: 'bench.regrade_waived', actor: 'coo', outcome: 'pass', message: 'regrade is down' })))
+})
+
+test('file --generator fizz_lean_v5 queues a v5 plan', () => {
+  const dir = benchRoot()
+  const d = fresh(schema)
+  const plan = Number(fileBench(d, dir, 'euler-earn-m01', false, 'fizz_lean_v5', AT)[0])
+  expect(planById(d, plan)).toMatchObject({ template: 'bench', state: 'queued', step: 0 })
+  expect(get(dir, plan, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz_lean_v5\n`)
+  expect(planTitle(d, plan)).toBe('Bench: score fizz_lean_v5 on euler-earn-m01 (catch / miss / false alarm)')
+  logged(d, { plan, kind: 'bench.regrade', actor: 'bench', outcome: 'refuse', message: 'regraded', pointer: null, run: null })
+  expect(() => fileBench(d, dir, 'euler-earn-m01', false, 'fizz_lean_v5', AT))
+    .toThrow(`euler-earn-m01: plan ${String(plan)} has no clean regrade; run cf bench regrade ${String(plan)} or file with --why`)
+  expect(allPlans(d)).toHaveLength(1)
 })
 
 test('a clean regrade or a first run files, other seats ungated', () => {

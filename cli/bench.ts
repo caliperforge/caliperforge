@@ -17,9 +17,11 @@ import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
 import type { Cli } from './cf-lanes.ts'
 
-export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string, stop?: string, why?: string): number[] {
-  const key = staffing(root).find((r) => r.template === 'bench' && r.step === 1 && r.seat === seat)?.key
-  if (key === undefined) throw new Error(`${seat} is not a bench generator in rules/staffing.yaml`)
+export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, generator: string, at: string, stop?: string, why?: string): number[] {
+  const row = staffing(root).find((r) => r.template === 'bench' && r.step === 1 && (r.key === generator || r.seat === generator))
+  const key = row?.key
+  if (row === undefined || key === undefined) throw new Error(`${generator} is not a bench generator in rules/staffing.yaml`)
+  const { seat } = row
   if (all === (target !== undefined)) throw new Error('cf bench file takes <target> or --all')
   if (stop !== undefined) {
     const list = phasesOf(join(root, 'seats/fizz_lean_generator/skill')).slice(0, -1)
@@ -154,7 +156,7 @@ export function tokens(db: Db, root: string, plan: number, projects: string): st
 export function registerBench(cf: Command, { root, db, out }: Cli): void {
   const bench = cf.command('bench')
   bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
-    .requiredOption('--generator <seat>', 'a bench generator in rules/staffing.yaml')
+    .requiredOption('--generator <seat>', 'a bench generator key or seat in rules/staffing.yaml')
     .option('--stop-after <phase>', 'park a fizz_lean_generator run once this phase hands off')
     .option('--why <text>', 'file a fizz_lean_generator pair whose last run has no clean regrade')
     .action((target: string | undefined, options: { all?: boolean; generator: string; stopAfter?: string; why?: string }) => {

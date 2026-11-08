@@ -95,7 +95,7 @@ VALUES
   ('rules/registry/82-bench_degraded.yaml', 'card', 'rules/registry/82-bench_degraded.yaml', '927d20f7ffbb582f498f37c33ee18aa54c68cc4566fc2460a9510b6174495106', '2026-10-27'),
   ('rules/registry/83-fork_ready_ci.yaml', 'card', 'rules/registry/83-fork_ready_ci.yaml', '17d2367c89876f7cfc9c5d74466799605119529fdadf44a3dca64a6cd6da48eb', '2026-10-28'),
   ('rules/registry/84-waive_resumes_stop.yaml', 'card', 'rules/registry/84-waive_resumes_stop.yaml', 'c1e2bcc3cf950d892c3ca154901d1db5ef1f9e8bbe5ba252661d3f0024bf6211', '2026-10-28'),
-  ('rules/registry/85-bench_night.yaml', 'card', 'rules/registry/85-bench_night.yaml', '1a72c3c5fb0286e1a44237fd0fb4969fa5a82cc1afb1351c21a29a8bccafef2c', '2026-10-29'),
+  ('rules/registry/85-bench_night.yaml', 'card', 'rules/registry/85-bench_night.yaml', '73417d86be3c430dee38c275a31c1d7ee79f23defdd4797e204c04d1ccefa6dd', '2026-10-29'),
   ('rules/registry/86-brief_title_set.yaml', 'card', 'rules/registry/86-brief_title_set.yaml', '680fb7acefd84a44a240bfa73db02fd5e02eebe0336e11af35683b6604b735a8', '2026-10-29'),
   ('rules/registry/87-ai_stance.yaml', 'card', 'rules/registry/87-ai_stance.yaml', 'ea2e2cff6b6d318c35abc090da983acbb30534e3eb91caadca79a577baf8b55b', '2026-10-31'),
   ('rules/registry/87-live_tree_behind.yaml', 'card', 'rules/registry/87-live_tree_behind.yaml', 'a5c96704e6bd118c30a916f36745f24ae0bb058b67aab551206cff2b93432109', '2026-10-31'),

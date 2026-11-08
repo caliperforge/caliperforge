@@ -14,6 +14,7 @@ import { gates } from '../../store/approvals.ts'
 import { approved, deliverablesOf, gated } from '../../store/deliverables.ts'
 import { eventsOf, logged } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
+import { drop, take } from '../../store/leases.ts'
 import { dropPlan } from '../../store/plans.ts'
 import { recordListing } from '../../store/tickets.ts'
 
@@ -34,8 +35,19 @@ function setup(approve = true) {
   const cf = new Command()
   registerPlans(cf, { root, db: () => db, out: () => undefined })
   const run = (...args: string[]) => cf.parse(['close', '2', '--why', 'a 502 at step 7', '--by', 'coo', ...args], { from: 'user' })
-  return { db, root, dir, main, run }
+  const waited = (...args: string[]) => cf.parseAsync(['close', '2', '--why', 'a 502 at step 7', '--by', 'coo', ...args], { from: 'user' })
+  return { db, root, dir, main, run, waited }
 }
+
+test('close --wait closes once the lease is dropped', async () => {
+  const { db, waited } = setup()
+  take(db, 2)
+  const done = waited('--wait', '10')
+  drop(db, 2)
+  await done
+  expect(plan(db, 2).state).toBe('refused')
+  expect(eventsOf(db, 2, 'close')).toHaveLength(1)
+}, 10_000)
 
 function unchanged(db: Db, state = 'approved') {
   expect(plan(db, 2).state).toBe('queued')

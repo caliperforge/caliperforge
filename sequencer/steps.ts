@@ -104,6 +104,7 @@ export const WAITING: Record<Wait, string> = {
   no_step_map: 'its template has no step map',
   file_overlap: 'another job is building one of its files',
   bench_score_busy: 'another bench job is scoring', bench_night: 'bench fuzzing runs at night',
+  long_job: 'its long job is running',
 }
 
 /** The parked target by name, which the bare reason cannot carry. */

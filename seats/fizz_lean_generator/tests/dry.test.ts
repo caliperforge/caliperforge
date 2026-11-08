@@ -13,7 +13,7 @@ import { trackers } from '../../../templates/probes.ts'
 import { reach } from '../../../templates/reach.ts'
 import { planted as fetched } from '../../../templates/rooted.ts'
 import { smoke } from '../../../templates/smoke.ts'
-import type { Suite } from '../../../templates/suite.ts'
+import { type Suite, suite } from '../../../templates/suite.ts'
 
 const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [], standIns: [], probes: [], trackers: [], build: { command: null, via_ir: null, optimizer: null } }))
 
@@ -49,7 +49,7 @@ const ROWS = [
   ['coverage', 'handoff', NEEDS(`${META}/handoff/coverage.md`)], ['coverage', 'probe readings', NEEDS(`${META}/corpus_medusa/call_sequences`)],
   ['coverage', 'reach', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)], ['coverage', 'boundary', NEEDS(`${META}/corpus_medusa/coverage/lcov.info`)],
   ['coverage', 'grade', NEEDS(`${META}/handoff/coverage.md`)],
-  ['invariants', 'handoff', NEEDS(`${META}/handoff/invariants.md`)], ['invariants', 'plan', NEEDS(`${META}/handoff/plan.md`)],
+  ['invariants', 'handoff', NEEDS(`${META}/handoff/invariants.md`)], ['invariants', 'ast', 'pass'], ['invariants', 'plan', NEEDS(`${META}/handoff/plan.md`)],
   ['invariants', 'duplicate', NEEDS(`${META}/reports/invariants-global-property-implementer.md`)], ['invariants', 'critic.share_converted', 'pass'],
   ['end', 'count', 'pass'],
 ]
@@ -239,9 +239,30 @@ test('a throw refuses the regrade, another rule passes it', () => {
   const { db, root } = regradable({ [`${META}/corpus_medusa/call_sequences/1.json`]: '[]' })
   vi.mocked(trackers).mockImplementationOnce(() => { throw new Error('boom') })
   expect(regraded(db, root, 1, fizz())).toContain('coverage\tprobe readings\trefuse throw | boom\n')
-  vi.mocked(compiled).mockReturnValueOnce([{ rule: 'handoff.ast', note: 'context: forge build --ast failed: boom' }])
-  expect(regraded(db, root, 1, fizz())).toContain('context\tast\trefuse handoff.ast | context: forge build --ast failed: boom\n')
+  const note = 'invariants: forge build --ast --build-info failed: boom'
+  vi.mocked(compiled).mockReturnValueOnce([{ rule: 'handoff.ast', note: 'context: forge build --ast failed: boom' }]).mockReturnValueOnce([])
+    .mockReturnValueOnce([{ rule: 'handoff.ast', note }])
+  const now = new Map([['context ast', 'refuse handoff.ast | context: forge build --ast failed: boom'], ['coverage probe readings', 'pass'], ['invariants ast', `refuse handoff.ast | ${note}`]])
+  const rows = ROWS.map(([phase = '', check = '', result = '']) => [phase, check, now.get(`${phase} ${check}`) ?? result])
+  expect(regraded(db, root, 1, fizz())).toBe(table(rows, REGRADED))
   expect(ofKind(db, 'bench.regrade')).toEqual(['refuse', 'pass'].map((outcome) => ({ plan: 1, kind: 'bench.regrade', actor: 'bench', outcome, message: REGRADED })))
+})
+
+test('the plan row reads a suite built after coverage rewrote out/', () => {
+  const gl04 = '- GL-04 | says: totalSupply equals the sum of tracked holder balances | relies: aggregates-3 | reads: eulerEarn_deposit,eulerEarn_mint,eulerEarn_withdraw,eulerEarn_redeem,eulerEarn_transfer | converted: no | tolerance: none | delta: none | fails: totalSupply diverges from the sum of holder balances, phantom mint or burn | implementer: global\n'
+  const { db, root } = regradable({ [`${META}/handoff/plan.md`]: `# Plan\n\n## Rows\n\n${gl04}`, [`${META}/corpus_medusa/call_sequences/1.json`]: '[]' })
+  let built = false
+  const handlers = Object.entries({ deposit: 582, mint: 609, redeem: 660, transfer: 679, withdraw: 694 }).map(([fn, line]) =>
+    ({ file: 'test/fizz/handlers/EulerEarnHandler.sol', start: line, end: line, name: `EulerEarnHandler.eulerEarn_${fn}`, clamped: false, target: null, clamps: [] }))
+  vi.mocked(compiled).mockImplementation(() => { built = true; return [] })
+  vi.mocked(trackers).mockImplementation(() => { built = false; return new Map() })
+  vi.mocked(suite).mockImplementation(() => built ? { ...EMPTY, handlers } : EMPTY)
+  const out = regraded(db, root, 1, fizz())
+  expect(out).toContain('invariants\tplan\tpass\n')
+  expect(out).not.toContain('plan.tracker')
+  vi.mocked(compiled).mockImplementation(() => [])
+  vi.mocked(trackers).mockImplementation(() => new Map())
+  vi.mocked(suite).mockImplementation(() => EMPTY)
 })
 
 test('an unregradable plan throws and logs no regrade', async () => {

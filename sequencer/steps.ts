@@ -188,7 +188,7 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
 function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: string | null }): { on: number | null; issue: string; why: string } | null {
   const found = newestOfOrigin(db, `https://github.com/${repo}/issues/${String(n)}`)
   const pred = found === undefined ? undefined : { ...found, closed_at }
-  if (pred?.state === 'done' && (landed(db, pred.id) || !mapOf(pred.template).steps.some((s) => s.name === 'push'))) return null
+  if (pred?.state === 'done' && landed(db, pred.id)) return null
   const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
   const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
   const issue = part === null ? `#${String(n)}` : `#${String(originIssue(part))}`

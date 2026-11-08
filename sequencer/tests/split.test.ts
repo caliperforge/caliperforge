@@ -407,6 +407,31 @@ test('D1, D2: a closed After: waits for its plan to land', async () => {
   expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
 })
 
+test('a part After a research part queues once it ends done', async () => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'a']), [])
+  waiting902(w)
+  const a = partPlan(w, 0) ?? 0
+  w.db.exec(`UPDATE plans SET template = 'research' WHERE id = ${String(a)}`)
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(plan(w.db, a)).toMatchObject({ state: 'queued' })
+  expect(partPlan(w, 1)).toBeNull()
+  end(w.db, a, 'done')
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  const b = partPlan(w, 1) ?? 0
+  expect(plan(w.db, b)).toMatchObject({ state: 'queued' })
+  expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
+})
+
+test('a part After an unpushed done pr_path part stays unqueued', async () => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'a']), [])
+  waiting902(w)
+  end(w.db, partPlan(w, 0) ?? 0, 'done')
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(partPlan(w, 1)).toBeNull()
+})
+
 const MOVED = 'https://github.com/caliperforge/fuzz-bench/issues/61'
 
 function noted(w: World, id: number, output: string): void {

@@ -508,7 +508,7 @@
 - name: bench_night
   table: events
   column: at
-  where: "kind = 'bench.fired' AND strftime('%H:%M', at, 'localtime') >= '06:00' AND strftime('%H:%M', at, 'localtime') < '22:00'"
+  where: "kind = 'bench.fired' AND EXISTS (SELECT 1 FROM pipes, (SELECT strftime('%H:%M', events.at, (SELECT value FROM settings WHERE key = 'tick.zone_offset_minutes') || ' minutes') AS t) WHERE name = 'refuzz' AND NOT CASE WHEN window_start <= window_end THEN t BETWEEN window_start AND window_end ELSE t >= window_start OR t <= window_end END)"
   gap: 7d
   expected: 0
 - name: brief_title_set

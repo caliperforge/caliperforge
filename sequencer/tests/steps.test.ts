@@ -245,16 +245,17 @@ test('D5 a pr_path plan on the bench pipe is never bench_night', () => {
   expect(blocked(db, planById(db, 1), DAY)).toBeNull()
 })
 
-test('D6 bench_night reports a bench.fired at 14:00, not 23:00', () => {
+test('bench_night reports a bench.fired outside the refuzz window', () => {
   const db = benched(2)
   const night = REGISTRY.filter((e) => e.name === 'bench_night')
-  const local = (hour: number) => new Date(2026, 8, 18, hour).toISOString().replace('T', ' ').slice(0, 19)
   const fired = { plan: 1, kind: 'bench.fired', actor: 'score', outcome: 'pass' as const, message: 'score', pointer: null, run: null }
-  const now = new Date(2026, 8, 19, 12)
-  logged(db, fired, local(23))
+  const now = new Date('2026-09-19T18:00:00Z')
+  logged(db, fired, '2026-09-19 05:00:00')
   expect(drift(db, night, now)).toEqual([])
-  logged(db, fired, local(14))
+  logged(db, fired, '2026-09-18 21:00:00')
   expect(drift(db, night, now)).toMatchObject([{ name: 'bench_night', state: 'seen' }])
+  hours(db, Number(pipeNamed(db, 'refuzz')?.id), '00:00', '23:59')
+  expect(drift(db, night, now)).toEqual([])
 })
 
 const NO_AI = 'Please, no AI-generated contributions.'

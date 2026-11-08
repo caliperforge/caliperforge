@@ -3,8 +3,8 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from
 import { join } from 'node:path'
 import { eventsOf, logged, ofKind } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { get as setting } from '../store/lanes.ts'
-import { end, type PlanRow } from '../store/plans.ts'
+import { count } from '../store/lanes.ts'
+import { end, type PlanRow, terminal } from '../store/plans.ts'
 import { work } from '../templates/research.ts'
 import type { Outcome } from './kind.ts'
 import { get, put, srcDir } from './workspace.ts'
@@ -57,8 +57,8 @@ export function exited(db: Db, root: string, plan: PlanRow): string | null {
 }
 
 export function longJobs(db: Db, root: string, now: Date): void {
-  const seconds = Number(setting(db, 'research.long_job_seconds'))
-  if (!Number.isFinite(seconds)) throw new Error(`research.long_job_seconds is not a number: ${setting(db, 'research.long_job_seconds')}`)
+  const seconds = count(db, 'research.long_job_seconds')
+  const ended = new Set(terminal(db))
   for (const [plan, actor] of new Map(ofKind(db, KIND).map((e) => [e.plan ?? 0, e.actor]))) {
     if (actor !== 'started') continue
     const job = jobOf(root, plan)
@@ -74,6 +74,7 @@ export function longJobs(db: Db, root: string, now: Date): void {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
     }
+    if (ended.has(plan)) continue
     logged(db, { plan, kind: KIND, actor: 'walled', outcome: 'refuse', message: `walled at ${String(seconds)}s`, pointer: log, run: null })
     end(db, plan, 'halted', `long job walled at ${String(seconds)}s: ${job.command}`)
   }

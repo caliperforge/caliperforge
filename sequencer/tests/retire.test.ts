@@ -11,10 +11,11 @@ const FORK = 'caliperforge/widget'
 const OLD = 'widget-12-a1-next'
 const NEW = 'widget-12-a2-next'
 
-/** `statuses` are the runs listed on `branch`, ids from 1; a `run cancel` goes in `log` once the first `throws` have thrown. */
-function runs(log: string[], branch: string, statuses: string[], throws = 0): Gh {
+/** `statuses` are the runs listed on `branch`, ids from 1; a `run cancel` goes in `log` once the first `throws` have thrown; `run view` reads `viewed`. */
+function runs(log: string[], branch: string, statuses: string[], throws = 0, viewed = 'completed'): Gh {
   let thrown = 0
   return (args) => {
+    if (args[1] === 'view') return JSON.stringify({ status: viewed })
     if (args[1] === 'cancel') {
       if (thrown < throws) {
         thrown += 1
@@ -112,4 +113,10 @@ test('a cancel that throws leaves the rest cancelled', () => {
   const log: string[] = []
   cancel(FORK, OLD, runs(log, OLD, ['queued', 'in_progress'], 1))
   expect(log).toEqual([`run cancel 2 --repo ${FORK}`])
+})
+
+test('a cancel that throws on a run still in progress rethrows', () => {
+  const log: string[] = []
+  expect(() => { cancel(FORK, OLD, runs(log, OLD, ['queued', 'in_progress'], 1, 'in_progress')) }).toThrow('run already completed')
+  expect(log).toEqual([])
 })

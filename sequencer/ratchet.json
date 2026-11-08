@@ -111,8 +111,7 @@
     "lines": 198
   },
   "retire.ts": {
-    "lines": 40,
-    "silent-catch": 1
+    "lines": 40
   },
   "route.ts": {
     "lines": 65
@@ -151,8 +150,7 @@
     "prepare": 1
   },
   "theirs.ts": {
-    "lines": 152,
-    "silent-catch": 1
+    "lines": 149
   },
   "ticket.ts": {
     "lines": 39,
@@ -166,8 +164,7 @@
     "prepare": 1
   },
   "upstream.ts": {
-    "lines": 60,
-    "silent-catch": 1
+    "lines": 60
   },
   "workspace.ts": {
     "lines": 449

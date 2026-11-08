@@ -38,6 +38,13 @@ test('D3: the prompt answers needs_build for network or writes', () => {
   for (const part of ['## Needs a build', 'outcome: needs_build', 'network', 'outside `.cf/measure/`']) expect(prompt).toContain(part)
 })
 
+test('the prompt names a Run command for a job past one call', () => {
+  const prompt = seat(root, 'measurer').prompt
+  for (const part of ['## Long job', '600 s', '**Run:**', '**Output:**', '`job.log`', '`# Long job`', '`cf bench medusa <checkout> --suite <dir> --workers <n> --out <path>`']) {
+    expect(prompt).toContain(part)
+  }
+})
+
 test('D7: the digests hold and measurer is a card row', () => {
   expect(check(root, '2026-10-20')).toEqual([])
   expect(rules(root).find((r) => r.id === 'measurer')).toMatchObject({ kind: 'card', path: 'rules/roster/measurer.yaml' })

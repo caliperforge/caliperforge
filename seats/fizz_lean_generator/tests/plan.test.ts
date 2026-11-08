@@ -84,7 +84,10 @@ test('D3: an aggregate no row relies on needs a skip reason', () => {
 })
 
 test('D4: reading a name the suite lacks is plan.tracker', () => {
-  expect(rules(plan([...GOOD, row('p3', { reads: 'ghost_total, ghost_missing' })]))).toEqual(['plan.tracker'])
+  const read = plan([...GOOD, row('p3', { reads: 'ghost_total, handler_deposit, ghost_missing' })])
+  expect(planned(read, MAP, ['ghost_total', 'H.handler_deposit'], []).refused).toEqual([
+    { rule: 'plan.tracker', note: 'plan: p3 reads ghost_missing, which the suite does not hold' },
+  ])
 })
 
 test('D5: converted needs a bound; implementer is one of two', () => {

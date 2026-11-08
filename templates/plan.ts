@@ -30,7 +30,7 @@ export function planned(plan: string, map: string, suite: string[], unreached: s
       ...refuse('plan.unused', USED.flatMap((section) => (mapped.get(section) ?? [])
         .filter((r) => r.name !== NONE && !relied.has(r.id) && !skipped.includes(r.id))
         .map((r) => `plan: ${r.id} is in no row's relies: and in no ## Skipped row with a reason`))),
-      ...refuse('plan.tracker', planned.flatMap((r) => listed(r.cells.get('reads')).filter((name) => !suite.includes(name))
+      ...refuse('plan.tracker', planned.flatMap((r) => listed(r.cells.get('reads')).filter((name) => !suite.some((s) => s === name || s.endsWith(`.${name}`)))
         .map((name) => `plan: ${r.name} reads ${name}, which the suite does not hold`))),
       ...refuse('plan.converted', planned.filter((r) => r.cells.get('converted') === 'yes' && !filled(r.cells.get('tolerance')) && !filled(r.cells.get('delta')))
         .map((r) => `plan: ${r.name} is converted with no filled tolerance: or delta:`)),

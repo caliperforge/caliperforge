@@ -6,14 +6,19 @@ import type { Provider } from '../../providers/kind.ts'
 import { eventsOf } from '../../store/events.ts'
 import { set } from '../../store/lanes.ts'
 import { dropPlan, putPlan } from '../../store/plans.ts'
+import { refusalRows } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { route } from '../next.ts'
-import { get, maybe, put } from '../workspace.ts'
+import { get, headSha, maybe, put, srcDir } from '../workspace.ts'
 import { plan, stub, world, type World } from './world.ts'
 
 const ASK = '# The cap\n\n**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it\n**Measure:** time it\n'
 
-const FOUND = 'The cap is 3 [source:1].\n\n---\nsources:\n  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00:00Z\n    quote: The cap is 3.\n    claim: The cap is 3\n---\n'
+const JOB = '**Run:** echo measured; exit 3\n**Output:** ~/cf_work/job/\n'
+
+/** An answer citing the job's command at `head` with `quote`. */
+const cited = (head: string, quote: string): string =>
+  `The job measured [source:1].\n\n---\nsources:\n  - run:\n      command: echo measured; exit 3\n      commit: ${head}\n      quote: ${quote}\n      claim: The job measured\n---\n`
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -48,9 +53,11 @@ test('a Run reply waits on its job, then gathers with its exit', async () => {
   const out = join(home(), 'cf_work/job')
   const w = researching()
   const prompts: string[] = []
-  const seats = measurer(['**Run:** echo measured; exit 3\n**Output:** ~/cf_work/job/\n', FOUND], prompts)
+  const replies = [JOB]
+  const seats = measurer(replies, prompts)
   await tick(w.db, w.root, seats)
   await tick(w.db, w.root, seats)
+  replies.push(cited(headSha(srcDir(w.root, 1)), 'measured'))
   expect(JSON.parse(get(w.root, 1, 'job.json'))).toMatchObject({ command: 'echo measured; exit 3', out })
   expect(eventsOf(w.db, 1, 'long_job')).toEqual([{ actor: 'started', outcome: 'pass', message: 'echo measured; exit 3' }])
   expect(plan(w.db, 1)).toMatchObject({ state: 'running', step: 1 })
@@ -61,6 +68,23 @@ test('a Run reply waits on its job, then gathers with its exit', async () => {
   expect(prompts).toHaveLength(2)
   expect(prompts[1]).toContain(`# Long job\n\n\`echo measured; exit 3\` exited 3; its log, ${join(out, 'job.log')}, ends:\n\nmeasured`)
   expect(plan(w.db, 1).step).toBe(2)
+  expect(JSON.parse(get(w.root, 1, 'runs.json'))).toEqual([{ command: 'echo measured; exit 3', output: 'measured\n' }])
+  await tick(w.db, w.root, seats)
+  expect(eventsOf(w.db, 1, 'check')).toMatchObject([{ outcome: 'pass' }])
+})
+
+test('a cite of the job with a quote not in its log is refused', async () => {
+  const out = join(home(), 'cf_work/job')
+  const w = researching()
+  const replies = [JOB]
+  const seats = measurer(replies, [])
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  replies.push(cited(headSha(srcDir(w.root, 1)), 'unmeasured'))
+  await vi.waitFor(() => { expect(existsSync(join(out, 'job.exit'))).toBe(true) })
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  expect(refusalRows(w.db, 1)[0]).toMatchObject({ step: 2, span: 'research.run_missing' })
 })
 
 test('a job past research.long_job_seconds halts its plan', async () => {

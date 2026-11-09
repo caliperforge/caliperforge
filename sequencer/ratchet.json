@@ -146,22 +146,17 @@
   "symbols.ts": {
     "lines": 43
   },
-  "tests/voice.test.ts": {
-    "prepare": 1
-  },
   "theirs.ts": {
     "lines": 149
   },
   "ticket.ts": {
-    "lines": 39,
-    "prepare": 1
+    "lines": 39
   },
   "unruled.ts": {
     "lines": 21
   },
   "upgrade.ts": {
-    "lines": 66,
-    "prepare": 1
+    "lines": 66
   },
   "upstream.ts": {
     "lines": 60

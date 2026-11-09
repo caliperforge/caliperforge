@@ -2,6 +2,7 @@ import { file, LANE, laneOf } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
 import type { Lane } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
+import { laneOpen } from '../store/ready.ts'
 import { alike } from '../store/refusals.ts'
 import { hold } from './hold.ts'
 import type { Wire } from './push.ts'
@@ -13,8 +14,7 @@ const ALIKE = 3
 export function ticketed(db: Db, root: string, plan: PlanRow, title: string, body: string, why: string, wire: Wire,
   now: Date): string {
   const lane = laneOf(title.split(/[\s,()]+/).map((name) => ({ name }))) ?? 'machine'
-  const open = db.prepare(`SELECT id, origin FROM plans WHERE lane = ? AND origin IS NOT NULL AND id <> ?
-    AND state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY id`).all(lane, plan.id) as { id: number; origin: string }[]
+  const open = laneOpen(db, lane, plan.id)
   const { id, origin } = open.find((r) => titleOf(root, r.id) === title) ?? queued(db, root, plan, lane, title, body, wire)
   hold(db, root, plan.id, `${origin}\n\n${why}`, now, id)
   return origin

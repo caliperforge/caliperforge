@@ -234,7 +234,7 @@ export function unproven(suite: string, name: string): Outcome | number {
     note: `${name} wrote no invariant_, property_ or echidna_ function in ${counted.map((p) => `${SUITE}/${p}`).join(', ')}` }
 }
 
-const WORKERS = 4
+const WORKERS = 8
 
 export function medusa(db: Db, plan: number | null, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
   const installed = !existsSync(join(src, 'medusa.json'))

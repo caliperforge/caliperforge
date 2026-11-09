@@ -54,7 +54,7 @@ it('rule-hashes skips rules/tests but not a new rule file', async () => {
   expect(await ruleHashes.run(dir)).toEqual([{ check: 'rule-hashes', path: 'rules/x.yaml', line: 1, message: 'file under rules/ has no row' }])
 })
 
-it('rule-hashes flags an edited rules/hardware.yaml as stale',async () => {
+it('rule-hashes flags an edited rules/hardware.yaml as stale', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-rules-'))
   for (const p of ['schema', 'rules', 'rules.seed.sql']) cpSync(join(root, p), join(dir, p), { recursive: true })
   expect(await ruleHashes.run(dir)).toEqual([])

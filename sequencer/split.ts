@@ -154,9 +154,9 @@ function unfileable(db: Db, plan: PlanRow): string | null {
   return approved(db, plan) ? null : 'an unapproved ticket on somebody else\'s repository is split by the COO, not the machine'
 }
 
-/** The parent's ask or comments without an `After:` gate, which `afterOf` would read as the part's. */
+/** The parent's ask or comments without an `After:` gate and with each `## ` heading made `### `, which `afterOf` and `said` would read as the part's. */
 function carried(ask: string, heading: string, source: string): string {
-  const text = ask.replace(/^After: #\d+$\n?/gm, '')
+  const text = ask.replace(/^After: #\d+$\n?/gm, '').replace(/^## /gm, '### ')
   return `${heading}\n\n${text.length > CUT ? `${text.slice(0, CUT)}\ncut, see ${source}` : text.trimEnd()}`
 }
 

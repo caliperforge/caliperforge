@@ -163,7 +163,8 @@ test('parentCut', async () => {
 
 test('D1, D2: a research part asks its own question', () => {
   const w = mine()
-  put(w.root, ID, 'ask.md', '# t\n\n**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n')
+  const asked = '**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n'
+  put(w.root, ID, 'ask.md', `# t\n\n${asked}\n## Answer from the director (2026-11-08)\n\n${asked}`)
   parted(w.db, w.root, { ...plan(w.db, ID), template: 'research' }, split(PARTS) ?? [], watched([], w.root, ID))
   const a = partPlan(w, 0) ?? 0
   expect(question(w.root, plan(w.db, a))).toMatchObject({ outcome: 'pass' })

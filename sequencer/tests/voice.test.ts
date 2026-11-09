@@ -1,16 +1,17 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { putPost } from '../../store/desk.ts'
 import { capture } from '../../templates/comms.ts'
 import { world, type World } from './world.ts'
 
 const today = new Date().toISOString().slice(0, 10)
 
 const posted = (w: World, id: number, edits: { title?: string; dek?: string; body?: string; note?: string } = {},
-  draft = { title: 'The day', dek: 'What moved', body: 'One job landed.' }): unknown =>
-  w.db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, edited_dek, edited_body, note,
-    sources, checks, work_date, written_date) VALUES (?, 'daily', 'site', 'proof', ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?)`)
-    .run(id, draft.title, draft.dek, draft.body, edits.title ?? null, edits.dek ?? null, edits.body ?? null, edits.note ?? null, today, today)
+  draft = { title: 'The day', dek: 'What moved', body: 'One job landed.' }): void => {
+  putPost(w.db, { id, kind: 'daily', dest: 'site', status: 'proof', ...draft, edited_title: edits.title ?? null, edited_dek: edits.dek ?? null,
+    edited_body: edits.body ?? null, note: edits.note ?? null, sources: '[]', checks: '[]', work_date: today, written_date: today })
+}
 
 const notes = (w: World): string => readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')
 

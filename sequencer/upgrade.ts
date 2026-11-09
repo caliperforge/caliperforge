@@ -2,21 +2,15 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { logged } from '../store/events.ts'
 import { migrate, type Db } from '../store/index.ts'
+import { pushedUnder } from '../store/ready.ts'
 import { BEHIND, type Receipt } from '../store/ticks.ts'
 import { SELF } from './workspace.ts'
 
 const COMMIT = `https://github.com/${SELF}/commit/`
 
-/** Every sha `land()` wrote in this url, newest first; a target's push writes a pull request one, and no landing of ours is in it. */
-function landed(db: Db): string[] {
-  const rows = db.prepare(`SELECT evidence FROM deliverables WHERE state = 'pushed' AND evidence LIKE ?
-    ORDER BY id DESC`).all(`${COMMIT}%`) as { evidence: string }[]
-  return rows.map((row) => row.evidence.slice(COMMIT.length))
-}
-
 /** The landed sha the live tree at `root` has not got, off its own refs: no fetch, no network. */
 export function behind(db: Db, root: string): string | null {
-  const shas = landed(db)
+  const shas = pushedUnder(db, COMMIT).map((url) => url.slice(COMMIT.length))
   if (shas.length === 0) return null
   const held = new Set(git(root, ['rev-list', 'HEAD']).split('\n'))
   return shas.find((sha) => !held.has(sha)) ?? null

@@ -3,8 +3,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, onTestFinished, test, vi } from 'vitest'
+import { fresh } from '../../../checks/sqlite.ts'
 import { compiled } from '../../../templates/extract.ts'
-import { held, readings, trackers } from '../../../templates/probes.ts'
+import { held, readings, sampled, trackers } from '../../../templates/probes.ts'
 import type { Suite } from '../../../templates/suite.ts'
 
 vi.mock('node:child_process', async (importOriginal) => {
@@ -80,6 +81,36 @@ test('held maps true probe functions to their cite', () => {
     property_probeFee: 'dropped: no corpus', property_probeLoose: 'true on 4 of 4 sequences' }
   expect(held(root, [spanned('ProbeCap', 'V.CAP', 2), spanned('ProbeFee', 'V.FEE', 6), spanned('ProbeLoose', null, 9), spanned('ProbeGone', 'V.GONE', 12)], said))
     .toEqual({ 'V.CAP': 'property_probeCap true on 3 of 4 sequences; property_probeCapLow true on 0 of 4 sequences' })
+})
+
+const SCHEMA = join(import.meta.dirname, '../../../schema')
+const INTERNAL = 'abstract contract ProbeCap {\n    function read_probeCap() internal pure returns (bool) { return true; }\n}\n'
+
+test('sampled wraps an internal read_probe in a deployed Exposed', () => {
+  const { root, corpus } = sequenced(1)
+  writeFileSync(join(root, 'test/fizz/Probes.sol'), INTERNAL)
+  let text = ''
+  faked((cwd) => { text = readFileSync(join(cwd, TEST), 'utf8'); return { status: 0, stdout: '  probe.property_probeCap= true\n', stderr: '' } })
+  expect(sampled(fresh(SCHEMA), 1, root, 'test/fizz', corpus)).toEqual({ property_probeCap: 'true on 1 of 1 sequences' })
+  expect(text).toContain('contract Exposed is FuzzTester {\n    constructor() payable {}\n'
+    + '    function property_probeCap() public returns (bool) { return read_probeCap(); }\n}\n\ncontract Deployer {')
+  expect(text).toContain('returns (FuzzTester h) { h = new Exposed(); } }')
+})
+
+test("sampled replays the corpus it is handed, not medusa.json's", () => {
+  const { root, corpus } = project(HARNESS, ['FuzzTester'], { corpusDirectory: 'test/fizz/fizz_data/corpus_medusa' })
+  writeFileSync(join(corpus, 'call_sequences/immutable/0.json'), JSON.stringify([{ call: { from: '0x10000', data: '0x12345678' } }]))
+  writeFileSync(join(root, 'test/fizz/Probes.sol'), INTERNAL)
+  const scored = join(root, 'scored/corpus_medusa')
+  mkdirSync(join(scored, 'call_sequences'), { recursive: true })
+  for (const i of [0, 1]) writeFileSync(join(scored, `call_sequences/${String(i)}.json`), JSON.stringify([{ call: { from: '0x10000', data: '0xabcdef01' } }]))
+  let text = ''
+  faked((cwd) => { text = readFileSync(join(cwd, TEST), 'utf8'); return { status: 0, stdout: '', stderr: '' } })
+  const db = fresh(SCHEMA)
+  sampled(db, 1, root, 'test/fizz', scored)
+  expect([text.match(/function testSequence\d+\(\) public/g)?.length, text.includes('hex"abcdef01"'), text.includes('hex"12345678"')]).toEqual([2, true, false])
+  mkdirSync(join(root, 'empty'))
+  expect(sampled(db, 1, root, 'test/fizz', join(root, 'empty'))).toEqual({ property_probeCap: 'dropped: no corpus' })
 })
 
 test('targetContracts not naming one is refused before forge', () => {

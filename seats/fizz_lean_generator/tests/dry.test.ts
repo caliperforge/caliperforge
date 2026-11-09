@@ -1,7 +1,8 @@
+import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { expect, test, vi } from 'vitest'
+import { expect, onTestFinished, test, vi } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planDir, put } from '../../../sequencer/workspace.ts'
 import { eventsAfter, ofKind, runRows } from '../../../store/events.ts'
@@ -9,7 +10,7 @@ import type { Db } from '../../../store/index.ts'
 import { pipeNamed, putPlan } from '../../../store/plans.ts'
 import { dried, regraded } from '../../../templates/dry.ts'
 import { compiled } from '../../../templates/extract.ts'
-import { trackers } from '../../../templates/probes.ts'
+import { sampled, trackers } from '../../../templates/probes.ts'
 import { reach } from '../../../templates/reach.ts'
 import { planted as fetched } from '../../../templates/rooted.ts'
 import { smoke } from '../../../templates/smoke.ts'
@@ -23,7 +24,12 @@ vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await imp
 
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
-vi.mock('../../../templates/probes.ts', async (importOriginal) => ({ ...await importOriginal<object>(), trackers: vi.fn(() => new Map()) }))
+vi.mock('../../../templates/probes.ts', async (importOriginal) => ({ ...await importOriginal<object>(), trackers: vi.fn(() => new Map()), sampled: vi.fn(() => ({})) }))
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const original = await importOriginal<{ spawnSync: typeof spawnSync }>()
+  return { ...original, spawnSync: vi.fn(original.spawnSync) }
+})
 
 vi.mock('../../../templates/extract.ts', async (importOriginal) => ({ ...await importOriginal<object>(), compiled: vi.fn(() => []) }))
 
@@ -270,22 +276,30 @@ test("the scored reach reads the probe pass's readings", async () => {
   vi.mocked(reach).mockImplementation(() => [])
 })
 
-test("only the scored reach reads report.json's probe readings", async () => {
+test('each reach reads the probes sampled on its own corpus', async () => {
   const corpus = `${META}/corpus_medusa`
   const { db, root } = regradable({ [`${META}/handoff/map.md`]: '## Limits\n\n- V.CAP | bound: 5\n', [`${corpus}/call_sequences/1.json`]: '[]',
     [`${corpus}/coverage/lcov.info`]: '', [`${corpus}/coverage/revert_report.json`]: '{"contractRevertMetrics":{}}',
-    'test/fizz/Probes.sol': '// probe: V.CAP\nabstract contract ProbeCap {\n    function read_probeCap() internal pure returns (bool) { return true; }\n}\n' })
+    'test/fizz/Probes.sol': '// probe: V.CAP\nabstract contract ProbeCap {\n    function read_probeCap() internal pure returns (bool) { return true; }\n}\n',
+    'test/fizz/FuzzTester.sol': 'contract FuzzTester {}\n', 'test/fizz/medusa.json': JSON.stringify({ fuzzing: { targetContracts: ['FuzzTester'] } }) })
   vi.mocked(suite).mockImplementation(() => ({ ...EMPTY, probes: [{ file: 'test/fizz/Probes.sol', start: 2, end: 4, name: 'ProbeCap', cites: 'V.CAP', trackers: [], calls: [] }] }))
   vi.mocked(reach).mockImplementation((await vi.importActual<typeof import('../../../templates/reach.ts')>('../../../templates/reach.ts')).reach)
-  const row = (name: string, note: string): string => `coverage\treach ${name}\trefuse reach.unmet | Limits V.CAP: ${note}\n`
-  put(root, 1, 'report.json', JSON.stringify({ probes: { property_probeCap: 'true on 3 of 4 sequences' } }))
+  const [dir, row] = [join(root, '.cf/regrade/1'), (name: string, note: string): string => `coverage\treach ${name}\trefuse reach.unmet | Limits V.CAP: ${note}\n`]
+  vi.mocked(sampled).mockClear().mockImplementation((...[, , , , on]) => ({ property_probeCap: on === join(dir, 'scored/corpus_medusa') ? 'true on 3 of 4 sequences' : 'dropped: no corpus' }))
   const out = regraded(db, root, 1, fizz())
+  expect(vi.mocked(sampled).mock.calls.map(([, ...rest]) => rest)).toEqual([[1, dir, 'test/fizz', join(dir, 'scored/corpus_medusa')], [1, dir, 'test/fizz', join(dir, corpus)]])
   expect(out).toContain(row('scored', 'probe: property_probeCap true on 3 of 4 sequences, no tracker reading'))
   expect(out).toContain(row('smoke', 'no probe reading'))
-  put(root, 1, 'report.json', JSON.stringify({ probes: '-' }))
-  expect(regraded(db, root, 1, fizz())).toContain(row('scored', 'no probe reading'))
-  rmSync(join(planDir(root, 1), 'report.json'))
-  expect(regraded(db, root, 1, fizz())).toContain(row('scored', 'no probe reading'))
+  onTestFinished(() => { vi.mocked(spawnSync).mockReset() })
+  const real = (await vi.importActual<typeof import('node:child_process')>('node:child_process')).spawnSync
+  vi.mocked(spawnSync).mockImplementation(((command: string, args: string[], options: object) => command === 'forge'
+    ? { status: 1, stdout: '', stderr: 'Error: boom\n' } : real(command, args, options)) as unknown as typeof spawnSync)
+  vi.mocked(sampled).mockImplementation((await vi.importActual<typeof import('../../../templates/probes.ts')>('../../../templates/probes.ts')).sampled)
+  const failed = regraded(db, root, 1, fizz())
+  expect([row('scored', 'no probe reading'), row('smoke', 'no probe reading')].filter((r) => !failed.includes(r))).toEqual([])
+  expect(failed).not.toContain('refuse throw')
+  expect(ofKind(db, 'swallowed').map((e) => [e.actor, e.message])).toEqual(['score', 'score'].map((actor) => [actor, 'forge test -vv --match-path test/fizz/ProbeReadings.t.sol exited 1: Error: boom']))
+  vi.mocked(sampled).mockImplementation(() => ({}))
   vi.mocked(suite).mockImplementation(() => EMPTY)
   vi.mocked(reach).mockImplementation(() => [])
 })

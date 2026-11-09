@@ -36,7 +36,7 @@ const keys = (items: Item[]): string[] => items.map((i) => i.key)
 const unreachable = (map: string, rows: string[]): string => `${map}\n## Unreachable\n\n${rows.map((r) => `- ${r}\n`).join('')}`
 
 test('D1: a guard seen only passing is not met', () => {
-  expect(at(judged(), 'Guards V.deposit')).toMatchObject({ met: false, cells: ['passing: yes', 'reverting: no'], note: 'Guards V.deposit: reverting never seen' })
+  expect(at(judged(), 'Guards V.deposit')).toMatchObject({ met: false, cells: ['passing: yes', 'reverting: no'], note: 'Guards V.deposit: reverting never seen; calls: 40, reverts: none' })
 })
 
 test('D2: a limit is met within 1% of its bound', () => {
@@ -81,7 +81,7 @@ test('a guard reads passing from its handler\'s successful calls', () => {
   expect(at(judged(), 'Guards V.withdraw')).toMatchObject({ met: true, cells: ['passing: yes', 'reverting: yes'] })
   const report = reported({ v_withdraw: [30, 30, 'panic: arithmetic underflow/overflow'] })
   expect(at(judged(PROBES, report), 'Guards V.withdraw')).toMatchObject({ met: false, cells: ['passing: no', 'reverting: yes'],
-    note: 'Guards V.withdraw: passing never seen' })
+    note: 'Guards V.withdraw: passing never seen; calls: 30, reverts: panic: arithmetic underflow/overflow [other] 30' })
 })
 
 test('a guard reads every error its span names from any handler', () => {
@@ -137,7 +137,7 @@ test('D5: unmet drops only a filled Unreachable reason', () => {
     { key: 'Limits V.CAP', reverts: [] }, { key: 'Conversion points V.convertToAssets', reverts: [] }])
   expect(keys(unmet(unreachable(MAP, ['Guards V.deposit | reason: CAP needs 1e24 of deposits']), items))).not.toContain('Guards V.deposit')
   for (const reason of ['', '<why>']) expect(keys(unmet(unreachable(MAP, [`Guards V.deposit | reason: ${reason}`]), items))).toContain('Guards V.deposit')
-  expect(met(MAP, items)).toMatchObject({ met: false, reasons: expect.arrayContaining(['Guards V.deposit: reverting never seen']) as string[] })
+  expect(met(MAP, items)).toMatchObject({ met: false, reasons: expect.arrayContaining(['Guards V.deposit: reverting never seen; calls: 40, reverts: none']) as string[] })
   expect(met(unreachable(MAP, unmet(MAP, items).map((i) => `${i.key} | reason: no input reaches it`)), items)).toEqual({ met: true, reasons: [] })
 })
 

@@ -25,7 +25,7 @@ const REPLAYED = /^replayed: .*$/m
 const WARNING = /^Warning \(\d+\)/
 const FAILED = /\[FAIL|error|revert/i
 export const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
-const PROBE = /\bfunction\s+(property_probe\w*)\s*\(/g
+const PROBE = /\bfunction\s+(property|read)_probe(\w*)\s*\(/g
 const READ = /\bfunction\s+(?:property|read)_probe(\w*)\s*\(/g
 const VISIBLE = /(\bfunction\s+read_probe\w*\s*\([^)]*\)[^{;]*?)\b(?:public|external)\b/g
 
@@ -101,7 +101,13 @@ const READERS = `
     }
 `
 
-const source = (replays: string, reads: string, { name, file, deployer, value }: Entry): string => `// SPDX-License-Identifier: MIT
+const exposing = (name: string, exposed: string[]): string => exposed.length === 0 ? '' : `contract Exposed is ${name} {
+    constructor() payable {}
+${exposed.map((rest) => `    function property_probe${rest}() public returns (bool) { return read_probe${rest}(); }\n`).join('')}}
+
+`
+
+const source = (replays: string, reads: string, { name, file, deployer, value }: Entry, exposed: string[]): string => `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import {${name}} from "./${file}";
@@ -113,7 +119,7 @@ interface Vm {
     function etch(address target, bytes calldata newRuntimeBytecode) external;
 }
 
-contract Deployer { function deploy() external returns (${name} h) { h = new ${name}${value > 0n ? `{value: ${String(value)}}` : ''}(); } }
+${exposing(name, exposed)}contract Deployer { function deploy() external returns (${name} h) { h = new ${exposed.length === 0 ? name : 'Exposed'}${value > 0n ? `{value: ${String(value)}}` : ''}(); } }
 
 contract Readings {
     Vm constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
@@ -156,11 +162,11 @@ function loaded(corpus: string): Sequence[] {
     .map((p) => JSON.parse(readFileSync(join(dir, p), 'utf8')) as Sequence)
 }
 
-function replay(root: string, contract: Entry, sequences: Sequence[], read: (count: number) => string): string {
+function replay(root: string, contract: Entry, sequences: Sequence[], read: (count: number) => string, exposed: string[] = []): string {
   const replays = kept(sequences)
   const reads = read(replays.length)
   try {
-    const text = source(replays.map(replayed).join(''), reads, contract)
+    const text = source(replays.map(replayed).join(''), reads, contract, exposed)
     writeFileSync(join(root, TEST), text)
     return forge(root, ['test', '-vv', '--match-path', TEST], ` on ${TEST}: ${String(Buffer.byteLength(text))} bytes, ${String(replays.length)} of ${String(sequences.length)} sequences`)
   } finally {
@@ -200,20 +206,22 @@ export function unprobed(from: string, into: string): void {
   for (const path of sols(into).map((p) => join(into, p))) writeFileSync(path, readFileSync(path, 'utf8').replaceAll('property_probe', 'read_probe').replace(VISIBLE, '$1internal'))
 }
 
-export function sampled(db: Db, plan: number, src: string, suite: string): Record<string, string> {
+export function sampled(db: Db, plan: number, src: string, suite: string, corpus?: string): Record<string, string> {
   const dir = join(src, suite)
-  const names = [...new Set(sols(dir).flatMap((p) => [...readFileSync(join(dir, p), 'utf8').replace(COMMENT, '').matchAll(PROBE)].map(([, name = '']) => name)))]
+  const declared = sols(dir).flatMap((p) => [...readFileSync(join(dir, p), 'utf8').replace(COMMENT, '').matchAll(PROBE)])
+  const names = [...new Set(declared.map(([, , rest = '']) => `property_probe${rest}`))]
   if (names.length === 0) return {}
+  const exposed = [...new Set(declared.flatMap(([, kind, rest = '']) => kind === 'read' ? [rest] : []))]
   const config = join(src, existsSync(join(src, 'medusa.json')) ? '' : suite, 'medusa.json')
   const all = (why: string): Record<string, string> => Object.fromEntries(names.map((n) => [n, `dropped: ${why}`]))
   let out: string
   try {
-    const at = (existsSync(config) ? JSON.parse(readFileSync(config, 'utf8')) as { fuzzing?: { corpusDirectory?: string } } : {}).fuzzing?.corpusDirectory ?? ''
-    const corpus = resolve(dirname(config), at)
-    const sequences = at === '' || !existsSync(join(corpus, 'call_sequences')) ? [] : loaded(corpus)
+    const at = corpus ?? (existsSync(config) ? JSON.parse(readFileSync(config, 'utf8')) as { fuzzing?: { corpusDirectory?: string } } : {}).fuzzing?.corpusDirectory ?? ''
+    const folder = resolve(dirname(config), at)
+    const sequences = at === '' || !existsSync(join(folder, 'call_sequences')) ? [] : loaded(folder)
     if (sequences.length === 0) return all('no corpus')
     out = replay(src, entry(src, config), sequences, () => names.map((n) =>
-      `        { (bool ok, bytes memory ret) = h.call(abi.encodeWithSignature("${n}()")); log("probe.${n}=", ok && ret.length == 32 && abi.decode(ret, (bool))); }\n`).join(''))
+      `        { (bool ok, bytes memory ret) = h.call(abi.encodeWithSignature("${n}()")); log("probe.${n}=", ok && ret.length == 32 && abi.decode(ret, (bool))); }\n`).join(''), exposed)
   } catch (error) {
     logged(db, { plan, kind: 'swallowed', actor: 'score', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return all(firstLine(error))

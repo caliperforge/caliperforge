@@ -99,7 +99,7 @@ function guard({ root, rows: map, metrics, all }: Read, row: Row): Judged {
   const reverting = literals.length + errors.length === 0 ? m.totalReverts > 0
     : seen((r) => literals.includes(r) || errors.some((e) => new RegExp(`(?<!\\w)${e}(?!\\w)`).test(r)))
   return { met: passing && reverting, cells: [`passing: ${yes(passing)}`, `reverting: ${yes(reverting)}`], misread: false,
-    note: [...(passing ? [] : ['passing never seen']), ...(reverting ? [] : ['reverting never seen'])].join(', ') }
+    note: `${[...(passing ? [] : ['passing never seen']), ...(reverting ? [] : ['reverting never seen'])].join(', ')}; calls: ${String(m.totalCalls)}, reverts: ${reverts(m).join(', ') || 'none'}` }
 }
 
 function unread({ held }: ProbeReadings, name: string): Judged {

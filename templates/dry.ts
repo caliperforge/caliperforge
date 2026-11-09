@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { join, relative } from 'node:path'
 import { scoredSuite } from '../cli/bench.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
-import { maybe, planDir } from '../sequencer/workspace.ts'
+import { planDir } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { quieted } from './balances.ts'
@@ -13,7 +13,7 @@ import { fixed, graded, type Phase, type Touched } from './graded.ts'
 import { handoff, ranged, type Refused } from './handoff.ts'
 import { drawn, suited } from './map.ts'
 import { duplicated, planned } from './plan.ts'
-import { held, readings, trackers } from './probes.ts'
+import { held, readings, sampled, trackers } from './probes.ts'
 import { type Item, met, misread, type ProbeReadings, reach, unlocated, unmet, written } from './reach.ts'
 import { rebased } from './rebased.ts'
 import { callee, rows } from './slices.ts'
@@ -33,7 +33,7 @@ const UNBUILT: Refused[] = [{ rule: 'reach.unbuilt', note: 'coverage: no out/ to
 
 type Row = [phase: string, check: string, result: () => string]
 
-interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string; scored: string | null; said: Record<string, string>; fix: () => Touched | string }
+interface Copy { db: Db; plan: number; dir: string; skill: string; fizz: string; handoffs: string; map: string; scored: string | null; fix: () => Touched | string }
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
@@ -115,13 +115,14 @@ function reaching(at: Copy, name: string, corpus: string, probing: () => ProbeRe
 }
 
 function coverage(at: Copy): Row[] {
-  const { dir, handoffs } = at
+  const { db, plan, dir, handoffs } = at
   const corpus = join(handoffs, '../corpus_medusa')
   let probes: ProbeReadings | undefined
   const probing = (): ProbeReadings => probes ??= readings(suite(dir).probes, trackers(dir, corpus))
-  const scored = at.scored === null ? [] : reaching(at, 'scored', at.scored, () => ({ ...probing(), held: held(dir, suite(dir).probes, at.said) }))
+  const sampling = (on: string) => (): ProbeReadings => ({ ...probing(), held: held(dir, suite(dir).probes, sampled(db, plan, dir, 'test/fizz', on)) })
+  const scored = at.scored === null ? [] : reaching(at, 'scored', at.scored, sampling(at.scored))
   return [handed(at, 'coverage'), ['coverage', 'probe readings', checked(at, [join(corpus, 'call_sequences')], built(dir, () => { probing(); return [] }))],
-    ...scored, ...reaching(at, 'smoke', corpus, probing), grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), join(corpus, 'coverage/lcov.info')])]
+    ...scored, ...reaching(at, 'smoke', corpus, sampling(corpus)), grade(at, 'coverage', 'coverage', [join(handoffs, 'coverage.md'), join(corpus, 'coverage/lcov.info')])]
 }
 
 function invariants(at: Copy): Row[] {
@@ -157,10 +158,10 @@ function cleared(dir: string): void {
   for (const name of readdirSync(dir).filter((name) => !BUILT.includes(name))) rmSync(join(dir, name), { recursive: true, force: true })
 }
 
-function tabled(db: Db, root: string, plan: number, dir: string, fizz: string, scored?: string, said: Record<string, string> = {}): (readonly [string, string, string])[] {
+function tabled(db: Db, root: string, plan: number, dir: string, fizz: string, scored?: string): (readonly [string, string, string])[] {
   const handoffs = join(dir, META, 'handoff')
   let t: Touched | string | undefined
-  const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), scored: scored ?? null, said,
+  const at = { db, plan, dir, skill: join(root, 'seats/fizz_lean_generator/skill'), fizz, handoffs, map: join(handoffs, 'map.md'), scored: scored ?? null,
     fix: () => t ??= fixed(root, plan, dir) }
   return [...context(at), ...scaffold(at), ...coverage(at), ...invariants(at), ['end', 'count', checked(at, [], () => counted(dir))] satisfies Row]
     .map(([phase, check, result]) => [phase, check, result()] as const)
@@ -184,8 +185,7 @@ export function regraded(db: Db, root: string, plan: number, fizz: string): stri
     unrooted(suites, dir)
     const [archived, scored] = [join(suites, 'fizz_data/corpus_medusa'), join(dir, 'scored/corpus_medusa')]
     if (existsSync(archived)) cpSync(archived, scored, { recursive: true })
-    const { probes = '-' } = JSON.parse(maybe(root, plan, 'report.json') ?? '{}') as { probes?: Record<string, string> | '-' }
-    const table = tabled(db, root, plan, dir, fizz, scored, probes === '-' ? {} : probes).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
+    const table = tabled(db, root, plan, dir, fizz, scored).map((row) => misreads(row[2]) ? [...row, 'misread'] as const : row)
     const heading = `plan ${String(plan)} regraded from fuzz-bench/suites/${generator}/${target}`
     const refused = table.some((row) => row[2].startsWith('refuse throw') || row[2].startsWith('refuse reach.unbuilt') || row.length === 4)
     logged(db, { plan, kind: 'bench.regrade', actor: 'bench', outcome: refused ? 'refuse' : 'pass', message: heading, pointer: null, run: null })

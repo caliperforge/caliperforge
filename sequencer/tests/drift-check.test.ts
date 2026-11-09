@@ -76,17 +76,24 @@ test('D4 a card opened without its sheet is seen', () => {
   expect(drift(d, REGISTRY, NOW).find((r) => r.name === 'card_facts')?.state).toBe('seen')
 })
 
-test('D5 a builder hand-off with no step-2 build is seen', () => {
-  const d = db()
-  logged(d, { plan: null, kind: 'director', actor: 'director', outcome: 'pass',
+test('a hand-off with no step-2 or step-1 research build is seen', () => {
+  const ruling = (d: Db, plan: number | null): number => logged(d, { plan, kind: 'director', actor: 'director', outcome: 'pass',
     message: "rule: x (out of the fixer's reach, so the builder takes it)", pointer: null, run: null }, '2026-10-02 10:00:00')
-  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
-  logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass',
-    message: "rule: x (out of the fixer's reach, so the builder takes it)", pointer: null, run: null }, '2026-10-02 10:00:00')
-  expect(drift(d, REGISTRY, NOW).find((r) => r.name === 'rule_to_build')?.state).toBe('seen')
-  addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
-  runAt(d, 1, 2, 'typescript_specialist', '2026-10-02 12:00:00')
-  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
+  const bare = db()
+  ruling(bare, null)
+  expect(drift(bare, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
+  const state = (step: number, seat: string, at: string): string | undefined => {
+    const d = db()
+    ruling(d, 1)
+    addRule(d, { id: seat, kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
+    runAt(d, 1, step, seat, at)
+    return drift(d, REGISTRY, NOW).find((r) => r.name === 'rule_to_build')?.state
+  }
+  expect(state(2, 'typescript_specialist', '2026-10-02 12:00:00')).toBeUndefined()
+  expect(state(1, 'measurer', '2026-10-02 12:00:00')).toBeUndefined()
+  expect(state(1, 'fetcher', '2026-10-02 12:00:00')).toBeUndefined()
+  expect(state(1, 'researcher', '2026-10-02 12:00:00')).toBe('seen')
+  expect(state(1, 'measurer', '2026-10-03 11:00:00')).toBe('seen')
 })
 
 test('D1-D6 a fork left with Actions off a day is seen', () => {

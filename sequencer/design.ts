@@ -189,7 +189,9 @@ async function shoot(browser: Browser, base: string, out: string, shot: Shot): P
     page.on('pageerror', (e) => logged.push({ text: e.message, url: '' }))
     await page.goto(`${base}/${shot.screen}`, { waitUntil: 'load' })
     const path = join(out, 'design', `${shot.screen.replaceAll('/', '_')}.${String(shot.width)}.${shot.scheme}.png`)
-    const png = await page.screenshot({ path, fullPage: true })
+    // headless Chromium under load answers Page.captureScreenshot with "Unable to capture screenshot" now and then
+    const take = (): Promise<Buffer> => page.screenshot({ path, fullPage: true })
+    const png = await take().catch(take)
     const found = await page.evaluate<Found>(DEFECTS)
     const at = (rule: string, text = ''): string => `${shot.screen} ${rule} ${String(shot.width)} ${shot.scheme}${text === '' ? '' : ` ${text}`}`
     const spans = [

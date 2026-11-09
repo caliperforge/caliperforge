@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { chromium } from 'playwright-core'
-import { expect, test } from 'vitest'
+import { chromium, type Page } from 'playwright-core'
+import { afterEach, expect, test, vi } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
@@ -53,6 +53,32 @@ browsed('D3 a clean page passes and leaves four screenshots', async () => {
   const { verdict, out } = await run('<h1>Plans</h1>')
   expect(verdict).toMatchObject({ outcome: 'pass', spans: [] })
   expect(readdirSync(join(out, 'design'))).toHaveLength(4)
+})
+
+afterEach(() => { vi.restoreAllMocks() })
+
+const screenshot = async () => {
+  const browser = await chromium.launch({ headless: true })
+  const proto = Object.getPrototypeOf(await browser.newPage()) as Page
+  await browser.close()
+  return vi.spyOn(proto, 'screenshot')
+}
+
+const unable = (): Promise<never> => Promise.reject(new Error('Protocol error (Page.captureScreenshot): Unable to capture screenshot'))
+
+browsed('a screenshot that throws once is retaken', async () => {
+  const spy = await screenshot()
+  spy.mockImplementationOnce(unable)
+  const { verdict, out } = await run('<h1>Plans</h1>')
+  expect(verdict).toMatchObject({ outcome: 'pass', spans: [] })
+  expect(readdirSync(join(out, 'design'))).toHaveLength(4)
+})
+
+browsed('a screenshot that throws twice rejects the capture', async () => {
+  const spy = await screenshot()
+  spy.mockImplementationOnce(unable).mockImplementationOnce(unable)
+  await expect(run('<h1>Plans</h1>')).rejects.toThrow(/Unable to capture screenshot/)
+  expect(spy.mock.calls).toHaveLength(2)
 })
 
 browsed('D4 console.error and clipped text refuse', async () => {

@@ -981,7 +981,7 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 7200, workers: 8, shrinkLimit: 500 },
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 7200, workers: 8, testLimit: 0, shrinkLimit: 500 },
     compilation: { platform: 'crytic-compile', platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
@@ -1003,7 +1003,7 @@ test('a standalone medusa.json is the scored one but for workers', () => {
     corpusDirectory: 'test/fizz/fizz_data/corpus_medusa' }, slither: { useSlither: true } }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   const suite = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')) as { fuzzing: object }
-  expect(suite).toEqual({ fuzzing: { timeout: 7200, workers: 8, shrinkLimit: 500, corpusDirectory: 'fizz_data/corpus_medusa' }, slither: { useSlither: false } })
+  expect(suite).toEqual({ fuzzing: { timeout: 7200, workers: 8, testLimit: 0, shrinkLimit: 500, corpusDirectory: 'fizz_data/corpus_medusa' }, slither: { useSlither: false } })
   const bin = mkdtempSync(join(tmpdir(), 'cf-forge-'))
   writeFileSync(join(bin, 'forge'), '#!/bin/sh\nmkdir -p out/build-info\n', { mode: 0o755 })
   vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
@@ -1026,28 +1026,30 @@ function compiled(args: string[]): string {
   return JSON.stringify({ compilation: { platform: 'crytic-compile', platformConfig: { target: '.', args } } })
 }
 
+const DEPTH = { timeout: 7200, workers: 8, testLimit: 0, shrinkLimit: 500 }
+
 test('D1 a foundry.toml forces the foundry framework', () => {
   expect(installed(compiled(['--foundry-compile-all']), 'foundry.toml', 'hardhat.config.ts')).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false }, fuzzing: DEPTH })
 })
 
 test('D2 no foundry.toml forces no framework', () => {
   expect(installed(compiled(['--foundry-compile-all']))).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false }, fuzzing: DEPTH })
 })
 
 test('D3 a forced framework already in args is kept', () => {
   expect(installed(compiled(['--compile-force-framework', 'hardhat']), 'foundry.toml')).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat', '--foundry-ignore-compile'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat', '--foundry-ignore-compile'] } }, slither: { useSlither: false }, fuzzing: DEPTH })
 })
 
 test('D1 D2 --foundry-ignore-compile is kept on the scored copy', () => {
   const forced = installed(compiled(['--foundry-ignore-compile']), 'foundry.toml')
   const kept = installed(compiled(['--foundry-ignore-compile']))
   expect(forced).toEqual({ compilation: { platform: 'crytic-compile', platformConfig: { target: '../..',
-    args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
+    args: ['--foundry-ignore-compile', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false }, fuzzing: DEPTH })
   expect(kept).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
+    platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false }, fuzzing: DEPTH })
   for (const copy of [forced, kept]) expect(JSON.stringify(copy)).not.toContain('--foundry-compile-all')
 })
 
@@ -1198,9 +1200,17 @@ test('a walled, reaped plan rescores its partial suite', () => {
   expect(runRows(db).filter((r) => r.step === 1)).toEqual([])
 })
 
-test('D3 a set timeout and workers at most 8 are kept', () => {
-  expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 8 } }))).toEqual({
-    fuzzing: { timeout: 600, workers: 8, shrinkLimit: 500 }, slither: { useSlither: false } })
+test('D1 D3 D4 D5 the suite depth gives way to the bench depth', () => {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { workers: 4, timeout: 3600, testLimit: 250000 } }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')))
+    .toEqual({ fuzzing: DEPTH, slither: { useSlither: false } })
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).toMatch(/mode: refuzz\n$/)
+  const score: unknown = JSON.parse(get(root, 1, 'score.json'))
+  expect(score).toMatchObject({ timeout: 7200, workers: 8, testLimit: 0 })
+  expect(score).not.toHaveProperty('mode')
+  expect(score).not.toHaveProperty('source')
 })
 
 test('the score timeout is read from settings, refused without it', () => {
@@ -1227,7 +1237,7 @@ test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
   expect(done.note).toContain('0xffffffffffffffffffffffffffffffffffffffffffffffff')
   expect(done.note).not.toContain('0x21e19e0c9bab2400000')
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'],
+    fuzzing: { timeout: 7200, workers: 8, testLimit: 0, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'],
       shrinkLimit: 500 }, slither: { useSlither: false } })
 })
 
@@ -1239,7 +1249,7 @@ test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
   expect(scored(db, root, planById(db, 1)).note).toContain(balances[0])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 7200, workers: 8,
-      shrinkLimit: 500 }, compilation: { platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
+      testLimit: 0, shrinkLimit: 500 }, compilation: { platformConfig: { target: '../..', args: ['--foundry-ignore-compile'] } }, slither: { useSlither: false } })
 })
 
 test('rescore D1 D2 a done plan scores again on its suite', () => {
@@ -1693,7 +1703,7 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   const calls = { pre_fix: 10, fix: 20 }
   const seconds = expect.any(Number) as number
   const none = { false_positive: 0, broken: 0, not_run: 0 }
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7, broken: 0, flaky: 0,
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, timeout: 14400, workers: 8, testLimit: 0, mode: 'refuzz', source: 7, broken: 0, flaky: 0,
     seeds: [{ seed: 1, catch: 0, ...none, silent: 3, calls, compile_s: null, fuzz_s: null, seconds }, { seed: 2, catch: 3, ...none, silent: 0, calls, compile_s: null, fuzz_s: null, seconds }],
     union: { catch: 3, ...none, flaky: 0, silent: 0 } })
   expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: { catch: 3, flaky: 0, p1: ['silent', 'catch'] } })

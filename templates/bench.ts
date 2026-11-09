@@ -175,7 +175,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const upstream = join(bench, 'targets', `${target}.yml`)
   if (!existsSync(upstream)) return { outcome: 'refuse', spans: ['target.yml'], note: `fuzz-bench has no targets/${target}.yml` }
-  const yml = moded(upstream, listedIn(root, plan.id, upstream), keys.refuzz)
+  const yml = moded(upstream, listedIn(root, plan.id, upstream), config !== null)
   if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
   put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
     CARRIED.filter((key) => keys[key] !== undefined).map((key) => `${key}: ${keys[key] ?? ''}\n`).join('')}`)
@@ -189,16 +189,21 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const calls = keys.refuzz === undefined ? seeded.least : seeded.calls
   const score = { catches: seeded.union.catch, false_positives: seeded.union.false_positive,
     untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }
-  kept(db, root, plan.id, { target, generator }, score, sha, { partial, ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
+  kept(db, root, plan.id, { target, generator }, score, sha, { partial, ...depth(config?.config), ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
     ...(keys.refuzz === undefined ? {} : { mode: 'refuzz', source: Number(keys.refuzz) }), broken: seeded.union.broken, flaky: seeded.union.flaky, seeds: seeded.seeds, union: seeded.union, ...(ran.retried ? { via_ir_retry: true } : {}) })
   report(db, root, plan.id, ran.runs, score.not_powered, keys.refuzz !== undefined, sampled(db, plan.id, srcDir(root, plan.id), suite))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }
 
-/** run_pair writes its 250k `testLimit` over the suite's unless the yml it is handed says `mode: refuzz`: https://github.com/caliperforge/fuzz-bench/pull/59 (run_pair.py:296) */
-function moded(upstream: string, listed: string | null, refuzz: string | undefined): string | null {
-  if (listed === null || refuzz === undefined) return listed
+function depth(config: unknown): object {
+  const { timeout, workers, testLimit } = (field(config, 'fuzzing') ?? {}) as Record<string, unknown>
+  return { timeout, workers, testLimit }
+}
+
+/** run_pair writes its 250k `testLimit` over the suite's unless the yml it is handed says `mode: refuzz` (https://github.com/caliperforge/fuzz-bench/pull/59, run_pair.py:296): the line is what lets the scored `testLimit` 0 through. */
+function moded(upstream: string, listed: string | null, medusa: boolean): string | null {
+  if (listed === null || !medusa) return listed
   const yml = `${listed.trimEnd()}\nmode: refuzz\n`
   writeFileSync(upstream, yml)
   return yml
@@ -255,15 +260,14 @@ export function medusa(db: Db, plan: number | null, src: string, suite: string, 
   if (typeof platform === 'object' && platform !== null && Array.isArray(args)) Object.assign(platform, reusing({ compilation: { platformConfig: { args: (args as string[]).filter((arg) => arg !== '--ignore-compile') } } })?.platformConfig)
   const ignored = field(platform, 'args')
   if (existsSync(join(src, 'foundry.toml')) && Array.isArray(ignored) && !ignored.includes('--compile-force-framework')) Object.assign(platform as object, { args: [...(ignored as unknown[]), '--compile-force-framework', 'foundry'] })
-  if (refuzz !== null && field(config, 'fuzzing') === undefined) Object.assign(config as object, { fuzzing: {} })
+  if (field(config, 'fuzzing') === undefined) Object.assign(config as object, { fuzzing: {} })
   const fuzzing = field(config, 'fuzzing')
   const balances = field(fuzzing, 'targetContractsBalances')
   const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])
   if (typeof fuzzing === 'object' && fuzzing !== null) {
-    const { timeout, workers } = fuzzing as Record<string, unknown>
-    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? Number(seconds) : timeout, workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
+    Object.assign(fuzzing, { timeout: Number(seconds), workers: WORKERS, testLimit: 0 })
     if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
-    if (refuzz !== null) Object.assign(fuzzing, { timeout: refuzz.hours * 3600, testLimit: 0, corpusDirectory: refuzz.corpus })
+    if (refuzz !== null) Object.assign(fuzzing, { timeout: refuzz.hours * 3600, corpusDirectory: refuzz.corpus })
   }
   return { config: quieted(config), clamped }
 }

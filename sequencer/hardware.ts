@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { parse } from 'yaml'
 import { z } from 'zod'
 import type { Read } from '../cli/gh.ts'
 
-export const OWNED: string[] = []
+export const OWNED: string[] = z.object({ owned: z.array(z.string()) }).parse(parse(readFileSync(join(import.meta.dirname, '../rules/hardware.yaml'), 'utf8'))).owned
 
 /** Solana prose says "ledger" for the chain, so brand names match case-sensitive. */
 const DEVICES: Record<string, RegExp> = {

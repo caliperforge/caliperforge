@@ -49,13 +49,11 @@ export function isHeld(root: string, plan: number): boolean {
   return maybe(root, plan, NOTE) !== null
 }
 
-const REPEAT = `# Stopped\n\n${WHY.repeat}.\n`
-
 function repeatAtCheck(db: Db, root: string, plan: number): boolean {
   const row = planById(db, plan)
   const refusal = maybe(root, plan, 'refusal.md')
   if (row.step !== 3 || refusal === null) return false
-  if (row.template !== 'comms') return !isHeld(root, plan) && refusal.endsWith(REPEAT)
+  if (row.template !== 'comms') return !isHeld(root, plan) && refusal.endsWith(`# Stopped\n\n${WHY.repeat}.\n`)
   return row.state === 'blocked_on_ceo' && refusal.startsWith('step 3 ')
 }
 

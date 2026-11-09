@@ -54,10 +54,10 @@ function listed(name: string, list: Step[]): StepMap {
 
 const MAPS: Record<PlanRow['template'], StepMap> = {
   pr_path: { steps, at, last },
-  /** templates/comms.ts, templates/research.ts and templates/account.ts import back into this module through sequencer/seat.ts, so their steps may not exist yet when this one loads. */
+  /** templates/comms.ts, templates/research.ts, templates/bench.ts and templates/account.ts import back into this module through sequencer/seat.ts, so their steps may not exist yet when this one loads. */
   get comms() { return listed('comms', comms) },
   get research() { return listed('research', research) },
-  bench: listed('bench', bench),
+  get bench() { return listed('bench', bench) },
   get account() { return listed('account', account) },
 }
 
@@ -184,11 +184,11 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
   return null
 }
 
-/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed, or is done on a template that never pushes. */
+/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed. */
 function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: string | null }): { on: number | null; issue: string; why: string } | null {
   const found = newestOfOrigin(db, `https://github.com/${repo}/issues/${String(n)}`)
   const pred = found === undefined ? undefined : { ...found, closed_at }
-  if (pred?.state === 'done' && (landed(db, pred.id) || !mapOf(pred.template).steps.some((s) => s.name === 'push'))) return null
+  if (pred?.state === 'done' && landed(db, pred.id)) return null
   const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
   const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
   const issue = part === null ? `#${String(n)}` : `#${String(originIssue(part))}`

@@ -184,7 +184,7 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
   return null
 }
 
-/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed, or is done on a template that never pushes. */
+/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed. */
 function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: string | null }): { on: number | null; issue: string; why: string } | null {
   const found = newestOfOrigin(db, `https://github.com/${repo}/issues/${String(n)}`)
   const pred = found === undefined ? undefined : { ...found, closed_at }

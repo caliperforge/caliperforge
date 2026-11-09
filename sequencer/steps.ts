@@ -22,6 +22,7 @@ import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { readyGate, proven, repoOf, target, type Target } from './ready.ts'
 import { stood } from './stance.ts'
+import { hardware } from './hardware.ts'
 import { opened, push, reviewable, type Wire } from './push.ts'
 import { polled } from './unpolled.ts'
 import { diffOf, maybe, put } from './workspace.ts'
@@ -223,7 +224,7 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   if (read === undefined) return { outcome: 'pass', spans: [], note: pulse }
   const house = moved(root, row.repo, read)
   if (house !== null) return { outcome: 'refuse', spans: [`house/${row.repo}.md`], note: house }
-  const park = checked(db, root, plan, row, read)
+  const park = checked(db, root, plan, row, read) ?? hardware(row.repo, row.issue_no, read)
   if (park === null) {
     if (row.state === 'parked') setTargetState(db, plan.target_id, 'ready')
     return stood(db, root, plan, row, read, span, pulse)
@@ -233,9 +234,9 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   return { outcome: 'refuse', held: true, spans: [span], note: park, ...quiet }
 }
 
-/** A target `checked()` parked: its newest step 0 note is one of the questions `find()` parks on. */
+/** A target `checked()` or `hardware()` parked: its newest step 0 note is one of the questions `find()` or `hardware()` parks on. */
 function rechecks(db: Db, plan: PlanRow): boolean {
-  return target(db, plan)?.state === 'parked' && /^(?:wanted|unclaimed|shape): /.test(eventsOf(db, plan.id, 'measure').at(-1)?.message ?? '')
+  return target(db, plan)?.state === 'parked' && /^(?:wanted|unclaimed|shape|hardware): /.test(eventsOf(db, plan.id, 'measure').at(-1)?.message ?? '')
 }
 
 function checked(db: Db, root: string, plan: PlanRow, row: Target, read: Read): string | null {

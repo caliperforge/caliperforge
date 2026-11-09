@@ -260,12 +260,12 @@ test('bench_night reports a bench.fired outside the refuzz window', () => {
 
 const NO_AI = 'Please, no AI-generated contributions.'
 
-function widget(contributing: string): Read {
+function widget(contributing: string, body = 'b'): Read {
   return (args) => {
     if (String(args[1]).includes('/git/trees/')) return { tree: [{ path: 'CONTRIBUTING.md', type: 'blob', sha: 'c' }] }
     if (String(args[1]).includes('/git/blobs/')) return { content: Buffer.from(contributing).toString('base64') }
     if (args[0] === 'issue') {
-      return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: 'https://github.com/acme/widget/issues/12', author: { login: 'keeper' },
+      return { number: 12, title: 'hello', body, state: 'OPEN', url: 'https://github.com/acme/widget/issues/12', author: { login: 'keeper' },
         assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
     }
     if (args[0] === 'search' || !args.includes('merged')) return []
@@ -296,6 +296,17 @@ test('D4 once the ceo returns it, the unstated plan passes', () => {
   expect(measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n'))).toEqual({ outcome: 'pass', spans: [],
     note: 'acme/widget#12 warm; ai stance: unstated — no statement in 1 files, 0 maintainer comments, 1 outside merges in 90 days' })
   expect(maybe(w.root, 1, 'ask.md')).not.toContain('## Ask first')
+})
+
+test('a Ledger target parks at step 0 and is measured again', () => {
+  const w = world()
+  const read = widget('Run the tests.\n', 'Two Ledgers cannot sign at once.')
+  const note = 'hardware: Ledger — https://github.com/acme/widget/issues/12'
+  expect(measure(w.db, w.root, planOf(w.db, 1), read)).toMatchObject({ outcome: 'refuse', held: true, note })
+  expect(targetRow(w.db, 1).state).toBe('parked')
+  logged(w.db, { plan: 1, kind: 'measure', actor: mapOf('pr_path').at(0).runs, outcome: 'refuse', message: note, pointer: null, run: null })
+  expect(blocked(w.db, planOf(w.db, 1))).toBeNull()
+  expect(measure(w.db, w.root, planOf(w.db, 1), read)).toMatchObject({ outcome: 'refuse', held: true, note, quiet: true })
 })
 
 test('a Fixes # CONTRIBUTING gives the plan issue_ref Fixes', () => {

@@ -234,7 +234,7 @@ const OLDER = `# a part\n\n**What:** part q\n**Why:** y\n**When it ends:** part 
 
 const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, or answers what its parent ticket asks', done_when: 'part d' }
 
-const FILLED = 'question.json written, filled for a part: '
+const FILLED = 'question.json written, filled: '
   + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**'
 
 test('part D1: an older part\'s question.json is its own', () => {
@@ -252,6 +252,33 @@ test('part D2: gather rewrites a stale parent question.json', async () => {
   expect(outcome.note).toBe(`${FILLED}; researcher: answer.md written, sources.json written with 1 source(s)`)
   expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual(OWN)
   expect(prompt).toContain(`# question.json\n\n${JSON.stringify(OWN)}`)
+})
+
+const DIRECTOR = (date: string, q: string, more = '') => `\n## Answer from the director (${date})\n\n**Question:** ${q}\n${more}`
+
+const THREE = DIRECTOR('2026-11-08', 'ruled q', '**Would be wrong if:** ruled w\n**Done when:** ruled d\n')
+
+const BLOCK = 'from Answer from the director (2026-11-08)'
+
+test('a part takes its lines from the director block', () => {
+  const w = researching(OLDER + THREE)
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'question.json written, filled: '
+    + `**Question:** ${BLOCK}, **Would be wrong if:** ${BLOCK}, **Done when:** ${BLOCK}` })
+  expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual({ question: 'ruled q', wrong_if: 'ruled w', done_when: 'ruled d' })
+})
+
+test('the last director block wins over an earlier one', () => {
+  const w = researching(OLDER + DIRECTOR('2026-11-01', 'early q', '**Would be wrong if:** early w\n**Done when:** early d\n') + THREE)
+  question(w.root, plan(w.db, 1))
+  const json = maybe(w.root, 1, 'question.json') ?? ''
+  expect(JSON.parse(json)).toEqual({ question: 'ruled q', wrong_if: 'ruled w', done_when: 'ruled d' })
+  for (const early of ['early q', 'early w', 'early d']) expect(json).not.toContain(early)
+})
+
+test('a block with only a Question keeps the part fill', () => {
+  const w = researching(OLDER + DIRECTOR('2026-11-08', 'ruled q') + PARENT)
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: FILLED.replace('from **What:**', BLOCK) })
+  expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual({ ...OWN, question: 'ruled q' })
 })
 
 test('part D3: a parent-only Question is refused, unfired', async () => {

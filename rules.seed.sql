@@ -105,6 +105,7 @@ VALUES
   ('rules/registry/89-phase_refused_twice.yaml', 'card', 'rules/registry/89-phase_refused_twice.yaml', 'a7cbf1f9dd45f8c4ddcc96c3f7de76f0aa58d7cfeed8ba0ff4c66ebad016f7b9', '2026-11-04'),
   ('rules/registry/90-review_fence_refired.yaml', 'card', 'rules/registry/90-review_fence_refired.yaml', 'e46c001bedc909a44d937d99e82beb56eeaae6b32ce68e9f455dfdd239b53865', '2026-11-06'),
   ('rules/registry/91-bench_grade_cannot_run.yaml', 'card', 'rules/registry/91-bench_grade_cannot_run.yaml', 'a7960c11d8ac1d70689b5d6f207a98ae283f5b4cdfe2e24ea1c5abc27c7d2a00', '2026-11-07'),
+  ('rules/registry/92-research_question_ruled.yaml', 'card', 'rules/registry/92-research_question_ruled.yaml', 'e4c814658140b60cfa9e99e149b5b575f124c8f29a67f181c996c9e18f9f9f06', '2026-11-09'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'c4f3cfabd3098a7bf472f65a53896f4c07fa7e8e102b54c9ac0afdbe922a19bf', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

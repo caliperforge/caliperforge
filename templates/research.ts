@@ -22,9 +22,12 @@ import { originRef, type PlanRow } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
 import { transcripts } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
+import { said, unasked } from './asked.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { planted } from './rooted.ts'
 import { verified, type Ran } from './verified.ts'
+
+export { unasked }
 
 export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
 
@@ -135,27 +138,10 @@ export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record']
   name === 'gather' ? { ...row(name, i), seat: 'researcher', fires: 'seat', runs: 'researcher' }
   : name === 'review' ? { ...row(name, i), fires: 'seat', runs: 'senior_review' } : row(name, i))
 
-const LINES = [['question', '**Question:**', '**What:**'], ['wrong_if', '**Would be wrong if:**', null], ['done_when', '**Done when:**', '**When it ends:**']] as const
-
-const PART_WRONG = 'it leaves out what this part asks, or answers what its parent ticket asks'
-
 const WRITTEN = 'question.json written'
 
 const askOf = (root: string, plan: PlanRow): string =>
   ['ask.md', 'issue.md'].flatMap((name) => maybe(root, plan.id, name) ?? []).join('\n')
-
-const said = (ask: string) => {
-  const lines = ask.split('\n')
-  const parent = lines.findIndex((l) => l === '## Parent ticket' || l === '## Parent comments')
-  const own = parent === -1 ? lines : lines.slice(0, parent)
-  const line = (label: string): string => own.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''
-  return LINES.map(([key, label, field]) => {
-    const from = line(label) !== '' || parent === -1 ? null : field ?? 'the fixed part sentence'
-    return [key, label, from === null ? line(label) : field === null ? PART_WRONG : line(field), from] as const
-  })
-}
-
-export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
 
 export function question(root: string, plan: PlanRow): Outcome {
   const ask = askOf(root, plan)
@@ -163,7 +149,7 @@ export function question(root: string, plan: PlanRow): Outcome {
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
   put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said(ask).map(([key, , rest]) => [key, rest]))))
   const filled = said(ask).flatMap(([, label, , from]) => from === null ? [] : [`${label} from ${from}`])
-  return { outcome: 'pass', spans: [], note: `${WRITTEN}${filled.length === 0 ? '' : `, filled for a part: ${filled.join(', ')}`}` }
+  return { outcome: 'pass', spans: [], note: `${WRITTEN}${filled.length === 0 ? '' : `, filled: ${filled.join(', ')}`}` }
 }
 
 const OUTPUT = '**Output:**'

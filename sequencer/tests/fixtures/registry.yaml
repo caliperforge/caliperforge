@@ -563,3 +563,9 @@
   where: "kind = 'bench.grade' AND message GLOB '*cannot run: the fix touches no*'"
   gap: 7d
   expected: 0
+- name: research_question_ruled
+  table: events
+  column: at
+  where: "actor = 'senior_review' AND kind = 'review' AND outcome = 'refuse' AND message LIKE '%question as filed%'"
+  gap: 7d
+  expected: 0

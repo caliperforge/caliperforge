@@ -1,6 +1,7 @@
 import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
 import { moved } from '../cli/house.ts'
+import { add } from '../cli/plan.ts'
 import { CARD, waits } from '../cli/queue.ts'
 import { vouched } from '../precedents/openings.ts'
 import { parse } from '../rails/diff.ts'
@@ -169,10 +170,12 @@ export function heldOn(db: Db, plan: PlanRow): number | null {
 }
 
 /** A ticket with an `After:` line is not briefed until the plan of each issue it names lands; one that never will is held for a person. */
-function after(db: Db, root: string, plan: PlanRow): Outcome | null {
+function after(db: Db, root: string, plan: PlanRow, read?: Read): Outcome | null {
   const ref = originRef(plan)
   if (ref === null) return null
   for (const row of afters(db, ref.repo, ref.no)) {
+    const planless = newestOfOrigin(db, `https://github.com/${ref.repo}/issues/${String(row.n)}`) === undefined
+    if (row.open && read !== undefined && planless) add(db, root, `${ref.repo}#${String(row.n)}`, 'after', undefined, read)
     const gate = unmet(db, ref.repo, row)
     if (gate === null) continue
     if (gate.on !== null) hold(db, root, plan.id, gate.why, new Date(), gate.on)
@@ -205,7 +208,7 @@ function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: s
 }
 
 export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outcome {
-  const gated = after(db, root, plan)
+  const gated = after(db, root, plan, read)
   if (gated !== null) return gated
   if (internal(plan)) return { outcome: 'pass', spans: [], note: `${homeOf(plan)}#${String(originIssue(plan))} is ours; no account to measure` }
   const row = target(db, plan)

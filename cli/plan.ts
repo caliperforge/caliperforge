@@ -72,7 +72,7 @@ export function seatOf(labels: { name: string }[]): string | null {
   return labels.map((l) => SEAT_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined) ?? null
 }
 
-export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | 'tick', pipe?: string, read: Read = gh): Filed {
+export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | 'tick' | 'after', pipe?: string, read: Read = gh): Filed {
   const { repo, no } = parse(ref)
   const row = issue(repo, no, read)
   const lane = laneOf(row.labels)
@@ -93,7 +93,7 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   if (missing.length > 0) return refusal(db, ref, 'plan.research_lines', `has no ${missing.join(' or ')} line`)
   if (row.body.includes(COMMS)) return desk(db, root, ref, row, by)
   const n = wideTicket(row.body)
-  if (n !== null) return refusal(db, ref, 'plan.wide', `split first: ${String(n)} files`)
+  if (n !== null && by !== 'after') return refusal(db, ref, 'plan.wide', `split first: ${String(n)} files`)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, by, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
@@ -118,7 +118,7 @@ function refusal(db: Db, ref: string, subject: string, why: string): Filed {
   return { plan: null, lane: null, seat: null, state: 'refused', why: `${ref} ${why}`, origin, ruling: rulingId(db, subject) }
 }
 
-function desk(db: Db, root: string, ref: string, row: z.infer<typeof Issue>, by: Holder | 'intake' | 'tick'): Filed {
+function desk(db: Db, root: string, ref: string, row: z.infer<typeof Issue>, by: Holder | 'intake' | 'tick' | 'after'): Filed {
   const title = POST.exec(row.body)?.[0]
   if (title === undefined) {
     return refusal(db, ref, 'plan.comms_title', 'names no post title (weekly|daily YYYY-MM-DD or ship post <owner/repo#n>)')
@@ -134,7 +134,7 @@ function desk(db: Db, root: string, ref: string, row: z.infer<typeof Issue>, by:
   return { plan, lane: 'comms', seat, state: 'queued', why: `${ref} queued on comms as "${title}"`, origin: null, ruling: null }
 }
 
-export function file(db: Db, by: Holder | 'intake' | 'tick', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
+export function file(db: Db, by: Holder | 'intake' | 'tick' | 'after', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
   const held = planOfOrigin(db, url)
   if (held !== null) return held
   if (pipe === LANE[lane].pipe) lanePipe(db, pipe)

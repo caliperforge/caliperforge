@@ -1,0 +1,4 @@
+emulators:
+  - device: ledger
+    stand_in: 'caliperforge/ledger-rig (action: caliperforge/ledger-rig@v0)'
+    limits: 'Linux hidraw only; not physical USB or macOS IOKit'

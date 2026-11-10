@@ -26,21 +26,29 @@ function repo(issue: object, files: Record<string, string> = {}): Read {
   }
 }
 
-test('an issue naming a Ledger is refused with its url', () => {
-  expect(hardware(KEYCHAIN, 307, repo(ISSUE_307))).toBe(`hardware: Ledger — https://github.com/${KEYCHAIN}/issues/307`)
+const RIG = 'caliperforge/ledger-rig (action: caliperforge/ledger-rig@v0); limits: Linux hidraw only; not physical USB or macOS IOKit'
+
+test('an issue naming a Ledger passes with the ledger-rig line', () => {
+  expect(hardware(KEYCHAIN, 307, repo(ISSUE_307))).toEqual({ park: null, lines: `- hardware: ledger — ${RIG} — https://github.com/${KEYCHAIN}/issues/307\n` })
+})
+
+test('an issue naming a Trezor is refused with its url', () => {
+  const issue = { ...ISSUE_307, title: 'Trezor: signing hangs' }
+  expect(hardware(KEYCHAIN, 307, repo(issue))).toEqual({ park: `hardware: Trezor — https://github.com/${KEYCHAIN}/issues/307`, lines: '' })
 })
 
 test('a pure-software issue whose names find no code passes', () => {
   const issue = { title: 'Parse the config once', body: 'Cache `load_config` instead.', url: 'https://github.com/acme/widget/issues/1', comments: [] }
-  expect(hardware('acme/widget', 1, repo(issue))).toBeNull()
+  expect(hardware('acme/widget', 1, repo(issue))).toEqual({ park: null, lines: '' })
 })
 
 test('an owned device is not refused', () => {
-  expect(hardware(KEYCHAIN, 307, repo(ISSUE_307), ['Ledger'])).toBeNull()
+  expect(hardware(KEYCHAIN, 307, repo(ISSUE_307), ['Ledger'])).toEqual({ park: null, lines: '' })
 })
 
-test('a named test ignored for a Ledger is refused', () => {
+test('a test ignored for a Ledger gets its stand-in, or none', () => {
   const issue = { title: 'Signing twice fails', body: 'See `two_devices_sign`.', url: 'https://github.com/acme/widget/issues/2', comments: [] }
-  expect(hardware('acme/widget', 2, repo(issue, { 'tests/ledger.rs': SIGN })))
-    .toBe('hardware: Ledger — `two_devices_sign` in tests/ledger.rs')
+  const read = repo(issue, { 'tests/ledger.rs': SIGN })
+  expect(hardware('acme/widget', 2, read)).toEqual({ park: null, lines: `- hardware: ledger — ${RIG} — \`two_devices_sign\` in tests/ledger.rs\n` })
+  expect(hardware('acme/widget', 2, read, [], [])).toEqual({ park: 'hardware: Ledger — `two_devices_sign` in tests/ledger.rs', lines: '' })
 })

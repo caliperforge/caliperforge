@@ -85,6 +85,13 @@ When the ask mirrors, ports or matches another implementation, list that impleme
 under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the
 errors it raises, each with its file:line.
 
+When the ask needs a device to build or test against -- a Ledger, a phone, a USB or HID port -- read
+the `- hardware:` lines under `## Target check` before you write a line about that device. A device a
+line names is tested on its stand-in: name the stand-in and its limits under `## Approach`, and its test
+under **When it ends:**, `## Cases` and `## Tests`. Never write that a run on a physical device is a
+person's step. A device no line names stops the brief: close with the unclear fence, its question
+`hardware: <device> — <the url or path:line that needs it>`, and nothing after it.
+
 When the ask carries `# Your last brief`, the refusal under it names what to fix: fix that, keep every
 other line, and open only the files the fix needs.
 

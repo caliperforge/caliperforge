@@ -150,6 +150,23 @@ test('undone passes a cannot-be-done G row', () => {
   expect(undone(cannot('G1'), false).outcome).toBe('pass')
 })
 
+const ci = (pointer: string): string => `---\ndone:\n  - id: D1\n    status: ci\n${pointer}---\n`
+
+test('a ci row at a workflow file passes audit and undone', () => {
+  const fence = ci('    pointer: .github/workflows/keychain-307.yml\n')
+  expect(audit(fence, ['D1']).outcome).toBe('pass')
+  expect(undone(fence, false).outcome).toBe('pass')
+  expect(undone(fence.replace('status: ci', 'status: cannot-be-done'), false).message).toBe('cannot-be-done: D1')
+})
+
+test('refuses a ci row with no pointer under .github/workflows', () => {
+  for (const pointer of ['', "    pointer: ' '\n", '    pointer: src/a.ts:1\n']) {
+    const verdict = audit(ci(pointer), ['D1'])
+    expect(verdict.spans).toEqual(['D1'])
+    expect(verdict.message).toBe('D1 expected by the ticket, absent from the handback or carried with no pointer')
+  }
+})
+
 test('refuses, not throws, on a fence that is not a done envelope', () => {
   const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n']
   for (const fence of fences) {

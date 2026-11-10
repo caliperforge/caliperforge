@@ -1011,6 +1011,17 @@ test('an unrun plan short of pre_review is refused', async () => {
   expect(ciVerdict()).toMatchObject({ outcome: 'refuse', spans: ['ci.local'] })
 })
 
+const KEYCHAIN = '.github/workflows/keychain-307.yml'
+const OWING = CARRIED.replace(/D2\n {4}status: done\n {4}pointer: \S+/, `D2\n    status: ci\n    pointer: ${KEYCHAIN}`)
+
+test('a ci-owed plan no fork workflow runs on goes to the ceo', async () => {
+  const w = await TEX_CI()
+  put(w.root, 1, 'step-2.handback.md', OWING)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, () => '[]'))).toMatchObject({ outcome: 'needs_ceo', spans: [KEYCHAIN],
+    note: expect.stringMatching(/^\.github\/workflows\/keychain-307\.yml: only a workflow run shows these green, and /) as unknown })
+  expect(ciGreen(w)).toEqual([])
+})
+
 const now = (w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
 
 test('a CI hold leaves a waiting on CI row in now', async () => {
@@ -1107,6 +1118,46 @@ test('a run that stays cancelled is re-run once, then to the ceo', async () => {
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
   expect(log).toEqual(['run rerun 1 --repo caliperforge/widget'])
   expect(plan(w.db, 1).step).toBe(6)
+})
+
+/** AT_CI built on `src/` whose hand-back owes keychain-307 as `ci`; the fork lists it, as `keychain` says, beside a green `src CI`, the one run `mine()` gates. */
+const owing = async (keychain?: Listed): Promise<[World, () => Outcome | null]> => {
+  const w = await AT_CI()
+  put(w.root, 1, 'step-2.handback.md', OWING)
+  built(w.root, 1, 'export const again = 1')
+  mkdirSync(join(srcDir(w.root, 1), '.github/workflows'), { recursive: true })
+  writeFileSync(join(srcDir(w.root, 1), KEYCHAIN), 'name: keychain-307\non: push\n')
+  const runs = keychain === undefined ? { 'src CI': GREEN_RUN } : { 'src CI': GREEN_RUN, 'keychain-307': keychain }
+  return [w, () => forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, forkRuns([], w, runs)))]
+}
+
+test('a running ci-owed run is held', async () => {
+  const [, ci] = await owing({ status: 'in_progress', conclusion: '' })
+  expect(ci()).toMatchObject({ outcome: 'pass', held: true, note: expect.stringMatching(/still running keychain-307, tick 1 of 45$/) as unknown })
+})
+
+test('a red ci-owed run goes to the builder, ungated', async () => {
+  const [w, ci] = await owing({ status: 'completed', conclusion: 'failure' })
+  const out = ci()
+  expect(out).toMatchObject({ outcome: 'refuse', to: 2, spans: ['ci.red keychain-307'] })
+  expect(out?.message).toMatch(/^## keychain-307\n\n.*boom/s)
+  expect(JSON.parse(get(w.root, 1, 'ci.json'))).toContainEqual(expect.objectContaining({ workflow: 'keychain-307', gates: false }))
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
+})
+
+test('a ci-owed workflow with no run is held, then to the ceo', async () => {
+  const [w, ci] = await owing()
+  expect(ci()).toMatchObject({ outcome: 'pass', held: true,
+    note: expect.stringMatching(/has no run of \.github\/workflows\/keychain-307\.yml, tick 1 of 10$/) as unknown })
+  waited(w, 'ci.waits', 10)
+  expect(ci()).toMatchObject({ outcome: 'needs_ceo', spans: [KEYCHAIN], note: expect.stringMatching(/ran no \.github\/workflows\/keychain-307\.yml at /) as unknown })
+  expect(ciGreen(w)).toEqual([])
+})
+
+test('a green ci-owed run passes ci-green', async () => {
+  const [w, ci] = await owing(GREEN_RUN)
+  expect(ci()).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
 })
 
 test('step 6 waits out the push window, then judges the new run', async () => {

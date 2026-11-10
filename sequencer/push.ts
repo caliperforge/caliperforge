@@ -29,6 +29,7 @@ import { rerun as cancelled } from './rerun.ts'
 import { based, moved, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
+import { owed, owing } from './owed.ts'
 import { prBody, prTitle } from './pr.ts'
 import { assembled, cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
 import { assembly, forkOf, homeOf, onto } from './home.ts'
@@ -131,14 +132,14 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const on = { fork, branch: ci, sha: tip }
   const early = unfired(db, root, plan, repo, head, on, wire)
   if (early !== null) return early.stop
-  const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo, plan.id)?.issue_ref }, touched(root, plan.id), wire.runs)
+  const { verdict, board, absent } = owing(root, plan.id, judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo, plan.id)?.issue_ref }, touched(root, plan.id), wire.runs))
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`
   const waiting = unfinished(verdict.spans) ?? others(board)
-  const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
-  const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
+  const window = carries(verdict.spans, MISSING) || waiting === null ? APPEARS : FINISHES
+  const hold = waiting === null && absent.length === 0 ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting ?? `has no run of ${absent.join(', ')}`}`, window)
   if (hold !== null) return onCi(db, plan.id, hold)
-  const stop = stalled(verdict.spans, board, at, fork, tip)
+  const stop = stalled(verdict.spans, board, at, fork, tip, absent)
   if (stop !== null) { freed(db, plan.id); return carries(stop.spans, MISSING) && forkOf(root, plan) !== null ? checked(db, root, plan, repo, stop.note) : stop }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
@@ -184,9 +185,9 @@ function refused(at: string, verdict: Verdict, failed: ReturnType<typeof red>): 
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2, note: `their CI is red on ${at}; back to the builder with the failed log` }
 }
 
-function stalled(spans: string[], board: Board[], at: string, fork: string, tip: string): Outcome | null {
+function stalled(spans: string[], board: Board[], at: string, fork: string, tip: string, absent: string[]): Outcome | null {
   if (carries(spans, MISSING)) return { outcome: 'needs_ceo', spans, note: `${fork} ran no workflow at ${tip.slice(0, 12)} in ${String(APPEARS)} ticks` }
-  if (!carries(spans, PENDING)) return null
+  if (!carries(spans, PENDING)) return absent.length === 0 ? null : { outcome: 'needs_ceo', spans: absent, note: `${fork} ran no ${absent.join(', ')} at ${tip.slice(0, 12)} in ${String(APPEARS)} ticks` }
   const running = board.filter((r) => r.gates && r.status !== 'completed').map((r) => r.workflow).join(', ')
   return { outcome: 'needs_ceo', spans: [PENDING], note: `${at} is still running ${running} after ${String(FINISHES)} ticks` }
 }
@@ -311,11 +312,13 @@ function events(on: unknown): string[] | null {
  * host at this head, stand as it. Our own branch lands on `main` from the checkout. An outside repo with no
  * workflows, or none that runs on its branch, comes here too, after its branch is sent.
  */
-function checked(db: Db, root: string, plan: PlanRow, repo: string, because?: string): null {
+function checked(db: Db, root: string, plan: PlanRow, repo: string, because?: string): Outcome | null {
   const passed = passing(db, plan.id, 'gate', 'pre_review')
   const sha = headOf(root, plan.id).sha
   const asm = assembly(db, plan)
   const why = because ?? (asm === null ? `${repo} runs no workflows` : `fork CI runs once on ${asm.branch}, at the parent's step 6`)
+  const owes = owed(root, plan.id).map((o) => o.file)
+  if (owes.length > 0) return { outcome: 'needs_ceo', spans: owes, note: `${owes.join(', ')}: only a workflow run shows these green, and ${why}` }
   const verdict: Verdict = {
     outcome: passed ? 'pass' : 'refuse',
     defect_class: null,

@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -45,13 +45,13 @@ function seeded(mode: string) {
   return { db, home }
 }
 
-function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'completed'): Provider {
+function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'completed', said = FIX): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (packet) => {
       packets.push(packet)
       const name = basename(packet.transcript)
-      const text = name.startsWith('fixer') ? fix : FIX
+      const text = name.startsWith('fixer') ? fix : name.startsWith('fix-') ? said : FIX
       return Promise.resolve({ text, transcript_path: packet.transcript, usage: { input: 10, cache: 0, output: 5 },
         seconds: 0, ended: name.startsWith('fix-') ? seated : 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
@@ -400,17 +400,31 @@ function swift(mode: string, listed = true) {
   const s = seeded(mode)
   put(s.home, 7, 'refusal.md', SWIFT)
   if (listed) record(s.db, 7, [{ path: 'swift/Sources/x.swift', is_new: false }])
+  mkdirSync(join(srcDir(s.home, 7), 'swift/Sources'), { recursive: true })
+  writeFileSync(join(srcDir(s.home, 7), 'swift/Sources/x.swift'), '\n', { mode: 0o644 })
   return s
 }
+
+const modeOf = (home: string) => statSync(join(srcDir(home, 7), 'swift/Sources/x.swift')).mode & 0o777
 
 test('D1 a listed swift span goes to the swift seat in fix mode', async () => {
   const { db, home } = swift('live')
   const packets: Packet[] = []
-  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  await woke(db, home, stub(RETURN, packets, 'completed', `## Modes\n\n- 100755 swift/Sources/x.swift\n\n${FIX}`), now, () => undefined, wire([]))
   expect(runs(db)).toEqual([...RAN, { seat: 'swift_specialist', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: 'fix' }])
   expect(of(packets, 'fix-')?.cwd).toBe(srcDir(home, 7))
+  expect(of(packets, 'fix-')?.prompt).toContain(readFileSync(join(home, 'seats/modes/fix.md'), 'utf8'))
   expect(of(packets, 'fixer')?.tools).toEqual(['Read', 'Glob', 'Grep'])
+  expect(modeOf(home)).toBe(0o755)
+  expect(maybe(home, 7, 'fixes.jsonl')).not.toContain('"applied":"unrepaired"')
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
+})
+
+test.each(['- 100755 swift/Sources/gone.swift', '- 100700 swift/Sources/x.swift'])('a seat mode row %s is unrepaired', async (row) => {
+  const { db, home } = swift('live')
+  await woke(db, home, stub(RETURN, [], 'completed', `## Modes\n\n${row}\n\n${FIX}`), now, () => undefined, wire([]))
+  expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unrepaired"')
+  expect(modeOf(home)).toBe(0o644)
 })
 
 test.each([false, true])('D2 an unlisted swift span stays with the fixer: stray %s', async (stray) => {

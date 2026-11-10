@@ -5,8 +5,9 @@ import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
-import { builder } from '../templates/pr-path.ts'
+import { at, builder } from '../templates/pr-path.ts'
 import { kernelPlan } from './home.ts'
+import { moded } from './moded.ts'
 import { fenceFor, languageOfSpan, pathOfSpan, TEST } from './route.ts'
 import { recorded } from './seat.ts'
 import { maybe, planDir, srcDir } from './workspace.ts'
@@ -28,12 +29,12 @@ export function coder(db: Db, root: string, plan: PlanRow): string | null {
 /** The language seat makes the repair in a fresh conversation, from the fixer's diagnosis and the stop. */
 export async function repaired(db: Db, root: string, plan: PlanRow, to: string, issue: string, wall: number,
   provider: Provider): Promise<boolean> {
-  const { manifest, prompt, hash } = seat(root, to)
+  const { manifest, prompt, hash } = seat(root, to, 'fix')
   const fired = await provider.fire({
     ...packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id), pending(planDir(root, plan.id), `fix-${to}`),
       kernelPlan(plan), fenceFor(db, plan.id, manifest.write_paths)),
     wall,
   })
   recorded(db, plan.id, plan.step, to, hash, provider.name, manifest, fired, 'fix')
-  return fired.ended === 'completed'
+  return fired.ended === 'completed' && moded(db, root, plan, { ...at(2), runs: to }, fired.text) === null
 }

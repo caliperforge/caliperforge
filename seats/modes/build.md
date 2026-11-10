@@ -26,6 +26,7 @@ done:
 ```
 
 One `- id:` row per `- D<n>` the issue lists, same ids, same order. An issue that lists none has one, `D1`.
-`status` is `done`, `cannot-be-done` or `they-said-dont`.
+`status` is `done`, `cannot-be-done`, `they-said-dont` or `ci`.
+A case only a push-triggered workflow run can show green is `ci`, its pointer the workflow file under `.github/workflows/`: the machine pushes the branch at step 6, waits for that run, and returns a red one to you with its log.
 A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.
 A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

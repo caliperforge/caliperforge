@@ -19,7 +19,7 @@ const Manifest = z.object({
 const Envelope = z.object({
   done: z.array(z.object({
     id: z.string(),
-    status: z.enum(['done', 'cannot-be-done', 'they-said-dont', 'brief-wrong']),
+    status: z.enum(['done', 'cannot-be-done', 'they-said-dont', 'brief-wrong', 'ci']),
     pointer: z.string().nullish(),
     why: z.string().nullish(),
   })).min(1),
@@ -29,7 +29,7 @@ export function audit(handback: string, expected: string[], prev = '', diff = ''
   const rows = carried(handback)
   const subject = createHash('sha256').update(handback).digest('hex')
   if (typeof rows === 'string') return refuse(subject, ['step-2.handback.md'], rows)
-  const absent = expected.filter((id) => (rows.get(id)?.pointer ?? '').trim() === '')
+  const absent = expected.filter((id) => !(rows.get(id)?.status === 'ci' ? /^\.github\/workflows\// : /\S/).test((rows.get(id)?.pointer ?? '').trim()))
   const stands = untouched(prev, diff)
   const forward = absent.filter(stands)
   const spans = absent.filter((id) => !stands(id))

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { isScalar, parseDocument } from 'yaml'
 import type { Board } from '../rails/ci-green/index.ts'
@@ -19,7 +19,7 @@ export function owed(root: string, plan: number): Owed[] {
 }
 
 function named(path: string): string | null {
-  if (!existsSync(path)) return null
+  if (statSync(path, { throwIfNoEntry: false })?.isFile() !== true) return null
   const name = parseDocument(readFileSync(path, 'utf8')).get('name', true)
   return isScalar(name) && typeof name.value === 'string' ? name.value : null
 }

@@ -187,7 +187,7 @@ test('760b D5 a profile naming the lane lets its repo file there', () => {
   expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([web])))
     .toMatchObject({ state: 'queued', lane: 'loupe', seat: 'web_specialist' })
   expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([{ ...web, labels: ['lane:machine'] }]))).toMatchObject({
-    state: 'refused', why: 'caliperforge/atelier-web#1 is on caliperforge/atelier-web; the machine lane builds in caliperforge/caliperforge',
+    state: 'refused', why: 'caliperforge/atelier-web#1 is on caliperforge/atelier-web; the machine lane builds in caliperforge/caliperforge or caliperforge/ledger-rig',
     origin: { origin_kind: 'ruling', origin_ref: 'plan.lane_home' } })
 })
 

@@ -98,7 +98,7 @@ it('1437 D4 a rubin or bio issue queues on its pipe', () => {
   }
 })
 
-it('1486 D1 rubin has six homes, machine two, and every other lane one', () => {
+it('1486 D1 rubin has six homes, machine two, others one', () => {
   expect(homes('rubin')).toEqual(RUBIN.map((r) => `${FORK}/${r}`))
   expect(homes('machine')).toEqual([LANE.machine.home, `${FORK}/ledger-rig`])
   for (const l of LANES.filter((n) => n !== 'rubin' && n !== 'machine')) expect(homes(l)).toEqual([LANE[l].home])

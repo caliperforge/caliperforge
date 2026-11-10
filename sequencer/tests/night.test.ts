@@ -1,14 +1,14 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { eventsOf } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { dial, enable, hours } from '../../store/lanes.ts'
-import { take } from '../../store/leases.ts'
+import { amend, dial, enable, hours } from '../../store/lanes.ts'
+import { held, take } from '../../store/leases.ts'
 import { dropPipes, pipeNamed, planById, putPlan, type PlanRow } from '../../store/plans.ts'
-import { dry, tick } from '../index.ts'
+import { dry, lap, tick } from '../index.ts'
 import { route } from '../next.ts'
 import { mapOf } from '../steps.ts'
 import { stub } from './world.ts'
@@ -54,6 +54,29 @@ test('a tick at 23:00 fires score and leaves no bench_night wait', async () => {
   await tick(db, mkdtempSync(join(tmpdir(), 'cf-night-')), stub(''), NIGHT)
   expect(eventsOf(db, 1, 'bench.fired')).toHaveLength(1)
   expect(planById(db, 1).wait_reason).not.toBe('bench_night')
+})
+
+test('a running score plan ticked by day waits on bench_night', async () => {
+  const db = closed([2])
+  amend(db, 1, { state: 'running' })
+  await tick(db, mkdtempSync(join(tmpdir(), 'cf-night-')), stub(''), DAY)
+  expect(planById(db, 1).wait_reason).toBe('bench_night')
+  expect(eventsOf(db, 1, 'bench.fired')).toEqual([])
+})
+
+test('a lap by day on a leased score plan fires nothing', async () => {
+  const db = closed([2])
+  amend(db, 1, { state: 'running' })
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(DAY)
+  try {
+    take(db, 1, new Date(), 7)
+    expect(await lap(db, mkdtempSync(join(tmpdir(), 'cf-night-')), stub(''), 1, 7, null)).toEqual([])
+  } finally {
+    vi.useRealTimers()
+  }
+  expect(eventsOf(db, 1, 'bench.fired')).toEqual([])
+  expect(held(db, DAY)).toEqual([])
 })
 
 test('without open refuzz a closed bench lane offers nothing', () => {

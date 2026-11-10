@@ -76,9 +76,12 @@ const GONE = /^\s*[-*]\s*`?([A-Za-z0-9_+./-]+\.[A-Za-z0-9]+)`?\s*(?:(?:—|–|-
  * that names no path is unread; a ``` code-fence line, wrapping the list or the done block, is not a row.
  */
 export function deletions(handback: string): { paths: string[]; unread: string[] } {
-  const rows = (section(handback, '## Deleted').split(/^---$/m)[0] ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('```'))
+  const rows = rowsUnder(handback, '## Deleted')
   return { paths: [...new Set(rows.flatMap((l) => GONE.exec(l)?.[1] ?? []))], unread: rows.filter((l) => !GONE.test(l)) }
 }
+
+export const rowsUnder = (handback: string, heading: string): string[] =>
+  (section(handback, heading).split(/^---$/m)[0] ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('```'))
 
 /** A migration a diff creates: `--- /dev/null` over `+++ b/schema/NNNN_*.sql`. */
 const MADE = /^--- \/dev\/null\n\+\+\+ b\/(schema\/(\d{4})_[^\n/]*\.sql)$/gm

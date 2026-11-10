@@ -42,6 +42,7 @@ import { answered } from './answered.ts'
 import { inputs } from './output.ts'
 import { looked } from './design.ts'
 import { dropped } from './dropped.ts'
+import { moded } from './moded.ts'
 import { asked, blinded, findings, left, owed } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
@@ -79,8 +80,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   if (fired.ended !== 'completed') return exited(step, fired)
   const kept = await fenced(db, root, plan, step, provider, fired.text)
   if (typeof kept !== 'string') return kept
-  return dropped(db, root, plan, step, kept)
-    ?? empty(root, plan, step, kept)
+  return dropped(db, root, plan, step, kept) ?? moded(db, root, plan, step, kept) ?? empty(root, plan, step, kept)
     ?? { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
 }
 

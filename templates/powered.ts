@@ -10,18 +10,21 @@ type Keys = Pick<Score, 'target' | 'generator'>
 
 const AGENTS = 8
 
+const FLOORS: Record<string, number> = { fizz_lean: 0, fizz_lean_v5: 0 }
+
 export const FEWEST = 3
 
 const TAIL = 40
 
-export function degraded(properties: number, agents = 0): 'reduced_generate' | 'few_properties' | null {
-  if (agents < AGENTS) return 'reduced_generate'
+export function degraded(properties: number, agents = 0, floor = AGENTS): 'reduced_generate' | 'few_properties' | null {
+  if (agents < floor) return 'reduced_generate'
   return properties < FEWEST ? 'few_properties' : null
 }
 
-export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false, refuzz = false): Score['not_powered'] {
+export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false, refuzz = false,
+  generator = 'fizz'): Score['not_powered'] {
   if (failed) return 'compile_failed'
-  const why = degraded(properties, agents)
+  const why = degraded(properties, agents, FLOORS[generator] ?? AGENTS)
   if (why !== null) return why
   if (refuzz) return null
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'

@@ -197,11 +197,12 @@ function capStop() {
   return seed
 }
 
-const targeted = (db: Db) => db.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,
+const TARGETED = `INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,
     cross_repo_activity, pulse, evidence) VALUES (1, 'acme/kit', '2026-09-24', 2, 1, '2026-09-24', 3, 4, 'warm', 'https://github.com/acme/kit');
     INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
     VALUES (1, 1, 'acme/kit', 706, 'ludo', 'ready', '2026-09-24', 'https://github.com/acme/kit/issues/706');
-    UPDATE plans SET target_id = 1, lane = NULL, seat = NULL, origin = NULL WHERE id = 7`)
+    UPDATE plans SET target_id = 1, lane = NULL, seat = NULL, origin = NULL WHERE id = 7`
+const targeted = (db: Db) => db.exec(TARGETED)
 
 function filing(bodies: string[]): Wire {
   const base = wire()
@@ -1278,9 +1279,9 @@ const LINES = `**Question:** how long does a tick take?
 **Output:** ~/cf_work/7/`
 const researched = (lines: string) => `---\nmove: research\nwhy: the ask only measures\nanswer: |\n${lines.replace(/^/gm, '  ')}\n---\n`
 
-async function researching() {
+async function researching(origin: string) {
   const { db, home } = seeded('1')
-  db.exec(UNBUILT)
+  db.exec(`${UNBUILT}; UPDATE plans SET origin = '${origin}' WHERE id = 7`)
   await run(db, home, researched(LINES))
   expect(plan7(db)).toMatchObject({ template: 'research', lane: 'research', pipe_id: pipeNamed(db, 'research')?.id, step: 0, waits_on: null })
   expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${LINES}\n`)
@@ -1311,6 +1312,7 @@ const UNRESEARCHED = [
   { sql: UNBUILT, lines: LINES.replace(/^\*\*Measure:\*\*.*\n/m, '') },
   ...['~/cf_work', '~/cf_work/../x', '/tmp/x'].map((out) => ({ sql: UNBUILT, lines: LINES.replace('~/cf_work/7/', out) })),
   { sql: UNBUILT, lines: LINES.replace(/^\*\*Done when:\*\*.*\n/m, '') },
+  { sql: `${UNBUILT}; ${TARGETED}`, lines: LINES },
 ]
 
 async function unresearched() {
@@ -1327,7 +1329,8 @@ async function unresearched() {
 }
 
 describe('research', () => {
-  test('research moves an unbuilt plan to the research lane', researching)
+  test('research moves an unbuilt plan to the research lane', () => researching('https://github.com/caliperforge/caliperforge/issues/139'))
+  test('research moves an unbuilt plan of another repo of ours', () => researching('https://github.com/caliperforge/neo-watch/issues/6'))
   test('a research answer with no Output fires the measurer', measured)
   test('research on a job it cannot take is held by the coo', LONG, unresearched)
 })

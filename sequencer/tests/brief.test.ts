@@ -313,7 +313,7 @@ test('a prompt row in its fence, or with no line, changes format', () => {
 })
 
 test('D1: build.md in its fence beside store/plans.ts is two jobs', () => {
-  expect(on(prompt(['- seats/modes/build.md:16', '- store/plans.ts'], ['- sequencer/rails.ts', '- rails/tight/prose.ts'])))
+  expect(on(prompt(['- seats/modes/build.md:20','- store/plans.ts'], ['- sequencer/rails.ts', '- rails/tight/prose.ts'])))
     .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })
 })
 

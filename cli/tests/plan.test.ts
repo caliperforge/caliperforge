@@ -187,7 +187,7 @@ test('760b D5 a profile naming the lane lets its repo file there', () => {
   expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([web])))
     .toMatchObject({ state: 'queued', lane: 'loupe', seat: 'web_specialist' })
   expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([{ ...web, labels: ['lane:machine'] }]))).toMatchObject({
-    state: 'refused', why: 'caliperforge/atelier-web#1 is on caliperforge/atelier-web; the machine lane builds in caliperforge/caliperforge',
+    state: 'refused', why: 'caliperforge/atelier-web#1 is on caliperforge/atelier-web; the machine lane builds in caliperforge/caliperforge or caliperforge/ledger-rig',
     origin: { origin_kind: 'ruling', origin_ref: 'plan.lane_home' } })
 })
 
@@ -240,15 +240,19 @@ const PATHS = ['a.ts', 'b.ts', '`c.ts:4`', 'd.ts', 'e.ts', 'f.ts'].map((p) => `-
 
 const TESTS = ['- cli/tests/plan.test.ts', '- a.test.ts']
 
-test('D1 a Files list of 6 non-test files is refused', () => {
+test('D1 a Files list of 6 non-test files is refused but by after', () => {
   const db = piped()
   const body = `What.\r\n\r\n**Files:**\r\n${[...PATHS, TESTS[0]].join('\r\n')}\r\n\r\n- g.ts\r\n`
-  const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([{ ...ISSUE, body }]))
-  expect(filed).toMatchObject({ state: 'refused', plan: null, origin: { origin_kind: 'ruling', origin_ref: 'plan.wide' },
-    why: 'caliperforge/caliperforge#25 split first: 6 files' })
+  for (const by of ['ceo', 'tick', 'intake'] as const) {
+    const filed = add(db, root, 'caliperforge/caliperforge#25', by, 'internal', canned([{ ...ISSUE, body }]))
+    expect(filed).toMatchObject({ state: 'refused', plan: null, origin: { origin_kind: 'ruling', origin_ref: 'plan.wide' },
+      why: 'caliperforge/caliperforge#25 split first: 6 files' })
+  }
   expect(allPlans(db)).toEqual([])
   expect(allEvents(db)).toEqual([])
   expect(existsSync(join(root, '.cf/work'))).toBe(false)
+  const filed = add(db, root, 'caliperforge/caliperforge#25', 'after', 'internal', canned([{ ...ISSUE, body }]))
+  expect(allPlans(db)).toMatchObject([{ id: filed.plan, state: 'queued', origin: URL }])
 })
 
 test('D2 five files plus tests file one queued plan', () => {

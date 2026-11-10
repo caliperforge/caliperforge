@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import type { Read } from '../../cli/gh.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open } from '../../store/index.ts'
@@ -30,6 +31,11 @@ function seeded(first: { state: PlanRow['state']; closedAt?: string; template?: 
   const one = first === null ? null : plan(1, first.state, first.template)
   const two = plan(2, 'running')
   return { db, root: mkdtempSync(join(tmpdir(), 'cf-after-')), one, two }
+}
+
+const viewed = (labels: readonly string[]): Read => (args) => {
+  if (args.slice(0, 3).join(' ') !== 'issue view 1') throw new Error(`no fixture for ${args.join(' ')}`)
+  return { number: 1, title: 't1', body: 'first', url: `https://github.com/${home}/issues/1`, labels: labels.map((name) => ({ name })) }
 }
 
 type Db = ReturnType<typeof open>
@@ -81,10 +87,26 @@ test('D3 an After closed unlanded or planless holds for the COO', () => {
   expect(row(closed.db, closed.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
     held_why: `#1 closed without plan ${String(closed.one)} landing` })
   expect(maybe(closed.root, closed.two, 'parked.md')).toBeNull()
-  const none = seeded(null)
-  expect(measure(none.db, none.root, plan(none.db, none.two)).held).toBe(true)
-  expect(row(none.db, none.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo', held_why: '#1 has no plan' })
-  expect(maybe(none.root, none.two, 'parked.md')).toBeNull()
+  const shut = seeded(null)
+  recordListing(shut.db, home, [listing(1, 'first', '2026-09-28')], false)
+  const unlisted = seeded(null)
+  recordListing(unlisted.db, home, [listing(2, 'second\n\nAfter: #1\n')], true)
+  const unlabelled = seeded(null)
+  for (const [{ db, root, two }, labels] of [[shut, ['lane:machine']], [unlisted, ['lane:machine']], [unlabelled, []]] as const) {
+    expect(measure(db, root, plan(db, two), viewed(labels)).held).toBe(true)
+    expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo', held_why: '#1 has no plan' })
+    expect(maybe(root, two, 'parked.md')).toBeNull()
+    expect(planRows(db).map((p) => p.id)).toEqual([two])
+  }
+})
+
+test('a planless open After is queued as a plan and waited on', () => {
+  const { db, root, two } = seeded(null)
+  expect(measure(db, root, plan(db, two), viewed(['lane:machine']))).toMatchObject({ outcome: 'pass', held: true, spans: ['#1'] })
+  const one = planRows(db).find((p) => p.origin === `https://github.com/${home}/issues/1`)
+  expect(one).toMatchObject({ state: 'queued', lane: 'machine' })
+  expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: one?.id, held_by: 'coo',
+    held_why: `waits for #1, plan ${String(one?.id)}, to land` })
 })
 
 test('D1 an After done research plan passes measure unheld', () => {

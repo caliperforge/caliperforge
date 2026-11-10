@@ -569,3 +569,9 @@
   where: "actor = 'senior_review' AND kind = 'review' AND outcome = 'refuse' AND message LIKE '%question as filed%'"
   gap: 7d
   expected: 0
+- name: test_only_not_hand_run
+  table: events
+  column: at
+  where: "actor = 'brief_writer' AND outcome = 'escalate' AND message LIKE '%hand-run brief%'"
+  gap: 7d
+  expected: 0

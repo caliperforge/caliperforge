@@ -106,6 +106,7 @@ VALUES
   ('rules/registry/90-review_fence_refired.yaml', 'card', 'rules/registry/90-review_fence_refired.yaml', 'e46c001bedc909a44d937d99e82beb56eeaae6b32ce68e9f455dfdd239b53865', '2026-11-06'),
   ('rules/registry/91-bench_grade_cannot_run.yaml', 'card', 'rules/registry/91-bench_grade_cannot_run.yaml', 'a7960c11d8ac1d70689b5d6f207a98ae283f5b4cdfe2e24ea1c5abc27c7d2a00', '2026-11-07'),
   ('rules/registry/92-research_question_ruled.yaml', 'card', 'rules/registry/92-research_question_ruled.yaml', 'e4c814658140b60cfa9e99e149b5b575f124c8f29a67f181c996c9e18f9f9f06', '2026-11-09'),
+  ('rules/registry/94-test_only_not_hand_run.yaml', 'card', 'rules/registry/94-test_only_not_hand_run.yaml', '83e9e4884b02982cb20401af6d7ed29e4403b2afc840247669a9553002985d33', '2026-11-10'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/hardware.yaml', 'card', 'rules/hardware.yaml', 'bee455a7b793606cb8f6bcff18d38296d34079eb73d666d44572f10dde561b21', '2026-11-09'),
   ('rules/emulators.yaml', 'card', 'rules/emulators.yaml', 'd3c6eb7140b65261b1053f9d9da02042fb495e901853e7ca14d09f53e3b3a94e', '2026-11-10'),

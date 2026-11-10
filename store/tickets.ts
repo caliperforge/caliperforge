@@ -36,10 +36,12 @@ export function afterOf(body: string): number[] {
   return hit === undefined ? [] : hit.split(', ').map((n) => Number(n.slice(1)))
 }
 
-export function afters(db: Db, repo: string, no: number): { n: number; closed_at: string | null }[] {
-  return db.prepare(`SELECT a.value AS n, c.closed_at FROM tickets t, json_each(t.after) a
+export function afters(db: Db, repo: string, no: number): { n: number; closed_at: string | null; open: boolean }[] {
+  const rows = db.prepare(`SELECT a.value AS n, c.closed_at, c.number IS NOT NULL AND c.closed_at IS NULL AS open
+    FROM tickets t, json_each(t.after) a
     LEFT JOIN tickets c ON c.repo = t.repo AND c.number = a.value WHERE t.repo = ? AND t.number = ? ORDER BY a.key`)
-    .all(repo, no) as { n: number; closed_at: string | null }[]
+    .all(repo, no) as { n: number; closed_at: string | null; open: number }[]
+  return rows.map((r) => ({ ...r, open: r.open === 1 }))
 }
 
 export function waveOf(labels: Listing['labels']): number | undefined {

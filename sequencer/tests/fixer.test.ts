@@ -60,7 +60,7 @@ function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'complete
 
 function wire(filed: string[]): Wire {
   const no = (): never => { throw new Error('not in this test') }
-  return { send: no, open: no, close: no, runs: no, comment: no, review: no, merged: no,
+  return { send: no, open: no, close: no, runs: no, comment: no, review: no, merged: () => [],
     file: (...args) => { const title = args[1]; filed.push(title); return 'https://github.com/caliperforge/caliperforge/issues/999' } }
 }
 
@@ -153,7 +153,8 @@ test.each([
   second(db, was)
   put(home, 8, 'ask.md', '# the run wall counts each streamed block\n')
   const filed: string[] = []
-  await woke(db, home, stub(TICKET, []), now, () => undefined, wire(filed))
+  const open = [{ number: 140, title: 'the run wall counts each streamed block', body: '', url: 'https://github.com/caliperforge/caliperforge/issues/140' }]
+  await woke(db, home, stub(TICKET, []), now, () => undefined, { ...wire(filed), merged: (args) => args.includes('open') ? open : [] })
   expect(filed).toEqual(want)
   expect(waitsOn(db)).toEqual({ waits_on: on ?? ticketed(db)?.id })
 })

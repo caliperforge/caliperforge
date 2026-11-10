@@ -246,6 +246,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'ticket': {
       const url = ticketed(db, root, plan, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
         f.why, wire, now)
+      if (url === false) return 'escalated'
       event(db, { plan: plan.id, kind: 'ticket', actor: 'fixer', outcome: 'pass', message: f.why, pointer: url, run: null })
       return `ticket ${url}`
     }

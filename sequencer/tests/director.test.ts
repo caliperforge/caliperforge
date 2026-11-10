@@ -140,7 +140,7 @@ function stub(text: string): Provider {
 function wire(): Wire {
   const no = (): never => { throw new Error('not in this test') }
   let n = 900
-  return { send: no, open: no, close: no, runs: no, review: no, merged: no, comment: () => undefined,
+  return { send: no, open: no, close: no, runs: no, review: no, merged: () => [], comment: () => undefined,
     file: () => `https://github.com/caliperforge/caliperforge/issues/${String(n++)}` }
 }
 
@@ -205,7 +205,14 @@ const targeted = (db: Db) => db.exec(`INSERT INTO accounts (id, repo, measured_a
 
 function filing(bodies: string[]): Wire {
   const base = wire()
-  return { ...base, file: (repo, title, body, labels) => { bodies.push(body); return base.file(repo, title, body, labels) } }
+  const open: { number: number; title: string; body: string; url: string }[] = []
+  return { ...base, merged: (args) => args.includes('open') ? open : [],
+    file: (repo, title, body, labels) => {
+      bodies.push(body)
+      const url = base.file(repo, title, body, labels)
+      open.push({ number: Number(url.split('/').at(-1)), title, body, url })
+      return url
+    } }
 }
 
 const prompted = async (db: Db, home: string) => {
@@ -1063,12 +1070,13 @@ async function repeats() {
   const bodies: string[] = []
   const fires: string[] = []
   const waits = (id: number) => planRows(db).find((p) => p.id === id)?.waits_on
-  await cooLite(db, home, row(db), wokeStub(REPLY.ask_ceo ?? '', fires), now, () => undefined, filing(bodies))
+  const wired = filing(bodies)
+  await cooLite(db, home, row(db), wokeStub(REPLY.ask_ceo ?? '', fires), now, () => undefined, wired)
   const ticket = allPlans(db).find((p) => p.origin === FILED)?.id
   expect(bodies).toEqual([expect.stringMatching(/^Filed by director: plans 7, 8, 10 stopped at step 4 with refusal e{64} within a day\./)])
   expect(waits(7)).toBe(ticket)
   expect(fires).toEqual([])
-  await cooLite(db, home, planById(db, 10), wokeStub(REPLY.ask_ceo ?? '', fires), now, () => undefined, filing(bodies))
+  await cooLite(db, home, planById(db, 10), wokeStub(REPLY.ask_ceo ?? '', fires), now, () => undefined, wired)
   expect(bodies).toHaveLength(1)
   expect(waits(10)).toBe(ticket)
   expect(fires).toEqual([])

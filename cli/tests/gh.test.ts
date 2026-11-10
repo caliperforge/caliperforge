@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { amendIssue } from '../amend.ts'
 import { actions, describePr, dispatch, fileIssue, forward, gh, installed, openPr, rehearse, run, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
@@ -74,6 +75,20 @@ test.each([['same', 'same\n'], [null, ''], [null, '\n']])('D2 live %j against %j
 
 test('D4 a failed description PATCH propagates', () => {
   expect(() => { describePr('acme/widget', 7, 'new', live('old'), recorder([], true)) }).toThrow('422')
+})
+
+const ALSO = '- Also hit on plan 1: a stop'
+
+test('amendIssue appends the line in one PATCH', () => {
+  const calls: string[][] = []
+  amendIssue('acme/widget', 7, ALSO, live('the ask'), recorder(calls))
+  expect(calls).toEqual([['api', '-X', 'PATCH', 'repos/acme/widget/issues/7', '-f', `body=the ask\n\n${ALSO}`]])
+})
+
+test('amendIssue sends nothing when the line is already there', () => {
+  const calls: string[][] = []
+  amendIssue('acme/widget', 7, ALSO, live(`the ask\n\n${ALSO}`), recorder(calls))
+  expect(calls).toEqual([])
 })
 
 test('D3 an open rehearsal opens nothing and moves nothing', () => {

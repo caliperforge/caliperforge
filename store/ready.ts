@@ -75,11 +75,6 @@ export function readyPlans(db: Db): Ready[] {
     .all() as Ready[]
 }
 
-export function laneOpen(db: Db, lane: string, except: number): { id: number; origin: string }[] {
-  return db.prepare(`SELECT id, origin FROM plans WHERE lane = ? AND origin IS NOT NULL AND id <> ?
-    AND state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY id`).all(lane, except) as { id: number; origin: string }[]
-}
-
 export function pushedUnder(db: Db, prefix: string): string[] {
   return db.prepare(`SELECT evidence FROM deliverables WHERE state = 'pushed' AND evidence LIKE ?
     ORDER BY id DESC`).pluck().all(`${prefix}%`) as string[]

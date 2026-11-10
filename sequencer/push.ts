@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
+import { amendIssue } from '../cli/amend.ts'
 import { actions, closeIssue, commentIssue, describePr, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, prNumber, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
@@ -57,6 +58,7 @@ export interface Wire {
   dispatch?: (fork: string, file: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
+  amend?: (repo: string, no: number, line: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
   install?: () => void
   card?: Check[]
@@ -72,6 +74,7 @@ export const WIRE: Wire = {
   close: closeIssue,
   file: fileIssue,
   comment: commentIssue,
+  amend: amendIssue,
   thread: issueComments,
   runs: shell,
   forward,

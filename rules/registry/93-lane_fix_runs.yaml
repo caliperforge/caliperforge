@@ -1,0 +1,20 @@
+- name: lane_fix_runs
+  table: runs
+  column: at
+  where: >-
+    plan IN (SELECT f.id FROM pipes pi
+    JOIN events s ON s.id = (SELECT max(e.id) FROM events e JOIN plans p ON p.id = e.plan
+    WHERE e.kind = 'pipe' AND e.actor = 'settle' AND p.pipe_id = pi.id)
+    JOIN events r ON r.kind = 'director' AND r.id > s.id AND r.plan IN (SELECT id FROM plans WHERE pipe_id = pi.id)
+    JOIN plans f ON f.pipe_id = pi.id AND f.origin = r.pointer)
+  gap: 1h
+  while: >-
+    EXISTS (SELECT 1 FROM pipes pi
+    JOIN events s ON s.id = (SELECT max(e.id) FROM events e JOIN plans p ON p.id = e.plan
+    WHERE e.kind = 'pipe' AND e.actor = 'settle' AND p.pipe_id = pi.id)
+    JOIN events r ON r.kind = 'director' AND r.id > s.id AND r.plan IN (SELECT id FROM plans WHERE pipe_id = pi.id)
+    AND julianday(r.at) <= julianday($since)
+    JOIN plans f ON f.pipe_id = pi.id AND f.origin = r.pointer AND f.state IN ('queued', 'running')
+    AND NOT EXISTS (SELECT 1 FROM runs u WHERE u.plan = f.id)
+    WHERE pi.enabled = 0 AND NOT EXISTS (SELECT 1 FROM events o WHERE o.kind = 'pipe' AND o.id > s.id
+    AND o.actor IN ('tick', 'ceo', 'coo') AND o.message GLOB pi.name || ' *'))

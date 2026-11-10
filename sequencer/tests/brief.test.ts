@@ -749,6 +749,17 @@ test('D3: a standing 0-line brief holds a built plan at step 1', async () => {
   expect(builds(w)).toBe(1)
 })
 
+test('a standing 0-line brief listing no file holds at step 1', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 1))
+  advance(w.db, plan(w.db, ID), 1)
+  put(w.root, ID, 'issue.md', estimated(plain(w), 0).replace('## Files\n\n- src/hello.ts\n', '## Files\n\nnone: a person runs it\n'))
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
+  expect(builds(w)).toBe(1)
+})
+
 test('D1: a ruling on a held 0-line brief fires the writer', async () => {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))

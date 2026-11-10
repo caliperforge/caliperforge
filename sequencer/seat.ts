@@ -170,7 +170,7 @@ function instead(runs: string, reply: string): Outcome | null {
 }
 
 function byHand(runs: string, brief: string | null): Outcome | null {
-  if (brief === null || estimate(brief) !== 0 || files(brief).every((f) => TEST.test(f.path))) return null
+  if (brief === null || estimate(brief) !== 0 || (files(brief).length > 0 && files(brief).every((f) => TEST.test(f.path)))) return null
   return { outcome: 'needs_ceo', spans: ['hand-run'], note: `${runs}: hand-run brief: it estimates 0 lines, so a person runs it; held until hand-run briefs have their own route` }
 }
 

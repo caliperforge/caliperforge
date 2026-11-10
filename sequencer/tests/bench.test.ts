@@ -1301,8 +1301,8 @@ test('calls D4 null sides record NULL and still score', () => {
 })
 
 /** `scoring` with generate.json at `tokens` spawning `agents` and writing `properties`, and run_pair rows at `pre_fix` and `fix` calls a side. */
-function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234, properties = 3) {
-  const made = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix, fix } }))))
+function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234, properties = 3, generator = 'fizz') {
+  const made = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix, fix } }))), { target: 'euler-earn-m01', generator, files: FILES })
   put(made.root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens, seconds: 56.5, agents, properties }))
   return made
 }
@@ -1330,6 +1330,20 @@ test('D3 8 agents and 1 property is few_properties', () => {
   expect(reason(8, 505660, 505660, 1234, 1)).toBe('few_properties')
   expect(reason(8, 69467, 69467, 1234, 1)).toBe('few_properties')
   expect(reason(8, 505660, 505660, 1234, 3)).toBeNull()
+})
+
+test('lean generators are not held to the sub-agent floor', () => {
+  for (const generator of ['fizz_lean', 'fizz_lean_v5']) {
+    for (const agents of [0, undefined]) {
+      const { root, db } = sided(agents, 505660, 505660, 1234, 3, generator)
+      said(db, KINDS.critic, 'clean')
+      expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+      expect(scores(db)).toMatchObject([{ generator, not_powered: null }])
+      expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ not_powered: null })
+      expect(get(root, 1, 'report.md')).toContain('- counted: yes\n')
+    }
+    expect(reason(0, 505660, 505660, 1234, 1, generator)).toBe('few_properties')
+  }
 })
 
 test('D4 generate.json without properties counts the suite', () => {

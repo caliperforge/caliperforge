@@ -9,6 +9,7 @@ import { refusalsOf } from '../../store/refusals.ts'
 import { cooLite } from '../director.ts'
 import { broken, deletions, renumbered, strays } from '../fence.ts'
 import { tick } from '../index.ts'
+import { modes } from '../moded.ts'
 import { get, srcDir } from '../workspace.ts'
 import { CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -150,6 +151,13 @@ test('a code-fence line is not a row; a prose row is still unread', () => {
   expect(deletions('## Deleted\n\n```\n- src/a.ts\n- src/b.ts\n```\n')).toEqual({ paths: ['src/a.ts', 'src/b.ts'], unread: [] })
   expect(deletions('## Deleted\n\n- src/a.ts\n```\n\n```yaml\n---\ndone:\n---\n```\n')).toEqual({ paths: ['src/a.ts'], unread: [] })
   expect(deletions('## Deleted\n\n```\n- the old spend file\n```\n')).toEqual({ paths: [], unread: ['- the old spend file'] })
+})
+
+test('a mode row reads; another mode or prose is unread', () => {
+  expect(modes('## Modes\n\n```\n- 100755 scripts/build\n- 100644 `src/a.ts`\n```\n\n---\ndone:\n---\n'))
+    .toEqual({ rows: [['100755', 'scripts/build'], ['100644', 'src/a.ts']], unread: [] })
+  expect(modes('## Modes\n\n- 100777 src/a.ts\n- make it executable\n')).toEqual({ rows: [], unread: ['- 100777 src/a.ts', '- make it executable'] })
+  expect(modes('built\n')).toEqual({ rows: [], unread: [] })
 })
 
 test('a new migration numbered at or below one the checkout holds', () => {

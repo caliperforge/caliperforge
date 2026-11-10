@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from 'node:fs'
+import { copyFileSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
@@ -133,6 +133,26 @@ test('D1 a fenceless hand-back deleting a listed file passes', async () => {
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(false)
   expect(diffOf(w.root, 1)).toContain('deleted file')
+})
+
+test('D1 a hand-back setting 100755 on a listed file passes', async () => {
+  const w = await atBuild()
+  const text = 'built\n\n## Modes\n\n- 100755 src/hello.ts\n'
+  const fired = (await tick(w.db, w.root, answers([text, text])))[0]
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(statSync(join(srcDir(w.root, 1), 'src/hello.ts')).mode & 0o111).not.toBe(0)
+  expect(diffOf(w.root, 1)).toContain('new mode 100755')
+})
+
+test.each([
+  ['- 100777 src/hello.ts', '- 100777 src/hello.ts'],
+  ['- 100755 src/never-was.ts', 'src/never-was.ts'],
+])('D2 %s refuses at step 2, mode unchanged', async (row, span) => {
+  const w = await atBuild()
+  const text = `built\n\n## Modes\n\n${row}\n`
+  const fired = (await tick(w.db, w.root, answers([text, text])))[0]
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: [span] })
+  expect(statSync(join(srcDir(w.root, 1), 'src/hello.ts')).mode & 0o111).toBe(0)
 })
 
 const NOT_DONE = 'Not done: this round only allowed changes to kotlin-ci.yml:23'

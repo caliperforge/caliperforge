@@ -9,6 +9,10 @@ A file the ask needs removed goes under `## Deleted` in your answer, one `- <pat
 you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
 write, or one that is not there, refuses the build.
 
+A file the ask needs executable goes under `## Modes` in your answer, one `- 100755 <path>` per line (`100644`
+clears the bit): the kernel sets the mode before step 3 reads the tree. A path outside what you may write, one
+that is not there, or any other mode refuses the build.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

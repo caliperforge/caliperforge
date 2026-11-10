@@ -100,7 +100,7 @@ test.each([
 const BRIEFS = [
   {
     issue: '# feat(python): carry a memo (#35)\n\n**What:** Add a memo field to the payment request.\n**Why:** #35 asks for it.\n',
-    message: 'feat(python): carry a memo ()\n\nAdd a memo field to the payment request.\n\nasks for it.',
+    message: 'feat(python): carry a memo\n\nAdd a memo field to the payment request.\n\nasks for it.',
     body: '#35 asks for it.\n\nAdd a memo field to the payment request.\n\nTested in `src/hello.test.ts`.\n\nAddresses #12.\n',
   },
   {

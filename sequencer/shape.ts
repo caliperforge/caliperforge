@@ -1,8 +1,10 @@
 import type { Profile } from '../store/profile.ts'
 
 export function clean(s: string, rules: Profile | null = null): string {
-  const number = rules?.issue_ref === 'Fixes' ? /(?<!Fixes )#\d+/g : /#\d+/g
-  return s.replace(number, '').replace(/\s+/g, ' ').trim()
+  const ref = rules?.issue_ref === 'Fixes' ? '(?<!Fixes )#\\d+' : '#\\d+'
+  const grouped = new RegExp(`\\s*[(\\[][\\s,]*${ref}(?:[\\s,]+${ref})*[\\s,]*[)\\]]`, 'g')
+  const bare = new RegExp(`\\s*${ref}(?=[.,;:!?])|${ref}`, 'g')
+  return s.replace(grouped, '').replace(bare, '').replace(/\s+/g, ' ').trim()
 }
 
 /** Under `package`, `type(scope)!: Rest` becomes `scope: rest`. */

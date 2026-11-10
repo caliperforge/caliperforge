@@ -1,0 +1,6 @@
+- name: test_only_not_hand_run
+  table: events
+  column: at
+  where: "actor = 'brief_writer' AND outcome = 'escalate' AND message LIKE '%hand-run brief%'"
+  gap: 7d
+  expected: 0

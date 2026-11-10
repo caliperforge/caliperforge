@@ -727,6 +727,16 @@ test('D1 D2: a 0-line brief is saved and held at step 1', async () => {
   expect(builds(w)).toBe(0)
 })
 
+test('a 0-line brief naming only test files passes step 1', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  const testOnly = (b: string): string => b.replace('## Files\n\n- src/hello.ts\n', '## Files\n\n- src/hello.test.ts (new)\n')
+  const provider: Provider = { ...stub(CARRIED), fire: (p) => stub(CARRIED, 0, undefined, undefined, testOnly(estimated(briefFor(p.prompt, p.cwd), 0))).fire(p) }
+
+  expect((await tick(w.db, w.root, provider))[0]).toMatchObject({ step: 1, outcome: 'pass', note: 'brief_writer: brief written' })
+  expect(briefOf(w)).toContain('## Files\n\n- src/hello.test.ts (new)\n')
+})
+
 test('D3: a standing 0-line brief holds a built plan at step 1', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -736,6 +746,17 @@ test('D3: a standing 0-line brief holds a built plan at step 1', async () => {
 
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
   expect(plan(w.db, ID).step).toBe(1)
+  expect(builds(w)).toBe(1)
+})
+
+test('a standing 0-line brief listing no file holds at step 1', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 1))
+  advance(w.db, plan(w.db, ID), 1)
+  put(w.root, ID, 'issue.md', estimated(plain(w), 0).replace('## Files\n\n- src/hello.ts\n', '## Files\n\nnone: a person runs it\n'))
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
   expect(builds(w)).toBe(1)
 })
 

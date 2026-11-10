@@ -24,7 +24,7 @@ import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { claimed, estimate, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
+import { claimed, estimate, files, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, TEST, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
 import { precedented, reviewed } from './precedented.ts'
@@ -170,7 +170,7 @@ function instead(runs: string, reply: string): Outcome | null {
 }
 
 function byHand(runs: string, brief: string | null): Outcome | null {
-  if (brief === null || estimate(brief) !== 0) return null
+  if (brief === null || estimate(brief) !== 0 || (files(brief).length > 0 && files(brief).every((f) => TEST.test(f.path)))) return null
   return { outcome: 'needs_ceo', spans: ['hand-run'], note: `${runs}: hand-run brief: it estimates 0 lines, so a person runs it; held until hand-run briefs have their own route` }
 }
 

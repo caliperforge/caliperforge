@@ -1271,6 +1271,22 @@ test('rescore D1 D2 a done plan scores again on its suite', () => {
   expect(runRows(db).filter((r) => r.step === 1)).toEqual([])
 })
 
+test('a rescored plan scores only inside the refuzz window', async () => {
+  const { root, db } = scoring()
+  staffedIn(root)
+  dial(db, 3, AT)
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  end(db, 1, 'done')
+  reap(root, [1])
+  rescore(db, root, 1, 'coo', 'error rows')
+  const { provider } = stub(1000, 'completed', true)
+  await tick(db, root, provider, OPENS)
+  expect(planById(db, 1).wait_reason).toBe('bench_night')
+  expect(eventsOf(db, 1, 'bench.fired')).toEqual([])
+  await tick(db, root, provider, NIGHT)
+  expect(eventsOf(db, 1, 'bench.fired')).toHaveLength(1)
+})
+
 test('D3 a root medusa.json that does not parse is refused', () => {
   const { root, db } = scoring()
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), '{')

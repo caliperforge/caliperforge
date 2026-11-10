@@ -6,6 +6,9 @@ import type { Read } from '../cli/gh.ts'
 
 export const OWNED: string[] = z.object({ owned: z.array(z.string()) }).parse(parse(readFileSync(join(import.meta.dirname, '../rules/hardware.yaml'), 'utf8'))).owned
 
+export const EMULATORS = z.object({ emulators: z.array(z.object({ device: z.string(), stand_in: z.string(), limits: z.string() })) })
+  .parse(parse(readFileSync(join(import.meta.dirname, '../rules/emulators.yaml'), 'utf8'))).emulators
+
 /** Solana prose says "ledger" for the chain, so brand names match case-sensitive. */
 const DEVICES: Record<string, RegExp> = {
   Ledger: /\bLedgers?\b/,
@@ -31,21 +34,36 @@ const File = z.object({ content: z.string() })
 
 const TEST_NAME = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/
 
-export function hardware(repo: string, no: number, read: Read, owned = OWNED): string | null {
+export function hardware(repo: string, no: number, read: Read, owned = OWNED, emulators = EMULATORS): { park: string | null; lines: string } {
   const row = Issue.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'title,body,url,comments']))
+  const covered = [...owned]
+  let lines = ''
+  let named = scan(repo, row, read, covered)
+  while (named !== undefined) {
+    const { device: found, where } = named
+    const stand = emulators.find((e) => e.device === found.toLowerCase())
+    if (stand === undefined) return { park: `hardware: ${found} — ${where}`, lines: '' }
+    lines += `- hardware: ${stand.device} — ${stand.stand_in}; limits: ${stand.limits} — ${where}\n`
+    covered.push(found)
+    named = scan(repo, row, read, covered)
+  }
+  return { park: null, lines }
+}
+
+function scan(repo: string, row: z.infer<typeof Issue>, read: Read, covered: string[]): { device: string; where: string } | undefined {
   for (const { body, url } of [{ body: `${row.title}\n${row.body}`, url: row.url }, ...row.comments]) {
-    const named = device(body, owned)
-    if (named !== undefined) return `hardware: ${named} — ${url}`
+    const named = device(body, covered)
+    if (named !== undefined) return { device: named, where: url }
   }
   const spans = [row.body, ...row.comments.map((c) => c.body)].join('\n').match(/`[^`\n]+`/g) ?? []
   for (const name of new Set(spans.map((s) => s.slice(1, -1)).filter((s) => TEST_NAME.test(s)))) {
     for (const { path } of Found.parse(read(['api', `search/code?q=${name}+repo:${repo}`])).items) {
       const source = Buffer.from(File.parse(read(['api', `repos/${repo}/contents/${path}`])).content.replace(/\n/g, ''), 'base64')
-      const named = gated(source.toString('utf8').split('\n'), name, owned)
-      if (named !== undefined) return `hardware: ${named} — \`${name}\` in ${path}`
+      const named = gated(source.toString('utf8').split('\n'), name, covered)
+      if (named !== undefined) return { device: named, where: `\`${name}\` in ${path}` }
     }
   }
-  return null
+  return undefined
 }
 
 function device(text: string, owned: string[]): string | undefined {

@@ -63,6 +63,12 @@ test('a generated file\'s row names the workflow step writing it', () => {
   )
 })
 
+test('the prompt reads hardware lines and shapes their question', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'When the ask needs a device to build or test against -- a Ledger, a phone, a USB or HID port -- read the `- hardware:` lines under `## Target check` before you write a line about that device. A device a line names is tested on its stand-in: name the stand-in and its limits under `## Approach`, and its test under **When it ends:**, `## Cases` and `## Tests`. Never write that a run on a physical device is a person\'s step. A device no line names stops the brief: close with the unclear fence, its question `hardware: <device> — <the url or path:line that needs it>`, and nothing after it.',
+  )
+})
+
 test('the prompt says how to answer a last brief and question', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('When the ask carries `# Your last brief`, the refusal under it names what to fix: fix that, keep every other line, and open only the files the fix needs.')

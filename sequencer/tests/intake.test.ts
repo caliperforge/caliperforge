@@ -40,6 +40,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
     log.push(args.join(' '))
     const shaped = rows.map(shape)
     if (args[0] === 'pr') return []
+    if (args[1] === 'list' && args[3] !== REPO) return []
     if (args[1] === 'list') return args[5] === 'closed' ? closed.map(shape) : shaped
     if (args[0] === 'api' && args[1]?.endsWith('/events?per_page=100') === true) return []
     if (args[0] === 'api') {
@@ -145,7 +146,11 @@ test('1437 D5: a fresh schema lists the rubin and bio homes', () => {
 test('D4: a read that throws halts no plan and names the repo', () => {
   const db = piped()
   queue(db, 50)
-  expect(intake(db, root, () => { throw new Error('gh is down') })).toEqual([`${REPO}: gh is down`])
+  const read: Read = (args) => {
+    if (args[3] === REPO) throw new Error('gh is down')
+    return []
+  }
+  expect(intake(db, root, read)).toEqual([`${REPO}: gh is down`])
   expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
   expect(ofKind(db, 'swallowed')).toEqual([{ plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: `${REPO}: gh is down` }])
 })
@@ -182,6 +187,7 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     throw new Error('gh is down')
   })
   expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt,stateReason`,
+    `issue list --repo caliperforge/ledger-rig --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt,stateReason`,
     'search issues --owner caliperforge --state open --limit 100 --json number,title,url,repository,labels'])
   const sink: string[] = []
   await tick(db, root, stub(CARRIED), now, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)

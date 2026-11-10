@@ -188,7 +188,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const seeded = seedsOf(ran.runs, ran.seconds, keys.refuzz !== undefined)
   const calls = keys.refuzz === undefined ? seeded.least : seeded.calls
   const score = { catches: seeded.union.catch, false_positives: seeded.union.false_positive,
-    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined) }
+    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls.pre_fix, fix_calls: calls.fix, not_powered: partial !== undefined ? 'wall' : powered(properties ?? proven, agents, calls, ran.runs.flat().every((r) => r.verdict === 'error'), keys.refuzz !== undefined, generator) }
   kept(db, root, plan.id, { target, generator }, score, sha, { partial, ...depth(config?.config), ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(ran.runs.flat()) } : {}),
     ...(keys.refuzz === undefined ? {} : { mode: 'refuzz', source: Number(keys.refuzz) }), broken: seeded.union.broken, flaky: seeded.union.flaky, seeds: seeded.seeds, union: seeded.union, ...(ran.retried ? { via_ir_retry: true } : {}) })
   report(db, root, plan.id, ran.runs, score.not_powered, keys.refuzz !== undefined, sampled(db, plan.id, srcDir(root, plan.id), suite))

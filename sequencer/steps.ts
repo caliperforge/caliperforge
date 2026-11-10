@@ -224,7 +224,7 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   if (read === undefined) return { outcome: 'pass', spans: [], note: pulse }
   const house = moved(root, row.repo, read)
   if (house !== null) return { outcome: 'refuse', spans: [`house/${row.repo}.md`], note: house }
-  const park = checked(db, root, plan, row, read) ?? hardware(row.repo, row.issue_no, read)
+  const park = checked(db, root, plan, row, read)
   if (park === null) {
     if (row.state === 'parked') setTargetState(db, plan.target_id, 'ready')
     return stood(db, root, plan, row, read, span, pulse)
@@ -242,9 +242,10 @@ function rechecks(db: Db, plan: PlanRow): boolean {
 function checked(db: Db, root: string, plan: PlanRow, row: Target, read: Read): string | null {
   const ask = maybe(root, plan.id, 'ask.md') ?? ''
   const found = find(row.repo, row.issue_no, ask.includes(CARD), ceoApproved(db, plan), vouched(db, row.repo), read)
+  const gear = found.park === null ? hardware(row.repo, row.issue_no, read) : { park: null, lines: '' }
   const at = ask.lastIndexOf(`\n${CHECK}\n`)
-  put(root, plan.id, 'ask.md', `${at === -1 ? ask : ask.slice(0, at)}\n${found.section}`)
-  return found.park
+  put(root, plan.id, 'ask.md', `${at === -1 ? ask : ask.slice(0, at)}\n${found.section}${gear.lines}`)
+  return found.park ?? gear.park
 }
 
 /** The repository and issue a plan's checkout is made from, if it has one. */

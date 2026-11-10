@@ -1300,9 +1300,9 @@ test('calls D4 null sides record NULL and still score', () => {
   expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ pre_fix_calls: null, fix_calls: null })
 })
 
-/** `scoring` with generate.json at `tokens` spawning `agents` and writing `properties`, and run_pair rows at `pre_fix` and `fix` calls a side. */
-function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234, properties = 3) {
-  const made = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix, fix } }))))
+/** `scoring` for `generator` with generate.json at `tokens` spawning `agents` and writing `properties`, and run_pair rows at `pre_fix` and `fix` calls a side. */
+function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234, properties = 3, generator = 'fizz') {
+  const made = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix, fix } }))), { target: 'euler-earn-m01', generator, files: FILES })
   put(made.root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens, seconds: 56.5, agents, properties }))
   return made
 }
@@ -1330,6 +1330,12 @@ test('D3 8 agents and 1 property is few_properties', () => {
   expect(reason(8, 505660, 505660, 1234, 1)).toBe('few_properties')
   expect(reason(8, 69467, 69467, 1234, 1)).toBe('few_properties')
   expect(reason(8, 505660, 505660, 1234, 3)).toBeNull()
+})
+
+test('agent floor applies to plain fizz only', () => {
+  expect(reason(6, 505660, 505660, 1234, 28)).toBe('reduced_generate')
+  expect(reason(6, 505660, 505660, 1234, 28, 'fizz_lean_v5')).toBeNull()
+  expect(reason(6, 505660, 505660, 1234, 2, 'fizz_lean_v5')).toBe('few_properties')
 })
 
 test('D4 generate.json without properties counts the suite', () => {
@@ -1371,8 +1377,9 @@ test('build_error keeps the last 40 lines of a long tail', () => {
 })
 
 test('1645b D2 failed is compile_failed before every other reason', () => {
-  expect(powered(3, 8, { pre_fix: 505660, fix: 505660 }, true)).toBe('compile_failed')
-  expect(powered(1, 0, {}, true)).toBe('compile_failed')
+  expect(powered('fizz', 3, 8, { pre_fix: 505660, fix: 505660 }, true)).toBe('compile_failed')
+  expect(powered('fizz', 1, 0, {}, true)).toBe('compile_failed')
+  expect(powered('fizz_lean_v5', 3, 6, {}, true)).toBe('compile_failed')
 })
 
 test('1645b D3 one row not error scores as today, no build_error', () => {
@@ -1645,7 +1652,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
   expect(fired.packets[0]?.idle).toBeUndefined()
   expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1, x_ray: 0 }])
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1, x_ray: 0, not_powered: 'pre_fix_calls' }])
 })
 
 test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
@@ -1655,7 +1662,7 @@ test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
     .toMatchObject({ outcome: 'pass' })
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toMatchObject([{ plan: 1, x_ray: 1 }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, seconds: 1, x_ray: 1, ...SEEDED })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, seconds: 1, x_ray: 1, not_powered: 'pre_fix_calls', ...SEEDED })
 })
 
 const REFUZZ = { ...KEYS, files: FILES, refuzz: '7', hours: '4', seeds: '2' }
@@ -1717,9 +1724,9 @@ test('refuzz D5 union: pass→fail, fail→pass, pass→pass', () => {
 })
 
 test('refuzz D6 short calls pass; all error is compile_failed', () => {
-  expect(powered(3, 8, { pre_fix: 1, fix: 1 }, false, true)).toBeNull()
-  expect(powered(3, 8, {}, false, true)).toBeNull()
-  expect(powered(3, 8, {}, true, true)).toBe('compile_failed')
+  expect(powered('fizz', 3, 8, { pre_fix: 1, fix: 1 }, false, true)).toBeNull()
+  expect(powered('fizz', 3, 8, {}, false, true)).toBeNull()
+  expect(powered('fizz', 3, 8, {}, true, true)).toBe('compile_failed')
   const { root, db } = scoring(writes('.jsonl', ERRORS), REFUZZ)
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })

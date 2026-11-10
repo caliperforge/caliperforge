@@ -14,14 +14,14 @@ export const FEWEST = 3
 
 const TAIL = 40
 
-export function degraded(properties: number, agents = 0): 'reduced_generate' | 'few_properties' | null {
-  if (agents < AGENTS) return 'reduced_generate'
+export function degraded(properties: number, agents = 0, generator = 'fizz'): 'reduced_generate' | 'few_properties' | null {
+  if (generator === 'fizz' && agents < AGENTS) return 'reduced_generate'
   return properties < FEWEST ? 'few_properties' : null
 }
 
-export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false, refuzz = false): Score['not_powered'] {
+export function powered(generator: string, properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false, refuzz = false): Score['not_powered'] {
   if (failed) return 'compile_failed'
-  const why = degraded(properties, agents)
+  const why = degraded(properties, agents, generator)
   if (why !== null) return why
   if (refuzz) return null
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'

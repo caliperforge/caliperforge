@@ -298,10 +298,18 @@ test('D4 once the ceo returns it, the unstated plan passes', () => {
   expect(maybe(w.root, 1, 'ask.md')).not.toContain('## Ask first')
 })
 
-test('a Ledger target parks at step 0 and is measured again', () => {
+test('a Ledger target passes step 0 with the ledger-rig line', () => {
   const w = world()
-  const read = widget('Run the tests.\n', 'Two Ledgers cannot sign at once.')
-  const note = 'hardware: Ledger — https://github.com/acme/widget/issues/12'
+  expect(measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n', 'Two Ledgers cannot sign at once.'))).toMatchObject({ outcome: 'pass' })
+  expect(targetRow(w.db, 1).state).not.toBe('parked')
+  expect(maybe(w.root, 1, 'ask.md')).toContain('\n- hardware: ledger — caliperforge/ledger-rig (action: caliperforge/ledger-rig@v0); '
+    + 'limits: Linux hidraw only; not physical USB or macOS IOKit — https://github.com/acme/widget/issues/12\n')
+})
+
+test('a Trezor target parks at step 0 and is measured again', () => {
+  const w = world()
+  const read = widget('Run the tests.\n', 'Two Trezor devices cannot sign at once.')
+  const note = 'hardware: Trezor — https://github.com/acme/widget/issues/12'
   expect(measure(w.db, w.root, planOf(w.db, 1), read)).toMatchObject({ outcome: 'refuse', held: true, note })
   expect(targetRow(w.db, 1).state).toBe('parked')
   logged(w.db, { plan: 1, kind: 'measure', actor: mapOf('pr_path').at(0).runs, outcome: 'refuse', message: note, pointer: null, run: null })

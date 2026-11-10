@@ -8,9 +8,6 @@
   "packs.ts": {
     "lines": 31
   },
-  "senior_review/tests/bench.test.ts": {
-    "test-name": 2
-  },
   "verdict.ts": {
     "lines": 161
   }

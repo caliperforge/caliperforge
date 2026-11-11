@@ -40,8 +40,5 @@
   },
   "tight/source.ts": {
     "lines": 174
-  },
-  "tight/tests/tight.test.ts": {
-    "citing-comment": 1
   }
 }

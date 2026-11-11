@@ -1285,14 +1285,15 @@ const LINES = `**Question:** how long does a tick take?
 **Done when:** the time is measured
 **Measure:** time one tick
 **Output:** ~/cf_work/7/`
+const FETCHED = LINES.replace(/^\*\*Measure:\*\*.*\n/m, '')
 const researched = (lines: string) => `---\nmove: research\nwhy: the ask only measures\nanswer: |\n${lines.replace(/^/gm, '  ')}\n---\n`
 
-async function researching(origin: string) {
+async function researching(origin: string, lines = LINES) {
   const { db, home } = seeded('1')
   db.exec(`${UNBUILT}; UPDATE plans SET origin = '${origin}' WHERE id = 7`)
-  await run(db, home, researched(LINES))
+  await run(db, home, researched(lines))
   expect(plan7(db)).toMatchObject({ template: 'research', lane: 'research', pipe_id: pipeNamed(db, 'research')?.id, step: 0, waits_on: null })
-  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${LINES}\n`)
+  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${lines}\n`)
   expect([maybe(home, 7, 'refusal.prev.md'), maybe(home, 7, 'refusal.md')]).toEqual(['step 3 rails refused\n', null])
   expect(question(home, row(db)).outcome).toBe('pass')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'research: the ask only measures' }])
@@ -1317,7 +1318,7 @@ async function measured() {
 const UNRESEARCHED = [
   { sql: 'UPDATE plans SET step = 1 WHERE id = 7', lines: LINES },
   { sql: `${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`, lines: LINES },
-  { sql: UNBUILT, lines: LINES.replace(/^\*\*Measure:\*\*.*\n/m, '') },
+  { sql: UNBUILT, lines: FETCHED.replace(/\n\*\*Output:\*\*.*$/, '') },
   ...['~/cf_work', '~/cf_work/../x', '/tmp/x'].map((out) => ({ sql: UNBUILT, lines: LINES.replace('~/cf_work/7/', out) })),
   { sql: UNBUILT, lines: LINES.replace(/^\*\*Done when:\*\*.*\n/m, '') },
   { sql: `${UNBUILT}; ${TARGETED}`, lines: LINES },
@@ -1339,6 +1340,7 @@ async function unresearched() {
 describe('research', () => {
   test('research moves an unbuilt plan to the research lane', () => researching('https://github.com/caliperforge/caliperforge/issues/139'))
   test('research moves an unbuilt plan of another repo of ours', () => researching('https://github.com/caliperforge/neo-watch/issues/6'))
+  test('research moves a fetch-only answer to the research lane', () => researching('https://github.com/caliperforge/caliperforge/issues/139', FETCHED))
   test('a research answer with no Output fires the measurer', measured)
   test('research on a job it cannot take is held by the coo', LONG, unresearched)
 })

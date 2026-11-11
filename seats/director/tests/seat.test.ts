@@ -90,10 +90,11 @@ test('D3: widen frees over_cap only', () => {
     + 'is the lane cap (`lanes.dial`, the band, the ceiling), which widen cannot free.')
 })
 
-test('D5: research names Suite and leaves Output optional', () => {
+test('D5: research names Suite and Output goes to the fetcher', () => {
   const prompt = seat(root, 'director').prompt.replace(/\n {2}/g, ' ')
   expect(prompt).toContain('Add `**Suite:** <plan id>` when the measurer needs')
-  expect(prompt).toContain('Add `**Output:** ~/cf_work/<id>/` only when the job fetches')
+  expect(prompt).toContain('Add `**Measure:**` when the job measures and `**Output:** ~/cf_work/<id>/` when it fetches: '
+    + 'with no Measure line, the Output line sends it to the fetcher.')
 })
 
 test('D8: orchestrator is refused, unlisted and unseeded', () => {

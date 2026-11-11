@@ -108,6 +108,7 @@ VALUES
   ('rules/registry/92-research_question_ruled.yaml', 'card', 'rules/registry/92-research_question_ruled.yaml', 'e4c814658140b60cfa9e99e149b5b575f124c8f29a67f181c996c9e18f9f9f06', '2026-11-09'),
   ('rules/registry/93-lane_fix_runs.yaml', 'card', 'rules/registry/93-lane_fix_runs.yaml', '0877969a7a2151c08dab324f48db4efd5afec03e4a8de1387e5b6fea6852f9d1', '2026-11-10'),
   ('rules/registry/94-test_only_not_hand_run.yaml', 'card', 'rules/registry/94-test_only_not_hand_run.yaml', '83e9e4884b02982cb20401af6d7ed29e4403b2afc840247669a9553002985d33', '2026-11-10'),
+  ('rules/registry/95-filed_covered.yaml', 'card', 'rules/registry/95-filed_covered.yaml', '5d92623b1c37a78dfcc018a45cc19406529352af7c16cab521c5106ba960d56e', '2026-11-11'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/hardware.yaml', 'card', 'rules/hardware.yaml', 'bee455a7b793606cb8f6bcff18d38296d34079eb73d666d44572f10dde561b21', '2026-11-09'),
   ('rules/emulators.yaml', 'card', 'rules/emulators.yaml', 'd3c6eb7140b65261b1053f9d9da02042fb495e901853e7ca14d09f53e3b3a94e', '2026-11-10'),

@@ -13,7 +13,7 @@ import { addRule, type Db } from '../../store/index.ts'
 import { enable } from '../../store/lanes.ts'
 import { addPlan, advance, briefed, planById, putPlan } from '../../store/plans.ts'
 import { addReview, type Verdict } from '../../store/verdict.ts'
-import { drift, Entry, mechanisms } from '../drift.ts'
+import { drift, type Drifted, Entry, mechanisms } from '../drift.ts'
 import { git } from '../workspace.ts'
 import { db, NOW, REGISTRY } from './drifting.ts'
 import { world } from './world.ts'
@@ -297,6 +297,25 @@ test('a fix queued behind a settled-off lane must run', () => {
   addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
   runAt(d, fix, 0, 'typescript_specialist', '2026-10-03 09:30:00')
   expect(drift(d, entry, NOW)).toEqual([])
+})
+
+test('filedCoveredSeen', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'filed_covered')
+  expect(entry).toMatchObject([{ name: 'filed_covered', gap: '7d', expected: 0 }])
+  const closed = (reason: string | null, verdict = 'filed'): Drifted[] => {
+    const d = db()
+    d.exec(`INSERT INTO tickets (repo, number, title, lane, state_reason) VALUES ('a/b', 5, 't', 'machine', ${reason === null ? 'NULL' : `'${reason}'`})`)
+    logged(d, { plan: 1, kind: 'covered', actor: 'ticketed', outcome: 'pass', message: `compared "t" with 0 open, 0 landed, 0 registry lines: ${verdict}`,
+      pointer: 'https://github.com/a/b/issues/5', run: null }, '2026-10-02 10:00:00')
+    return drift(d, entry, NOW)
+  }
+  for (const reason of ['DUPLICATE', 'NOT_PLANNED']) {
+    expect(closed(reason)).toMatchObject([{ name: 'filed_covered', state: 'seen', newest: '2026-10-02 10:00:00' }])
+  }
+  expect(closed('COMPLETED')).toEqual([])
+  expect(closed(null)).toEqual([])
+  expect(closed('DUPLICATE', 'landed as abc')).toEqual([])
+  expect(closed('DUPLICATE', 'covered by #4')).toEqual([])
 })
 
 test('catchupRangeClearsSilent D4', () => {

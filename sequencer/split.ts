@@ -178,6 +178,7 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
     internal(plan) ? `Part ${of} of #${prefix}, split by the brief writer.`
       : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ...(section === '' ? [] : ['', section]), ''].join('\n')
+  // Not through covered() in ticket.ts: a part names its parent's files, so the open parent would cover it.
   const url = wire.file(homeOf(plan), title, body, labels(plan))
   addPart(db, { parent: plan.id, n, url, title, body, after })
   return url
@@ -194,6 +195,7 @@ export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, 
   const id = String(parent.id)
   const title = `p${id}${letter(n)}: address ${signal.author}'s review on ${signal.repo}#${String(signal.pr)}`
   const body = `${words(signal)}\nInternal only: a fix of plan ${id}; it builds against asm/${id} on our fork and opens no pull request upstream.\n`
+  // Not through covered() in ticket.ts: a part names its parent's files, so the open parent would cover it.
   const url = wire.file(homeOf(parent), title, body, labels(parent))
   addPart(db, { parent: parent.id, n, url, title, body, after: null })
   return made(db, root, parent, n, { url, title, body })

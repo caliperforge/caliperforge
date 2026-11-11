@@ -13,6 +13,7 @@ import { check, gather, question, record, sourced } from '../../templates/resear
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
+import { output } from '../output.ts'
 import { mapOf } from '../steps.ts'
 import { drop, headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
 import { git } from './bases.ts'
@@ -922,6 +923,20 @@ test('ruling D1/D2: a measurer needs_build reruns on fetcher', async () => {
   expect(prompt).toContain(`# Output\n\n${out}`)
   expect(existsSync(out)).toBe(true)
   expect(ran(w)).toEqual(['measurer', 'fetcher'])
+})
+
+test('a ruled Output wins over the ask Output at gather', async () => {
+  const out = join(home(), 'cf_work/1401b')
+  const w = researching(`${ASK}**Output:** /tmp/x\n`)
+  const head = headed(w)
+  rule(w.db, w.root, plan(w.db, 1), 'director', '**Output:** ~/cf_work/1401b/')
+  expect(output(w.root, plan(w.db, 1))).toBe(out)
+  question(w.root, plan(w.db, 1))
+  let prompt = ''
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => { prompt = p.prompt })))
+    .toMatchObject({ outcome: 'pass', note: expect.stringContaining('fetcher: answer.md written') as unknown })
+  expect(prompt).toContain(`# Output\n\n${out}`)
+  expect(ran(w)).toEqual(['fetcher'])
 })
 
 test.each(['~/cf_work/../x', '~/.ssh/config'])('ruling D3: Output %s is written', (named) => {

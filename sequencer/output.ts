@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { PlanRow } from '../store/plans.ts'
+import { labelled } from '../templates/asked.ts'
 import { work } from '../templates/research.ts'
 import { maybe, planDir } from './workspace.ts'
 
 /** A research job's `**Output:**` folder made absolute, or null when the job is not research or names no folder under ~/cf_work/. */
 export function output(root: string, plan: PlanRow): string | null {
-  const named = /^\*\*Output:\*\*(.*)$/m.exec(maybe(root, plan.id, 'ask.md') ?? '')?.[1]?.trim()
+  const named = labelled(maybe(root, plan.id, 'ask.md') ?? '', '**Output:**')
   return plan.template === 'research' && named !== undefined ? work(named) : null
 }
 

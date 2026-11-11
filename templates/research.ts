@@ -22,7 +22,7 @@ import { originRef, type PlanRow } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
 import { transcripts } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
-import { said, unasked } from './asked.ts'
+import { labelled, said, unasked } from './asked.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { planted } from './rooted.ts'
 import { verified, type Ran } from './verified.ts'
@@ -178,7 +178,7 @@ export function work(named: string): string | null {
 
 /** The ask's `**Output:**` folder made absolute, or why it is refused. */
 function output(ask: string): { out?: string } | { why: string } {
-  const named = ask.split('\n').find((l) => l.startsWith(OUTPUT))?.slice(OUTPUT.length).trim()
+  const named = labelled(ask, OUTPUT)
   if (named === undefined) return {}
   const out = work(named)
   return out === null ? { why: `${OUTPUT} ${named} is not a folder under ~/cf_work/` } : { out }

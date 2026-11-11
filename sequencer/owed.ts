@@ -9,12 +9,12 @@ import { maybe, srcDir } from './workspace.ts'
 interface Owed { file: string; name: string }
 
 /** Each workflow file a hand-back `ci` row names, and the name its runs show on the board: its `name:`, else its path. */
-export function owed(root: string, plan: number): Owed[] {
+export function owed(root: string, plan: number, src = srcDir(root, plan)): Owed[] {
   const rows = carried(maybe(root, plan, 'step-2.handback.md') ?? '')
   if (typeof rows === 'string') return []
   return [...rows.values()].filter((row) => row.status === 'ci').map((row) => {
     const file = (row.pointer ?? '').split(':')[0] ?? ''
-    return { file, name: named(join(srcDir(root, plan), file)) ?? file }
+    return { file, name: named(join(src, file)) ?? file }
   })
 }
 

@@ -1,11 +1,15 @@
 import { join } from 'node:path'
 import type { Board, Gh } from '../rails/ci-green/index.ts'
-import { logged } from '../store/events.ts'
+import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { allParts } from '../store/parts.ts'
+import { terminal } from '../store/plans.ts'
+import { landed } from './landed.ts'
+import { LETTERS } from './ordered.ts'
 import { owed } from './owed.ts'
 import { BOARD } from './push.ts'
 import { firstLine } from './unpolled.ts'
-import { maybe, planDir, put } from './workspace.ts'
+import { cloned, maybe, planDir, put, srcDir } from './workspace.ts'
 
 const RUN = /github\.com\/([^/]+\/[^/]+)\/actions\/runs\/(\d+)/
 
@@ -15,11 +19,12 @@ type Ran = Board & { url: string }
  * Each run on a landed part's board is logged against it; each plan in `next` gets the owed runs' artifacts in
  * its `artifacts/<run id>/` and every run listed at the end of its ask. Returns each download that failed.
  */
-export function relayed(db: Db, root: string, landed: number, part: string, next: number[], gh: Gh): string[] {
+export function relayed(db: Db, root: string, landed: number, part: string, next: number[], gh: Gh,
+  src = srcDir(root, landed)): string[] {
   const board = (JSON.parse(maybe(root, landed, BOARD) ?? '[]') as Board[]).filter((r): r is Ran => r.url !== undefined)
   for (const r of board) logged(db, { plan: landed, kind: 'landed.run', actor: 'split', outcome: 'pass', message: r.workflow, pointer: r.url, run: null })
   if (board.length === 0) return []
-  const owes = new Set(owed(root, landed).map((o) => o.name))
+  const owes = new Set(owed(root, landed, src).map((o) => o.name))
   const failed: string[] = []
   for (const id of next) {
     const rows = board.map((r) => {
@@ -35,6 +40,22 @@ export function relayed(db: Db, root: string, landed: number, part: string, next
     put(root, id, 'ask.md', `${(maybe(root, id, 'ask.md') ?? '').trimEnd()}\n\n## Runs on part ${part}'s landed commit\n\n${rows.join('\n')}\n`)
   }
   return failed
+}
+
+/**
+ * `relayed` for each landed part that logged no run, to its open waiters with a cloned checkout. The landed part's
+ * `src/` is reaped, so the owed workflow names are read from the first waiter's.
+ */
+export function unrelayed(db: Db, root: string, gh: Gh): string[] {
+  const parts = allParts(db)
+  const ended = new Set(terminal(db))
+  return parts.flatMap(({ parent, n, plan }) => {
+    if (plan === null) return []
+    const waiters = parts.flatMap((q) => q.parent === parent && q.after === n && q.plan !== null && !ended.has(q.plan)
+      && cloned(join(planDir(root, q.plan), 'src')) ? [q.plan] : [])
+    if (waiters[0] === undefined || !landed(db, plan) || eventsOf(db, plan, 'landed.run').length > 0) return []
+    return relayed(db, root, plan, LETTERS[n] ?? String(n), waiters, gh, join(planDir(root, waiters[0]), 'src'))
+  })
 }
 
 function download(root: string, plan: number, run: Ran, gh: Gh): string {

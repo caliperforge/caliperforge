@@ -1154,6 +1154,23 @@ test('a ci-owed workflow with no run is held, then to the ceo', async () => {
   expect(ciGreen(w)).toEqual([])
 })
 
+const overruled = (head: string): string => `overruled:\n  head: ${head.slice(0, 12)}\n  spans: ci.red keychain-307\n  reason: the runner lost its keychain\n`
+
+test('a red ci-owed run overruled at its head passes ci-green', async () => {
+  const [w, ci] = await owing({ status: 'completed', conclusion: 'failure' })
+  expect(ci()).toMatchObject({ outcome: 'refuse', to: 2 })
+  put(w.root, 1, 'rulings.md', overruled(headSha(srcDir(w.root, 1))))
+  expect(ci()).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }, { outcome: 'refuse' }])
+  expect(maybe(w.root, 1, GREEN)).toBeNull()
+})
+
+test('a red run overruled at another head still refuses', async () => {
+  const [w, ci] = await owing({ status: 'completed', conclusion: 'failure' })
+  put(w.root, 1, 'rulings.md', overruled('b'.repeat(40)))
+  expect(ci()).toMatchObject({ outcome: 'refuse', to: 2, spans: ['ci.red keychain-307'] })
+})
+
 test('a green ci-owed run passes ci-green', async () => {
   const [w, ci] = await owing(GREEN_RUN)
   expect(ci()).toBeNull()

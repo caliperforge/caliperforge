@@ -39,6 +39,7 @@ import { size } from './size.ts'
 import { prosed } from './tells.ts'
 import { picked, theirs } from './theirs.ts'
 import { dispatchable, fired, started, unrun, UNRUN } from './triggers.ts'
+import { excused } from './excused.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -155,7 +156,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
   if (rerun !== null) return onCi(db, plan.id, rerun)
   if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)
-  const passed = verdict.outcome === 'pass' || Array.isArray(base)
+  const passed = verdict.outcome === 'pass' || Array.isArray(base) || excused(root, plan.id, head.sha, verdict.spans, board)
   record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
   freed(db, plan.id)
   forkGreen(db, plan.id, passed)

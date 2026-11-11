@@ -37,8 +37,9 @@ export function listed(root: string, plan: number, sha: string): { id: string; t
     .filter((text) => /^- G\d+ /.test(text)).map((text) => ({ id: text.split(' ')[1] ?? '', text }))
 }
 
+export const field = (body: string, key: string): string => new RegExp(`^[ \\t]+${key}:(.*)$`, 'm').exec(body)?.[1]?.trim() ?? ''
+
 export function accepted(rulings: string): Map<string, string> {
-  const field = (body: string, key: string): string => new RegExp(`^[ \\t]+${key}:(.*)$`, 'm').exec(body)?.[1]?.trim() ?? ''
   return new Map([...rulings.matchAll(BLOCK)].flatMap(([, body = '']) => /^[0-9a-f]{7,40}$/.test(field(body, 'head')) && field(body, 'reason') !== ''
     ? (field(body, 'ids').match(/G\d+/g) ?? []).map((id) => [id, field(body, 'reason')] as const) : []))
 }

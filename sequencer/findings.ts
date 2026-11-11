@@ -30,7 +30,7 @@ export function kept(root: string, plan: number, repo: string, pr: number, bots:
 }
 
 export function rowsAt(root: string, plan: number, head: string | null): string[] {
-  return head === null ? [] : rows(maybe(root, plan, `findings-${head}.md`) ?? '').map((r) => r.text)
+  return head === null ? [] : rows(maybe(root, plan, `findings-${head}.md`) ?? '').map((r) => r.text.trimEnd())
 }
 
 /** `findings.md` is what the completion audit reads, so a head Greptile passed leaves none behind. */

@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -56,6 +56,19 @@ test.each(['~/cf_work', '~/cf_work/../x', '~/.ssh/config', '/tmp/x'])('inputs D2
 test('inputs D2: a plan with no ask, issue or rulings', () => {
   home()
   expect(inputs(temp('cf-root-'), 7)).toEqual([])
+})
+
+test("the plan's own artifacts folder is read once it exists", () => {
+  home()
+  const root = temp('cf-root-')
+  const artifacts = join(root, '.cf/work/7/artifacts')
+  expect(inputs(root, 7)).toEqual([])
+  mkdirSync(join(artifacts, '42'), { recursive: true })
+  writeFileSync(join(artifacts, '42/results.md'), 'ok\n')
+  expect(inputs(root, 7)).toEqual([artifacts])
+  const read = (path: string) => readOutside(temp('cf-src-'), 'Read', { file_path: join(root, path) }, inputs(root, 7))
+  expect(read('.cf/work/7/artifacts/42/results.md')).toBeNull()
+  expect(read('.cf/work/8/artifacts/42/results.md')).toMatch(/^ruling:run\.outside_checkout refuses a read of /)
 })
 
 test('inputs D3: readOutside admits the cited folder only', () => {

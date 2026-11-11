@@ -785,6 +785,27 @@ test('D2: a held 0-line brief with no ruling stays held', async () => {
   expect(writes()).toBe(before)
 })
 
+const RESEARCH = `**Question:** how long does a tick take?
+**Would be wrong if:** a tick logs no time
+**Done when:** the time is measured
+**Measure:** time one tick
+**Output:** ~/cf_work/2/
+`
+
+test('a standing 0-line brief on a research ask goes to research', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  const standing = estimated(plain(w), 0)
+  put(w.root, ID, 'ask.md', `${askOf(w)}\n${RESEARCH}`)
+  put(w.root, ID, 'issue.md', standing)
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass', note: 'brief_writer: research ask: sent to the research lane' })
+  expect(plan(w.db, ID)).toMatchObject({ template: 'research', lane: 'research', step: 0 })
+  expect(holdOf(w.db, ID)).toEqual({ held_by: null, held_why: null })
+  expect(maybe(w.root, ID, 'issue.md')).toBeNull()
+  expect(maybe(w.root, ID, 'issue.prev.md')).toBe(standing)
+})
+
 test('D4: a brief estimating 3 lines is written as before', async () => {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))

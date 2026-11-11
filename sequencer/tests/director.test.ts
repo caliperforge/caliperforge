@@ -1278,6 +1278,12 @@ const LINES = `**Question:** how long does a tick take?
 **Measure:** time one tick
 **Output:** ~/cf_work/7/`
 const FETCHED = LINES.replace(/^\*\*Measure:\*\*.*\n/m, '')
+const ANSWER_2339 = `**Question:** which record does the fetch return?
+**Would be wrong if:** the record carries no id
+**Done when:** the record is fetched
+**Measure:** \`record.id\` at \`history/2026-11.jsonl:202\`
+**Output:** ~/cf_work/2339/`
+const ASK_2339 = `# fetch the record\n\n${ANSWER_2339.replace('~/cf_work/2339/', '~/cf_work/5a-a2a-fetch/')}\n\n## Parent ticket\n\nthe parent\n\n## Parent comments\n\nnone\n`
 const researched = (lines: string) => `---\nmove: research\nwhy: the ask only measures\nanswer: |\n${lines.replace(/^/gm, '  ')}\n---\n`
 
 async function researching(origin: string, lines = LINES, ask = 'the ask\n') {
@@ -1338,6 +1344,8 @@ describe('research', () => {
   test('research moves a fetch-only answer to the research lane', () => researching('https://github.com/caliperforge/caliperforge/issues/139', FETCHED))
   test('research judges the answer over the ask\'s own lines', () =>
     researching('https://github.com/caliperforge/caliperforge/issues/139', FETCHED, 'the ask\n**Output:** /tmp/y\n**Done when:**\n'))
+  test('research moves plan 2339\'s answer over its parent ticket', () =>
+    researching('https://github.com/caliperforge/neo-watch/issues/6', ANSWER_2339, ASK_2339))
   test('a research answer with no Output fires the measurer', measured)
   test('research on a job it cannot take is held by the coo', LONG, unresearched)
 })

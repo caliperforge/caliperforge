@@ -205,7 +205,7 @@ test('D2 a second swallowed before a back is seen', () => {
   expect(drift(d, once, NOW).map((r) => r.state)).toEqual(['seen'])
 })
 
-test('weakened_ruled sees a director ruling, not a pre-build park', () => {
+test('weakened_ruled sees a ruling or a cap, not a pre-build park', () => {
   const ruled = REGISTRY.filter((e) => e.name === 'weakened_ruled')
   const log = (d: Db, kind: string, outcome: Event['outcome'], message: string, at: string): number =>
     logged(d, { plan: 1, kind, actor: kind === 'rails' ? 'tick' : kind === 'park' ? 'coo' : 'director', outcome, message, pointer: null, run: null }, at)
@@ -229,4 +229,14 @@ test('weakened_ruled sees a director ruling, not a pre-build park', () => {
   log(after, 'park', 'pass', 'm', '2026-10-01 13:00:00')
   log(after, 'rails', 'refuse', 'test-weakened: x', '2026-10-02 09:00:00')
   expect(drift(after, ruled, NOW).map((r) => r.state)).toEqual(['seen'])
+  const capped = db()
+  putPlan(capped, { id: 2, pipe_id: planById(capped, 1).pipe_id, target_id: null, template: 'comms', state: 'queued', queued_at: '2026-10-01', step: 0, retries: 0 })
+  const cap = (plan: number, at: string): number =>
+    logged(capped, { plan, kind: 'build_cap', actor: 'settle', outcome: 'needs_coo', message: 'm', pointer: null, run: null }, at)
+  cap(1, '2026-10-02 08:00:00')
+  log(capped, 'rails', 'refuse', 'test-weakened: x', '2026-10-02 09:00:00')
+  cap(2, '2026-10-02 10:00:00')
+  expect(drift(capped, ruled, NOW)).toEqual([])
+  cap(1, '2026-10-02 10:00:00')
+  expect(drift(capped, ruled, NOW)).toMatchObject([{ name: 'weakened_ruled', state: 'seen', newest: '2026-10-02 09:00:00' }])
 })

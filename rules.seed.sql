@@ -98,7 +98,7 @@ VALUES
   ('rules/registry/86-brief_title_set.yaml', 'card', 'rules/registry/86-brief_title_set.yaml', '680fb7acefd84a44a240bfa73db02fd5e02eebe0336e11af35683b6604b735a8', '2026-10-29'),
   ('rules/registry/87-ai_stance.yaml', 'card', 'rules/registry/87-ai_stance.yaml', 'ea2e2cff6b6d318c35abc090da983acbb30534e3eb91caadca79a577baf8b55b', '2026-10-31'),
   ('rules/registry/87-live_tree_behind.yaml', 'card', 'rules/registry/87-live_tree_behind.yaml', 'a5c96704e6bd118c30a916f36745f24ae0bb058b67aab551206cff2b93432109', '2026-10-31'),
-  ('rules/registry/87-weakened_ruled.yaml', 'card', 'rules/registry/87-weakened_ruled.yaml', '8a1449f8e6effa5b686138c9225727c4f9e7b95a561a37c23db16350ae193acc', '2026-11-01'),
+  ('rules/registry/87-weakened_ruled.yaml', 'card', 'rules/registry/87-weakened_ruled.yaml', '81cab77947bcb1914e84fe4ac4eeaa9723aa1c5c4f6d510cccee5eafb8a93a3e', '2026-11-01'),
   ('rules/registry/88-park_lost_wait.yaml', 'card', 'rules/registry/88-park_lost_wait.yaml', '11706f8a9dc1395eb1f90c0cef37a137f4d0aefcd7c6cc6e1040e0edd6e037ce', '2026-11-03'),
   ('rules/registry/89-bench_dry.yaml', 'card', 'rules/registry/89-bench_dry.yaml', '663d3b4ffae260533c82f87a64423f291f1c7ab5391aad51be187ae85bef5465', '2026-11-04'),
   ('rules/registry/89-phase_refused_twice.yaml', 'card', 'rules/registry/89-phase_refused_twice.yaml', 'a7cbf1f9dd45f8c4ddcc96c3f7de76f0aa58d7cfeed8ba0ff4c66ebad016f7b9', '2026-11-04'),

@@ -35,7 +35,7 @@ test('D2: the prompt runs forge and medusa', () => {
 
 test('D3: the prompt answers needs_build for network or writes', () => {
   const prompt = seat(root, 'measurer').prompt
-  for (const part of ['## Needs a build', 'outcome: needs_build', 'network', 'outside `.cf/measure/`']) expect(prompt).toContain(part)
+  for (const part of ['## Needs a build', 'outcome: needs_build', 'network', 'outside `.cf/measure/`', '`# Output`', 'never a re-run']) expect(prompt).toContain(part)
 })
 
 test('the prompt names a Run command for a job past one call', () => {

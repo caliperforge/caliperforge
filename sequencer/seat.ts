@@ -259,8 +259,9 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   const { manifest, prompt, hash } = seat(root, step.runs, step.mode)
   const src = srcDir(root, plan.id)
   const spec = languageOfSeat(step.runs) === null ? tight(root) : `${tight(root)}\n\n${discipline(root)}`
+  const fence = fenceFor(db, plan.id, manifest.write_paths)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), spec, issue, src,
-    transcriptOf(root, plan.id, step.step), ours, out === undefined ? fenceFor(db, plan.id, manifest.write_paths) : [out])
+    transcriptOf(root, plan.id, step.step), ours, out === undefined ? fence : step.runs === 'measurer' ? [...fence, out] : [out])
   const staffing = staffedOn(db, root, plan, step.step)
   const fired = await provider.fire(checkout ? {
     ...built,

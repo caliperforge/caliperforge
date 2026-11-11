@@ -30,11 +30,11 @@ const FOUND = source('    quote: The cap is 3.\n')
 
 const REFUSE = 'The answer goes past its quote.\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - answer.md:1\n---\n'
 
-const researching = (ask = ASK): World => {
+const researching = (ask = ASK, target_id: number | null = 1): World => {
   const w = world()
   const { queued_at } = plan(w.db, 1)
   dropPlan(w.db, 1)
-  putPlan(w.db, { id: 1, pipe_id: 1, target_id: 1, template: 'research', state: 'queued', queued_at, step: 0, retries: 0 })
+  putPlan(w.db, { id: 1, pipe_id: 1, target_id, template: 'research', state: 'queued', queued_at, step: 0, retries: 0 })
   put(w.root, 1, 'ask.md', ask)
   set(w.db, 'science.dir', mkdtempSync(join(tmpdir(), 'cf-science-')), 'ceo', '2026-10-05')
   return w
@@ -853,7 +853,7 @@ const home = (): string => {
 
 test('fetch D1: a Measure line with Output fires measurer', async () => {
   const out = join(home(), 'cf_work/rubin-post')
-  const w = researching(`${MEASURE}**Output:** ~/cf_work/rubin-post/\n`)
+  const w = researching(`${MEASURE}**Output:** ~/cf_work/rubin-post/\n`, null)
   const head = headed(w)
   question(w.root, plan(w.db, 1))
   const seen: Packet[] = []
@@ -861,7 +861,10 @@ test('fetch D1: a Measure line with Output fires measurer', async () => {
     .toMatchObject({ outcome: 'pass', note: expect.stringContaining('measurer: answer.md written') as unknown })
   const [packet] = seen
   expect(packet?.prompt).toContain(`# Output\n\n${out}`)
-  expect(packet?.refuse(join(out, 'data.json'))).not.toBeNull()
+  expect(packet?.reads).toEqual([out])
+  expect(packet?.refuse(join(out, 'sources.md'))).toBeNull()
+  expect(packet?.refuse('.cf/measure/recheck.py')).toBeNull()
+  for (const path of [join(out, '../other/x'), 'src/x.ts']) expect(packet?.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(ran(w)).toEqual(['measurer'])
 })
 
@@ -879,6 +882,7 @@ test('fetch D1: an Output line fires fetcher into its folder', async () => {
   expect(packet?.prompt).toContain(`# HEAD\n\n${head}\n\n# Output\n\n${out}`)
   expect(packet?.reads).toEqual([out])
   expect(packet?.refuse(join(out, 'data.json'))).toBeNull()
+  expect(packet?.refuse('src/x.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(ran(w)).toEqual(['fetcher'])
   expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
 })

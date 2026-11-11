@@ -10,7 +10,8 @@ import { proofed } from '../../store/desk.ts'
 import { addSetting } from '../../store/drift.ts'
 import { logged, runAt } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
-import { advance, briefed, planById, putPlan } from '../../store/plans.ts'
+import { enable } from '../../store/lanes.ts'
+import { addPlan, advance, briefed, planById, putPlan } from '../../store/plans.ts'
 import { addReview, type Verdict } from '../../store/verdict.ts'
 import { drift, Entry, mechanisms } from '../drift.ts'
 import { git } from '../workspace.ts'
@@ -280,6 +281,22 @@ test('aiStanceSeen D8', () => {
   expect(drift(w.db, entry, now)).toMatchObject([{ name: 'ai_stance', state: 'seen' }])
   measured('acme/widget#12 warm; ai stance: open — x')
   expect(drift(w.db, entry, now)).toEqual([])
+})
+
+test('a fix queued behind a settled-off lane must run', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'lane_fix_runs')
+  const d = db()
+  const pipe = planById(d, 1).pipe_id
+  const origin = 'https://github.com/caliperforge/caliperforge/issues/90'
+  enable(d, pipe, false)
+  logged(d, { plan: 1, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: 'lane off', pointer: null, run: null }, '2026-10-03 07:00:00')
+  logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: 'file: fix', pointer: origin, run: null }, '2026-10-03 08:00:00')
+  const fix = addPlan(d, { pipe_id: pipe, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-03',
+    lane: 'machine', seat: 'typescript_specialist', origin, step: 0 })
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'lane_fix_runs', state: 'silent' }])
+  addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
+  runAt(d, fix, 0, 'typescript_specialist', '2026-10-03 09:30:00')
+  expect(drift(d, entry, NOW)).toEqual([])
 })
 
 test('catchupRangeClearsSilent D4', () => {

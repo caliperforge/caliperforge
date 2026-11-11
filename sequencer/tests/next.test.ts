@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest'
 import { logged } from '../../store/events.ts'
 import { record as recordFiles } from '../../store/files.ts'
-import { amend, dial, set, width } from '../../store/lanes.ts'
+import { amend, dial, enable, set, width } from '../../store/lanes.ts'
 import { held, holder, take } from '../../store/leases.ts'
-import { addPipe, pipeNamed, planRows, putPlan, WAIT, type PlanRow } from '../../store/plans.ts'
+import { addPipe, addPlan, pipeNamed, planRows, putPlan, WAIT, type PlanRow } from '../../store/plans.ts'
 import { at } from '../../templates/pr-path.ts'
-import { route, type Route } from '../next.ts'
+import { lanes, route, type Route } from '../next.ts'
 import { mapOf } from '../steps.ts'
 import { approve, plan, world, type World } from './world.ts'
 
@@ -158,6 +158,39 @@ for (const [name, { state, id = 1, mine = false, want }] of Object.entries(TABLE
     expect(stored(w)).toEqual(before)
   })
 }
+
+const FIX = 'https://github.com/caliperforge/caliperforge/issues/90'
+
+/** The world's lane switched off by settle, a queued fix with origin FIX, and the director filing FIX when `filed`. */
+function settled(filed: boolean): { w: World; fix: number } {
+  const w = world()
+  enable(w.db, w.pipe.id, false)
+  logged(w.db, { plan: 1, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: 'lane off', pointer: null, run: null })
+  if (filed) logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: 'file: fix', pointer: FIX, run: null })
+  const fix = addPlan(w.db, { pipe_id: w.pipe.id, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-13',
+    lane: 'machine', seat: 'typescript_specialist', origin: FIX, step: 0 })
+  return { w, fix }
+}
+
+const offeredOn = (w: World) => lanes(w.db, NOW).filter((l) => l.pipe.id === w.pipe.id)
+  .map(({ pipe, plans }) => ({ width: pipe.max_concurrent, plans: plans.map((p) => p.id) }))
+
+test('a settled-off lane steps only its filed fix, one wide', () => {
+  const { w, fix } = settled(true)
+  expect(offeredOn(w)).toEqual([{ width: 1, plans: [fix] }])
+})
+
+test('a settled-off lane with no filed fix offers nothing', () => {
+  expect(offeredOn(settled(false).w)).toEqual([])
+})
+
+test('a lane a ceo or coo touched after settle stays fully off', () => {
+  for (const actor of ['ceo', 'coo']) {
+    const { w } = settled(true)
+    logged(w.db, { plan: null, kind: 'pipe', actor, outcome: 'pass', message: `${w.pipe.name} width 1`, pointer: null, run: null })
+    expect(offeredOn(w)).toEqual([])
+  }
+})
 
 test('the table has a row for every reason a plan waits', () => {
   const decided = new Set(Object.values(TABLE).map(({ want }) => 'fire' in want ? 'fire' : want.wait))

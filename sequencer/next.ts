@@ -1,3 +1,4 @@
+import { fixes } from '../store/back-on.ts'
 import type { Db } from '../store/index.ts'
 import { held, type Lease } from '../store/leases.ts'
 import { cap, hhmm, pipes } from '../store/lanes.ts'
@@ -50,15 +51,25 @@ export function offered(db: Db, now: Date, mine: Lease | null = null): Offer[] {
   }))
 }
 
-/** Every enabled lane in its window with its plans, and a closed lane with its fuzzing bench plans while `fuzzLane` opens it. */
+/**
+ * Every enabled lane in its window with its plans, a closed lane with its fuzzing bench plans while `fuzzLane` opens it,
+ * and a lane settle switched off, in its window, at width 1 with the fixes the director filed for its stop.
+ */
 export function lanes(db: Db, now: Date): { pipe: PipeRow; plans: PlanRow[] }[] {
   const when = hhmm(db, now)
-  return pipes(db).filter((p) => p.enabled === 1).flatMap((pipe) => {
+  return pipes(db).flatMap((pipe) => {
+    if (pipe.enabled === 0) return inWindow(pipe, when) ? fixing(db, pipe) : []
     if (inWindow(pipe, when)) return [{ pipe, plans: live(db, pipe) }]
     const fuzz = fuzzLane(db, pipe, when)
     const plans = live(db, pipe).filter((p) => fuzzes(p, mapOf(p.template).at(p.step)))
     return fuzz === null || plans.length === 0 ? [] : [{ pipe: fuzz, plans }]
   })
+}
+
+function fixing(db: Db, pipe: PipeRow): { pipe: PipeRow; plans: PlanRow[] }[] {
+  const fix = new Set(fixes(db, pipe.id))
+  const plans = live(db, pipe).filter((p) => fix.has(p.id))
+  return plans.length === 0 ? [] : [{ pipe: { ...pipe, max_concurrent: 1 }, plans }]
 }
 
 /**

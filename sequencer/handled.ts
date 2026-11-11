@@ -12,7 +12,7 @@ export function handled(root: string, plan: number, head: string): { id: string;
     .filter((sha) => tried(src, ['merge-base', '--is-ancestor', sha, head]) !== null)
     .flatMap((sha) => {
       const { open } = unruled(root, plan, sha)
-      return listed(root, plan, sha).map(({ id, text }) => {
+      return listed(root, plan, sha).filter(({ id }) => sha === head || id.startsWith('G')).map(({ id, text }) => {
         const at = pointer(id)
         const fix = at === '' ? '' : tried(src, ['log', '-1', '--format=%H', `${sha}..${head}`, '--', at.split(':')[0] ?? ''])?.trim() ?? ''
         const how = reply(id) ?? (fix === '' ? null : `fixed in ${fix.slice(0, 12)} at ${at}`)

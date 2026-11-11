@@ -8,12 +8,13 @@ import { greptileFacts } from '../../store/facts.ts'
 import { record, since } from '../../store/signals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { blinded, rehearsed } from '../findings.ts'
+import { handled } from '../handled.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import { headOf } from '../push.ts'
 import { verdict } from '../signoff.ts'
 import { headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
-import { approve, CARRIED, once, PASS, plan, scored, stub, watched, world, type World } from './world.ts'
+import { approve, built as worked, CARRIED, once, PASS, plan, scored, stub, watched, world, type World } from './world.ts'
 
 const FOUND = '- G11 src/hello.ts:1 a mint change is lost\n- G12 src/hello.ts:2 the name is wrong\n'
 
@@ -146,6 +147,13 @@ test('a B1 fixed: row in the hand-back lets ready pass', async () => {
   const w = await atReady(handback)
   expect(await lap(w, handback)).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('a blind row at an earlier tree does not hold the head', async () => {
+  const w = await UNANSWERED()
+  put(w.root, 1, `findings-${headOf(w.root, 1).sha}.md`, '- G1 src/hello.ts:1 an old finding\n')
+  worked(w.root, 1, '// another round')
+  expect(handled(w.root, 1, headOf(w.root, 1).sha).filter((f) => f.holds).map((f) => f.id)).toEqual(['G1'])
 })
 
 test('an open blind B P3 fails the fact sheet as blind review', async () => {

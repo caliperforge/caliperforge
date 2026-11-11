@@ -189,19 +189,18 @@ test('D1 D2 greptileFacts gives score and each ruling', () => {
     external_id: 'x', score: 4, plan, head: HEAD })
   expect(greptileFacts(db, dir, plan, HEAD)).toEqual([
     { name: 'greptile', ok: true, says: '4/5' },
-    { name: 'findings', ok: true, says: '2 findings' },
     { name: 'G1', ok: true, says: 'fixed: src/a.ts:3' },
     { name: 'G2', ok: true, says: 'accepted: recorded upstream' },
   ])
   put(dir, plan, `findings-${HEAD}.md`, '- G1 src/a.ts:1 x\n- G2 src/a.ts:2 y\n- G3 src/a.ts:3 z\n')
-  expect(greptileFacts(db, dir, plan, HEAD).at(-1)).toEqual({ name: 'G3', ok: false, says: 'open' })
+  expect(greptileFacts(db, dir, plan, HEAD).at(-1)).toEqual({ name: 'greptile', ok: false, says: 'G3 src/a.ts:3 z' })
 })
 
 test('D3 greptileFacts with no score and no findings file', () => {
   const { db, dir, plan } = greptiled({})
   expect(greptileFacts(db, dir, plan, HEAD)).toEqual([
     { name: 'greptile', ok: false, says: 'no score' },
-    { name: 'findings', ok: true, says: '0 findings' },
+    { name: 'findings', ok: true, says: 'none' },
   ])
 })
 

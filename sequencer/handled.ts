@@ -8,7 +8,7 @@ import { maybe, planDir, put, srcDir, tried } from './workspace.ts'
 /** Each finding at `head` or at a head before it on its line, with the ruling or the later commit that answers it. */
 export function handled(root: string, plan: number, head: string): { id: string; text: string; how: string | null; holds: boolean }[] {
   const [src, reply, pointer] = [srcDir(root, plan), replies(root, plan), pointers(root, plan, true)]
-  return readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? [])
+  return [...new Set([...readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? []), head])]
     .filter((sha) => tried(src, ['merge-base', '--is-ancestor', sha, head]) !== null)
     .flatMap((sha) => {
       const { open } = unruled(root, plan, sha)

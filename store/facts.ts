@@ -142,9 +142,10 @@ export function greptileFacts(db: Db, root: string, plan: number, head: string):
   const row = graded(db, plan, head)
   const score = row?.score ?? 0
   return [
-    row === null ? { name: 'greptile', ok: false, says: 'no score' } : { name: 'greptile', ok: score >= 4 || found.length > 0, says: `${String(score)}/5` },
-    { name: 'findings', ok: true, says: `${String(found.length)} findings` },
-    ...found.map(({ id }) => ({ name: id, ok: lines.has(id), says: lines.get(id) ?? 'open' })),
+    row === null ? { name: 'greptile', ok: false, says: 'no score' } : { name: 'greptile', ok: score >= 4 || found.some((f) => f.id.startsWith('G')), says: `${String(score)}/5` },
+    ...found.length === 0 ? [{ name: 'findings', ok: true, says: 'none' }] : found.map(({ id, text }) => lines.has(id)
+      ? { name: id, ok: true, says: lines.get(id) ?? '' }
+      : { name: id.startsWith('B') ? 'blind review' : 'greptile', ok: false, says: text.split('\n')[0]?.slice(2) ?? '' }),
   ]
 }
 

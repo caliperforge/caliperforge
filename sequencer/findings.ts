@@ -5,6 +5,8 @@ import { asks, graded, type Signal } from '../store/signals.ts'
 import { verdictRows } from '../store/verdict.ts'
 import { BOT } from './capture.ts'
 import { carried } from './push.ts'
+import { rows } from './listed.ts'
+import { listed, unruled } from './unruled.ts'
 import { cloned, drop, headSha, maybe, put, srcDir } from './workspace.ts'
 
 export interface Rehearsal { root: string; list: Read }
@@ -28,7 +30,7 @@ export function kept(root: string, plan: number, repo: string, pr: number, bots:
 }
 
 export function rowsAt(root: string, plan: number, head: string | null): string[] {
-  return head === null ? [] : (maybe(root, plan, `findings-${head}.md`) ?? '').split('\n').filter((l) => l.startsWith('- G'))
+  return head === null ? [] : rows(maybe(root, plan, `findings-${head}.md`) ?? '').map((r) => r.text)
 }
 
 /** `findings.md` is what the completion audit reads, so a head Greptile passed leaves none behind. */
@@ -36,12 +38,15 @@ export function findings(db: Db, root: string, plan: number, src: string): strin
   const head = cloned(src) ? headSha(src) : null
   const score = head === null ? null : graded(db, plan, head)?.score ?? null
   const lines = head !== null && score !== null && score < 5 ? maybe(root, plan, `findings-${head}.md`) ?? '' : ''
+  const ruled = head === null ? [] : unruled(root, plan, head).ruled
+  const blind = head === null ? '' : listed(root, plan, head).filter((f) => f.id.startsWith('B') && !ruled.includes(f.id)).map((f) => f.text).join('')
+  const told = blind === '' ? '' : `\n\n# Blind review findings\n\nUnder \`## Findings answered\` in your hand-back, above the fence, write one row per id: \`- B1 fixed: <how>\` or \`- B1 disputed: <why>\`.\n\n${blind}`
   if (lines.trim() === '') {
     drop(root, plan, 'findings.md')
-    return ''
+    return told
   }
   put(root, plan, 'findings.md', lines)
-  return `\n\n# Bot review findings\n\nGreptile scored this head ${String(score)}/5. Answer each finding under its id in your hand-back's done rows, with a pointer.\n\n${lines}`
+  return `\n\n# Bot review findings\n\nGreptile scored this head ${String(score)}/5. Answer each finding under its id in your hand-back's done rows, with a pointer.\n\n${lines}${told}`
 }
 
 /** `findings.open.md` is what step 3 reads: a row whose span `narrowed()` dropped is not open. */

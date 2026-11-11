@@ -107,7 +107,7 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0
-  const { found, ruled, open, refused, severe } = unruled(root, plan.id, sha, row.body ?? '')
+  const { found, ruled, open, refused, severe } = unruled(root, plan.id, sha, row.body ?? '', /^G/)
   if (open.length > 0 || (score < 4 && found === 0)) {
     const same = diffAt(db, plan.id, plan.step) === diff
     const back = refused.length > 0 || (!same && (severe.length > 0 || (score < 4 && found === 0)))

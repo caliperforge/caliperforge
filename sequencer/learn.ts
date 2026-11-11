@@ -3,26 +3,26 @@ import { join } from 'node:path'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { graded, type SignalRow } from '../store/signals.ts'
+import { rows } from './listed.ts'
 import { languageOfPath } from './route.ts'
 import { maybe, planDir, repoName } from './workspace.ts'
 
 export const BLOCK = /^accepted:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))*)/gm
 
-const FINDING = /^- G(\d+) (\S+?)(?::(\d+))? (.*)$/gm
-
 const HEADING = '## Found by Greptile and fixed\n\n'
 
 /** Each Greptile finding an earlier head carried that `sha` no longer does, and no ruling accepted, becomes a worked example for its language. */
 export function learned(db: Db, root: string, plan: number, sha: string): void {
-  const kept = [...(maybe(root, plan, `findings-${sha}.md`) ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1])
+  const greptile = (name: string): ReturnType<typeof rows> => rows(maybe(root, plan, name) ?? '').filter((f) => f.id.startsWith('G'))
+  const kept = greptile(`findings-${sha}.md`).map((f) => f.id)
   const ruled = [...(maybe(root, plan, 'rulings.md') ?? '').matchAll(BLOCK)]
     .flatMap(([, body = '']) => /^[ \t]+ids:(.*)$/m.exec(body)?.[1]?.match(/G\d+/g) ?? [])
   for (const name of readdirSync(planDir(root, plan))) {
     const head = /^findings-(.+)\.md$/.exec(name)?.[1]
     const signal = head === undefined || head === sha ? null : graded(db, plan, head)
     if (head === undefined || signal === null) continue
-    for (const [, id = '', path = '', at, body = ''] of (maybe(root, plan, name) ?? '').matchAll(FINDING)) {
-      if (!kept.includes(`G${id}`) && !ruled.includes(`G${id}`)) learn(db, root, plan, signal, head, { id, path, at, body })
+    for (const { id, path, at, body } of greptile(name)) {
+      if (!kept.includes(id) && !ruled.includes(id)) learn(db, root, plan, signal, head, { id: id.slice(1), path, at, body })
     }
   }
 }

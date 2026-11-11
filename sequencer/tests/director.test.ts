@@ -1822,7 +1822,8 @@ const CLOSES = [
   ['fixed', '', null, null],
   ['covered', `ref: ${COVER}\n`, COVER, null],
   ['retire', '', FILED, '**What:** Retire registry entry fixer\n**Why:** the cause\n**Files:** rules/registry/01-fixer.yaml\n'
-    + '**When it ends:** main no longer has the fixer entry in rules/registry/01-fixer.yaml\n\n'
+    + '**When it ends:** main no longer has the fixer entry in rules/registry/01-fixer.yaml\n'
+    + 'Replaces: registry entry fixer in rules/registry/01-fixer.yaml\n\n'
     + 'Drift finding 1: fixer is off, fixer.mode is not live'],
   ['defect', DEFECT, FILED, '**What:** the tick skips fixer.mode\n**Why:** the cause\n'
     + '**Files:** sequencer/fixer.ts\n**When it ends:** a live fixer.mode fires the fixer\n\n'

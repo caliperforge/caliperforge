@@ -9,6 +9,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { pending } from '../store/transcript.ts'
+import { compared, type Cover, covered, said } from './covered.ts'
 import { applying, spare } from './director.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -28,6 +29,8 @@ type Said = z.infer<typeof Said>
 
 interface Entry { from: number; to: number }
 
+interface Closed { outcome: Said['outcome']; ref: string | null }
+
 export async function answer(db: Db, root: string, provider: Provider, now: Date, wire: Wire = WIRE): Promise<string> {
   if (!applying(db)) return 'director.apply is off'
   const [found] = unanswered(db, now)
@@ -46,8 +49,10 @@ export async function answer(db: Db, root: string, provider: Provider, now: Date
   const m = fired.ended === 'completed' ? read(fired.text) : null
   if (m === null) return told(db, found, now, 'needs_coo', `finding ${String(found.id)}: no outcome`)
   if (m.outcome === 'retire' && held === null) return told(db, found, now, 'needs_coo', `retire did not apply: no entry ${found.name}`)
-  closeFinding(db, found.id, m.outcome, m.why, refOf(m, found, wire, held?.path), now)
-  return told(db, found, now, 'pass', `${m.outcome}: ${m.why}`)
+  const done = refOf(db, root, m, found, wire, now, held?.path)
+  if (typeof done === 'string') return told(db, found, now, 'needs_coo', done)
+  closeFinding(db, found.id, done.outcome, m.why, done.ref, now)
+  return told(db, found, now, 'pass', `${done.outcome}: ${m.why}`)
 }
 
 function read(text: string): Said | null {
@@ -77,14 +82,29 @@ function line(found: Finding): string {
   return `finding ${String(found.id)}: ${found.name} is ${found.state}, ${found.detail}`
 }
 
-function refOf(m: Said, found: Finding, wire: Wire, path = ''): string | null {
-  if (m.outcome === 'covered') return m.ref ?? null
-  if (m.outcome === 'fixed') return null
+function refOf(db: Db, root: string, m: Said, found: Finding, wire: Wire, now: Date, path = ''): Closed | string {
+  if (m.outcome === 'covered') return { outcome: 'covered', ref: m.ref ?? null }
+  if (m.outcome === 'fixed') return { outcome: 'fixed', ref: null }
   const [title, files, ends, priority] = m.outcome === 'retire'
-    ? [`Retire registry entry ${found.name}`, path, `main no longer has the ${found.name} entry in ${path}`, 'P2']
+    ? [`Retire registry entry ${found.name}`, path,
+      `main no longer has the ${found.name} entry in ${path}\nReplaces: registry entry ${found.name} in ${path}`, 'P2']
     : [m.title ?? m.why, m.files ?? '', m.ends ?? '', 'P0']
   const body = `**What:** ${title}\n**Why:** ${m.why}\n**Files:** ${files}\n**When it ends:** ${ends}\n\nDrift ${line(found)}`
-  return wire.file(SELF, title, body, ['lane:machine', priority, 'fix'])
+  const cover = covered(db, root, null, SELF, title, body, now, wire.merged)
+  const done = acted(cover, m, found, wire, title, body, priority)
+  compared(db, null, 'finding', title, cover, typeof done === 'string' ? null : done.ref)
+  return done
+}
+
+function acted(cover: Cover, m: Said, found: Finding, wire: Wire, title: string, body: string, priority: string): Closed | string {
+  switch (cover.verdict) {
+    case 'landed': return { outcome: 'covered', ref: cover.sha }
+    case 'open':
+      wire.amend?.(SELF, cover.no, `- Also hit by drift finding ${String(found.id)}: ${m.why.split('\n')[0] ?? ''}`)
+      return { outcome: 'covered', ref: cover.url }
+    case 'unreplaced': return `finding ${String(found.id)}: ${said(cover)}`
+    case 'filed': return { outcome: m.outcome, ref: wire.file(SELF, title, body, ['lane:machine', priority, 'fix']) }
+  }
 }
 
 function told(db: Db, found: Finding, now: Date, outcome: 'pass' | 'needs_coo', message: string): string {

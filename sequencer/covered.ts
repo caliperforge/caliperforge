@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { WINDOW, type Read } from '../cli/gh.ts'
 import { registered } from '../runner/rules.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { newestOfOrigin, type PlanRow } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
@@ -24,14 +25,14 @@ const PATH = /(?<![\w./:-])(?:[\w-]+\/)+[\w.-]+\.[a-z]{1,5}\b/g
 
 const DAYS = 14
 
-export type Cover = ({ verdict: 'landed'; no: number; url: string; sha: string } | { verdict: 'open'; no: number; url: string; plan: number }
+export type Cover = ({ verdict: 'landed'; no: number; url: string; sha: string } | { verdict: 'open'; no: number; url: string; plan: number | null }
   | { verdict: 'unreplaced'; name: string } | { verdict: 'filed' }) & { open: number; landed: number; names: number }
 
 interface Draft { title: string; text: string; spans: Cited[]; names: string[] }
 
 interface Cited { path: string; from: number; to: number }
 
-export function covered(db: Db, root: string, plan: PlanRow, repo: string, title: string, body: string, now: Date, read: Read): Cover {
+export function covered(db: Db, root: string, plan: PlanRow | null, repo: string, title: string, body: string, now: Date, read: Read): Cover {
   const since = new Date(now.getTime() - DAYS * 86_400_000).toISOString().slice(0, 10)
   const open = listed(read, repo, ['--state', 'open'], 'number,title,body,url')
   const landed = listed(read, repo, ['--state', 'closed', '--search', `closed:>=${since}`], 'number,title,body,url,comments')
@@ -41,17 +42,25 @@ export function covered(db: Db, root: string, plan: PlanRow, repo: string, title
     })
   const names = registry(root)
   const counts = { open: open.length, landed: landed.length, names: names.length }
-  const draft = { title, text: `${title}\n${body}`, spans: cites(refusalRows(db, plan.id).map((r) => r.span ?? '').join('\n')),
-    names: named(`${title}\n${body}`, names) }
+  const draft = { title, text: `${title}\n${body}`,
+    spans: plan === null ? [] : cites(refusalRows(db, plan.id).map((r) => r.span ?? '').join('\n')), names: named(`${title}\n${body}`, names) }
   const hit = landed.find((i) => covers(draft, i, names))
   if (hit !== undefined) return { verdict: 'landed', no: hit.number, url: hit.url, sha: hit.sha, ...counts }
   for (const i of open.filter((o) => covers(draft, o, names))) {
     const on = newestOfOrigin(db, i.url)
-    if (on !== undefined && waitable(db, on.id, plan.id)) return { verdict: 'open', no: i.number, url: i.url, plan: on.id, ...counts }
+    if (plan === null || (on !== undefined && waitable(db, on.id, plan.id))) {
+      return { verdict: 'open', no: i.number, url: i.url, plan: on?.id ?? null, ...counts }
+    }
   }
   const name = draft.names[0]
   if (name !== undefined && !/^Replaces: \S/m.test(body)) return { verdict: 'unreplaced', name, ...counts }
   return { verdict: 'filed', ...counts }
+}
+
+export function compared(db: Db, plan: number | null, actor: string, title: string, cover: Cover, pointer: string | null): void {
+  logged(db, { plan, kind: 'covered', actor, outcome: cover.verdict === 'unreplaced' ? 'refuse' : 'pass',
+    message: `compared "${title}" with ${String(cover.open)} open, ${String(cover.landed)} landed, ${String(cover.names)} registry lines: ${said(cover)}`,
+    pointer, run: null })
 }
 
 export function said(cover: Cover): string {

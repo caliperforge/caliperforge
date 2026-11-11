@@ -1,11 +1,10 @@
 import { file, LANE, laneOf } from '../cli/plan.ts'
-import { logged } from '../store/events.ts'
 import { returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import type { Lane } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { alike } from '../store/refusals.ts'
-import { type Cover, covered, said } from './covered.ts'
+import { compared, type Cover, covered } from './covered.ts'
 import { hold, unhold } from './hold.ts'
 import type { Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -19,9 +18,7 @@ export function ticketed(db: Db, root: string, plan: PlanRow, title: string, bod
   const lane = laneOf(title.split(/[\s,()]+/).map((name) => ({ name }))) ?? 'machine'
   const cover = covered(db, root, plan, LANE[lane].home, title, body, now, wire.merged)
   const url = acted(db, root, plan, cover, lane, title, body, why, wire, now)
-  logged(db, { plan: plan.id, kind: 'covered', actor: 'ticketed', outcome: cover.verdict === 'unreplaced' ? 'refuse' : 'pass',
-    message: `compared "${title}" with ${String(cover.open)} open, ${String(cover.landed)} landed, ${String(cover.names)} registry lines: ${said(cover)}`,
-    pointer: url === false ? null : url, run: null })
+  compared(db, plan.id, 'ticketed', title, cover, url === false ? null : url)
   return url
 }
 

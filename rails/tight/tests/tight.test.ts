@@ -208,7 +208,8 @@ const moved = (removed: string, source: string): string[] => {
 
 const within = (comment: string): string[] => {
   const source = `export const reap = 1\n${comment}\nexport const sow = 2\n`
-  const diff = `--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,4 +1,4 @@\n-/** #154: reap\n- * on land */\n export const reap = 1\n+${comment.replace('\n', '\n+')}\n export const sow = 2\n`
+  const was = '/** #154: reap\n * on land */'
+  const diff = `--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,4 +1,4 @@\n-${was.replace('\n', '\n-')}\n export const reap = 1\n+${comment.replace('\n', '\n+')}\n export const sow = 2\n`
   return tight(root, { diff, sources: { 'src/a.ts': source }, description: 'x.' }).spans
 }
 

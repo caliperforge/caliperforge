@@ -1,8 +1,9 @@
-import { isAbsolute } from 'node:path'
+import { existsSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import type { PlanRow } from '../store/plans.ts'
 import { labelled } from '../templates/asked.ts'
 import { work } from '../templates/research.ts'
-import { maybe } from './workspace.ts'
+import { maybe, planDir } from './workspace.ts'
 
 /** A research job's `**Output:**` folder made absolute, or null when the job is not research or names no folder under ~/cf_work/. */
 export function output(root: string, plan: PlanRow): string | null {
@@ -10,9 +11,10 @@ export function output(root: string, plan: PlanRow): string | null {
   return plan.template === 'research' && named !== undefined ? work(named) : null
 }
 
-/** Every folder strictly under ~/cf_work/ that the plan's ask, issue or rulings name, once each. */
+/** Every folder strictly under ~/cf_work/ that the plan's ask, issue or rulings name, once each, and the plan's own `artifacts` folder once it exists. */
 export function inputs(root: string, plan: number): string[] {
   const text = ['ask.md', 'issue.md', 'rulings.md'].map((name) => maybe(root, plan, name) ?? '').join('\n')
   const tokens = text.split(/[\s`'"()]+/).map((token) => token.replace(/[.,;:]+$/, ''))
-  return [...new Set(tokens.flatMap((token) => token.startsWith('~/') || isAbsolute(token) ? work(token) ?? [] : []))]
+  const artifacts = join(planDir(root, plan), 'artifacts')
+  return [...new Set(tokens.flatMap((token) => token.startsWith('~/') || isAbsolute(token) ? work(token) ?? [] : [])), ...existsSync(artifacts) ? [artifacts] : []]
 }

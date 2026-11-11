@@ -18,6 +18,7 @@ import { approved } from './approve.ts'
 import { words } from './signals.ts'
 import { landed } from './landed.ts'
 import { firstLine } from './unpolled.ts'
+import { relayed } from './relayed.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 const CUT = 6000
@@ -90,15 +91,16 @@ export function languages(plan: PlanRow, brief: string): string | null {
 
 /**
  * After a part lands on main: the parts that wait on it are queued, or, every other part landed, the parent's issue is
- * closed with the sha that finished it. Only the close touches the network, and a close that fails is
+ * closed with the sha that finished it. Only the close and the waiters' artifact downloads touch the network, and one that fails is
  * said in the note rather than undoing a landing.
  */
 export function following(db: Db, root: string, plan: PlanRow, sha: string, wire: Wire = WIRE): string | null {
   const row = partOf(db, plan.id)
   if (row === undefined) return null
   const parent = planById(db, row.parent)
-  const waiting = waitingOn(db, parent.id, row.n)
-  if (waiting.length > 0) return waiting.map((n) => `part ${letter(n)} queued as plan ${String(queue(db, root, parent, n))}`).join('; ')
+  const queued = waitingOn(db, parent.id, row.n).map((n) => [n, queue(db, root, parent, n)] as const)
+  const failed = relayed(db, root, plan.id, letter(row.n), queued.flatMap(([, id]) => id === null ? [] : [id]), wire.runs)
+  if (queued.length > 0) return [...queued.map(([n, id]) => `part ${letter(n)} queued as plan ${String(id)}`), ...failed].join('; ')
   const rest = partsOf(db, parent.id).filter((p) => p.n !== row.n)
   if (!rest.every((p) => landed(db, p.plan))) return null
   const issue = originIssue(parent)

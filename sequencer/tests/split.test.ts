@@ -1,13 +1,16 @@
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { shape, split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { refilled } from '../refill.ts'
+import { unrelayed } from '../relayed.ts'
 import { unran } from '../reproduced.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
-import { maybe, put, srcDir } from '../workspace.ts'
+import { maybe, planDir, put, srcDir } from '../workspace.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { record } from '../../store/files.ts'
@@ -15,7 +18,7 @@ import { builder } from '../../templates/pr-path.ts'
 import { question } from '../../templates/research.ts'
 import { refile } from '../../cli/refile.ts'
 import { measure } from '../steps.ts'
-import { logged, ofKind, runLogged, runRows } from '../../store/events.ts'
+import { logged, ofKind, pointers, runLogged, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
@@ -297,6 +300,125 @@ test('D3: a close that throws is said and logged on the parent', async () => {
   const wire = { ...watched([], w.root, b), close: () => { throw new Error('gh down') } }
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), wire)).toBe('the last part landed; closing #34 failed: gh down')
   expect(ofKind(w.db, 'swallowed').map((e) => [e.plan, e.actor, e.message])).toEqual([[ID, 'split', 'gh down']])
+})
+
+const CI_RUN = 'https://github.com/caliperforge/caliperforge/actions/runs/1'
+const KEYCHAIN_RUN = 'https://github.com/caliperforge/caliperforge/actions/runs/307'
+const WORKFLOW = '.github/workflows/keychain-307.yml'
+
+/** Part a, pushed, its hand-back owing keychain-307 as `ci`, its board `board`. */
+async function boarded(w: World, board: string | null): Promise<number> {
+  await briefed(w, ID, PARTS, [])
+  const a = partPlan(w, 0) ?? 0
+  put(w.root, a, 'step-2.handback.md', `---\ndone:\n  - id: D1\n    status: ci\n    pointer: ${WORKFLOW}\n---\n`)
+  mkdirSync(join(srcDir(w.root, a), '.github/workflows'), { recursive: true })
+  writeFileSync(join(srcDir(w.root, a), WORKFLOW), 'name: keychain-307\non: push\n')
+  if (board !== null) put(w.root, a, 'ci.json', board)
+  pushed(w, a)
+  return a
+}
+
+const BOARD = `${JSON.stringify([
+  { workflow: 'CI', status: 'completed', conclusion: 'success', gates: true, url: CI_RUN },
+  { workflow: 'keychain-307', status: 'completed', conclusion: 'success', gates: false, url: KEYCHAIN_RUN },
+  { workflow: 'lint', status: 'completed', conclusion: 'success', gates: false },
+])}\n`
+
+const downloads = (calls: string[][]): Wire['runs'] => (args) => {
+  calls.push(args)
+  mkdirSync(args.at(-1) ?? '', { recursive: true })
+  writeFileSync(join(args.at(-1) ?? '', 'results.md'), 'ok\n')
+  return ''
+}
+
+test('a landing logs its runs and hands owed artifacts on', async () => {
+  const w = mine()
+  const a = await boarded(w, BOARD)
+  const calls: string[][] = []
+  expect(following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), { ...watched([], w.root, a), runs: downloads(calls) })).toMatch(/^part b queued as plan \d+$/)
+  expect(ofKind(w.db, 'landed.run').map((e) => [e.plan, e.actor, e.message])).toEqual([[a, 'split', 'CI'], [a, 'split', 'keychain-307']])
+  expect(pointers(w.db, 'landed.run')).toEqual([CI_RUN, KEYCHAIN_RUN])
+  const b = partPlan(w, 1) ?? 0
+  const folder = join(planDir(w.root, b), 'artifacts', '307')
+  expect(calls).toEqual([['run', 'download', '307', '--repo', 'caliperforge/caliperforge', '--dir', folder]])
+  expect(existsSync(join(folder, 'results.md'))).toBe(true)
+  expect(maybe(w.root, b, 'ask.md')?.split("\n\n## Runs on part a's landed commit\n\n")[1]).toBe(`- CI ${CI_RUN}\n- keychain-307 ${KEYCHAIN_RUN}, artifacts in ${folder}\n`)
+})
+
+test('a download that throws is said; the next part still queues', async () => {
+  const w = mine()
+  const a = await boarded(w, BOARD)
+  const runs: Wire['runs'] = (args) => { if (args[1] === 'download') throw new Error('gh down\nmore'); return '' }
+  const note = following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), { ...watched([], w.root, a), runs })
+  const b = partPlan(w, 1) ?? 0
+  expect(note).toBe(`part b queued as plan ${String(b)}; keychain-307 artifacts for plan ${String(b)} not downloaded: gh down`)
+  expect(ofKind(w.db, 'swallowed').map((e) => [e.plan, e.actor, e.message])).toEqual([[a, 'split', 'gh down']])
+  expect(plan(w.db, b)).toMatchObject({ state: 'queued' })
+  expect(maybe(w.root, b, 'ask.md')).toContain(`- keychain-307 ${KEYCHAIN_RUN}, artifacts not downloaded: gh down\n`)
+  expect(existsSync(join(planDir(w.root, b), 'artifacts'))).toBe(false)
+})
+
+test.each([null, '[]\n'])('a landing with board %j relays nothing', async (board) => {
+  const w = mine()
+  const a = await boarded(w, board)
+  const calls: string[][] = []
+  following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), { ...watched([], w.root, a), runs: downloads(calls) })
+  const b = allParts(w.db).find((p) => p.parent === ID && p.n === 1)
+  expect(ofKind(w.db, 'landed.run')).toEqual([])
+  expect(calls).toEqual([])
+  expect(maybe(w.root, b?.plan ?? 0, 'ask.md')).toBe(`# ${b?.title ?? ''}\n\n${b?.body ?? ''}`)
+})
+
+/** Part a landed with nothing relayed, its board since filled and its `src/` reaped; part b queued on a cloned checkout. */
+async function unrelayedB(w: World, finished = true): Promise<number> {
+  const a = await boarded(w, null)
+  following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched([], w.root, a))
+  if (finished) finish(w.db, plan(w.db, a))
+  put(w.root, a, 'ci.json', BOARD)
+  rmSync(join(planDir(w.root, a), 'src'), { recursive: true })
+  const b = partPlan(w, 1) ?? 0
+  mkdirSync(join(srcDir(w.root, b), '.git'))
+  mkdirSync(join(srcDir(w.root, b), '.github/workflows'), { recursive: true })
+  writeFileSync(join(srcDir(w.root, b), WORKFLOW), 'name: keychain-307\non: push\n')
+  return b
+}
+
+test("an earlier landing's runs reach its waiter once", async () => {
+  const w = mine()
+  const b = await unrelayedB(w)
+  const ask = maybe(w.root, b, 'ask.md') ?? ''
+  const calls: string[][] = []
+  expect(unrelayed(w.db, w.root, downloads(calls))).toEqual([])
+  const folder = join(planDir(w.root, b), 'artifacts', '307')
+  expect(calls).toEqual([['run', 'download', '307', '--repo', 'caliperforge/caliperforge', '--dir', folder]])
+  expect(existsSync(join(folder, 'results.md'))).toBe(true)
+  const relayedAsk = `${ask.trimEnd()}\n\n## Runs on part a's landed commit\n\n- CI ${CI_RUN}\n- keychain-307 ${KEYCHAIN_RUN}, artifacts in ${folder}\n`
+  expect(maybe(w.root, b, 'ask.md')).toBe(relayedAsk)
+  unrelayed(w.db, w.root, downloads(calls))
+  expect(calls).toHaveLength(1)
+  expect(maybe(w.root, b, 'ask.md')).toBe(relayedAsk)
+})
+
+test.each([
+  { by: 'a finished waiter', finished: true, set: (w: World, b: number) => { end(w.db, b, 'done') } },
+  { by: 'an unlanded part', finished: false, set: () => undefined },
+  { by: 'an uncloned waiter', finished: true, set: (w: World, b: number) => { rmSync(join(srcDir(w.root, b), '.git'), { recursive: true }) } },
+])('nothing is relayed to $by', async ({ finished, set }) => {
+  const w = mine()
+  const b = await unrelayedB(w, finished)
+  set(w, b)
+  const ask = maybe(w.root, b, 'ask.md')
+  const calls: string[][] = []
+  expect(unrelayed(w.db, w.root, downloads(calls))).toEqual([])
+  expect(calls).toEqual([])
+  expect(maybe(w.root, b, 'ask.md')).toBe(ask)
+})
+
+test('a late download that throws is returned', async () => {
+  const w = mine()
+  const b = await unrelayedB(w)
+  const runs: Wire['runs'] = () => { throw new Error('gh down') }
+  expect(unrelayed(w.db, w.root, runs)).toEqual([`keychain-307 artifacts for plan ${String(b)} not downloaded: gh down`])
 })
 
 test('D1, D2: a re-split part closes and its grandparent goes on', async () => {

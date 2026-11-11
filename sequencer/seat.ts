@@ -24,7 +24,7 @@ import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { claimed, estimate, files, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, TEST, wide, WIDE, type Part } from './brief.ts'
+import { claimed, estimate, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
 import { precedented, reviewed } from './precedented.ts'
@@ -44,6 +44,7 @@ import { looked } from './design.ts'
 import { dropped } from './dropped.ts'
 import { moded } from './moded.ts'
 import { asked, blinded, findings, left, owed } from './findings.ts'
+import { byHand } from './reroute.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { staffed } from './staffing.ts'
@@ -125,7 +126,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (ticket === null && maybe(root, plan.id, 'ask.md') === null) {
     return { outcome: 'needs_ceo', spans: ['ask.md'], note: `plan ${String(plan.id)} has no ask.md or issue.md: write the ask to ask.md, then cf retry ${String(plan.id)}` }
   }
-  const held = ruled(root, plan.id) === null || builderRan(db, plan.id) ? byHand(step.runs, ticket) : null
+  const held = ruled(root, plan.id) === null || builderRan(db, plan.id) ? byHand(db, root, plan, step.runs, ticket) : null
   if (held !== null || (ticket !== null && builderRan(db, plan.id))) return held ?? stands()
   const saved = split(maybe(root, plan.id, 'split.md') ?? '')
   if (saved !== null) return splitting(step, saved)
@@ -158,7 +159,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
-  return byHand(step.runs, text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+  return byHand(db, root, plan, step.runs, text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }
 
 /** What the brief seat's reply ends in place of a brief: an allow-listed command to run, or a claimed ask held with its evidence. */
@@ -167,11 +168,6 @@ function instead(runs: string, reply: string): Outcome | null {
   if (line !== null) return { outcome: 'pass', spans: [], note: `${runs}: ${line}`, command: line }
   const evidence = claimed(reply)
   return evidence === null ? null : { outcome: 'needs_ceo', spans: [], note: `${runs}: claimed: ${evidence}` }
-}
-
-function byHand(runs: string, brief: string | null): Outcome | null {
-  if (brief === null || estimate(brief) !== 0 || (files(brief).length > 0 && files(brief).every((f) => TEST.test(f.path)))) return null
-  return { outcome: 'needs_ceo', spans: ['hand-run'], note: `${runs}: hand-run brief: it estimates 0 lines, so a person runs it; held until hand-run briefs have their own route` }
 }
 
 async function written(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, ask: string, src: string): Promise<{ fired: Fired; cut: string | null }> {

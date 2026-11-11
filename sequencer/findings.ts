@@ -17,7 +17,7 @@ export function rehearsed({ root, list }: Rehearsal, plan: number, fork: string,
   const comments = bots.length === 0 ? [] : kept(root, plan, fork, pr, bots, list)
   const paths = comments.filter((c) => BOT.test(c.user.login)).map((c) => `G${String(c.id)} ${c.path}\n`).join('')
   if (paths !== '') put(root, plan, 'findings.paths', paths)
-  return bots.map((s) => ({ ...s, head: typeof s.head === 'string' ? carried(root, plan, s.head) : null, external_id: `${s.external_id}@${String(s.head)}` }))
+  return bots.map((s) => ({ ...s, head: typeof s.head === 'string' ? carried(root, plan, s.head) : null }))
 }
 
 export function kept(root: string, plan: number, repo: string, pr: number, bots: Pick<Signal, 'head'>[], list: Read): ReturnType<typeof inline> {

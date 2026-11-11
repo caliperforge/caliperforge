@@ -93,7 +93,7 @@ function findings(view: Pr, seen: SignalRow[]): string[] {
   const bodies = new Map(view.reviews.map((r) => [r.id, r.body]))
   const found = seen
     .filter((s) => s.kind === 'review' || (s.kind === 'bot_review' && (s.score ?? 5) < 5))
-    .map((s) => classOf(bodies.get(s.external_id) ?? ''))
+    .map((s) => classOf(bodies.get(s.external_id.replace(/@.*/, '')) ?? ''))
   return [...found.filter((c) => c !== FALLBACK), ...found.filter((c) => c === FALLBACK)]
 }
 

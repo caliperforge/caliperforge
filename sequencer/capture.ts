@@ -8,7 +8,7 @@ import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { allPlans, end, originRef } from '../store/plans.ts'
 import { latest } from '../store/rulings.ts'
-import { record, type Signal, type SignalRow } from '../store/signals.ts'
+import { known, record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { missed, reached } from '../store/unreached.ts'
 import { kept, rehearsed, type Rehearsal } from './findings.ts'
@@ -164,7 +164,7 @@ function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?:
     for (const s of rehearsed(row.rehearsal, row.plan, row.repo, view.number, signals(view, row))) stored(db, row, s)
     return []
   }
-  const fresh = signals(view, row).map((s) => stored(db, row, s)).filter((s) => s !== null)
+  const fresh = signals(view, row).filter((s) => s.kind !== 'bot_review' || !known(db, s)).map((s) => stored(db, row, s)).filter((s) => s !== null)
   const bots = fresh.filter((s) => s.kind === 'bot_review')
   if (root !== undefined && list !== undefined && bots.length > 0) inlined(db, row, view.number, { root, list }, bots)
   attribute(db, row.plan, row.repo, view)
@@ -208,6 +208,7 @@ export function signals(view: Pr, row: Pushed): Signal[] {
     ...merged(base, view),
     ...red(base, view),
   ].filter((s) => s.kind !== 'bot_review' || typeof s.head === 'string')
+    .map((s) => (s.kind === 'bot_review' ? { ...s, external_id: `${s.external_id}@${String(s.head)}` } : s))
 }
 
 /** A review bot's summary comment carries its score as its review would; only a person's comment asks something of us. */

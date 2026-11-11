@@ -30,6 +30,11 @@ export function record(db: Db, signal: Signal): SignalRow | null {
   return SignalRow.parse(db.prepare('SELECT * FROM signals WHERE id = ?').get(Number(written.lastInsertRowid)))
 }
 
+/** A row keyed before its head joined the key still stands for that head. */
+export function known(db: Db, s: Signal): boolean {
+  return db.prepare("SELECT 1 FROM signals WHERE repo = ? AND pr = ? AND kind = 'bot_review' AND head = ?").get(s.repo, s.pr, s.head ?? null) !== undefined
+}
+
 export function graded(db: Db, plan: number, head: string): SignalRow | null {
   const row: unknown = db.prepare("SELECT * FROM signals WHERE plan = ? AND kind = 'bot_review' AND head = ? ORDER BY id DESC LIMIT 1")
     .get(plan, head)

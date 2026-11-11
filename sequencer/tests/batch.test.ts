@@ -9,7 +9,7 @@ import { approvalsOf, headApproved, headDigest, refusedPush, signedHead } from '
 import { deliverablesOf, newest } from '../../store/deliverables.ts'
 import { classOf, dispositionsOf } from '../../store/dispositions.ts'
 import type { Db } from '../../store/index.ts'
-import { advance, pipeNamed, putPlan, rewind, titles } from '../../store/plans.ts'
+import { advance, end, pipeNamed, putPlan, rewind, titles } from '../../store/plans.ts'
 import { bySubject, open as openProposals } from '../../store/proposals.ts'
 import { latest } from '../../store/rulings.ts'
 import { eventsOf, ofKind, pointers, runAt } from '../../store/events.ts'
@@ -200,8 +200,33 @@ test('Greptile summary is kept with its head; old format is not', async () => {
     { id: 'g1', author: { login: 'greptile-apps' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, createdAt: at },
     { id: 'g2', author: { login: 'greptile-apps' }, body: 'Confidence Score: 4/5', createdAt: at },
   ] })
-  expect(capture(w.db, () => view).map((s) => s.external_id)).toEqual(['g1'])
-  expect(others(w.db, SEEDED).map((s) => ({ external_id: s.external_id, score: s.score, head: s.head }))).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
+  expect(capture(w.db, () => view).map((s) => s.external_id)).toEqual([`g1@${SHA}`])
+  expect(others(w.db, SEEDED).map((s) => ({ external_id: s.external_id, score: s.score, head: s.head }))).toEqual([{ external_id: `g1@${SHA}`, score: 4, head: SHA }])
+})
+
+const summaryAt = (head: string): Pr => pr({ comments: [{ id: 'g1', author: { login: 'greptile-apps[bot]' },
+  body: `Confidence Score: 4/5\n\n${REVIEWED.replace(SHA, head)}`, createdAt: new Date(Date.now() + 1000).toISOString() }] })
+
+test('an edited summary at a new head rewinds a done plan to build', async () => {
+  const w = await PUSHED()
+  const later = 'c'.repeat(40)
+  const p1 = { id: 14, commit_id: later, original_commit_id: later, path: 'src/hello.ts', line: 4, original_line: 4, body: 'P1 the mint is dropped', user: { login: 'greptile-apps[bot]' } }
+  const list = (args: string[]): unknown => (args[0] === 'api' ? [...INLINE, p1] : [])
+  capture(w.db, () => summaryAt(SHA), w.root, list)
+  end(w.db, 1, 'done')
+  const [edited] = capture(w.db, () => summaryAt(later), w.root, list)
+  if (edited === undefined) throw new Error('a bot review at the new head expected')
+  expect(others(w.db, SEEDED).map((s) => s.external_id)).toEqual([`g1@${SHA}`, `g1@${later}`])
+  expect(started(w.db, edited, w.root)).toMatchObject({ plan: 1, step: 2 })
+  expect(get(w.root, 1, 'refusal.md')).toContain('- G14 src/hello.ts:4 P1 the mint is dropped')
+})
+
+test('a summary already scored at its head is not recorded again', async () => {
+  const w = await PUSHED()
+  record(w.db, { repo: 'acme/widget', pr: 7, kind: 'bot_review', author: 'greptile-apps[bot]', at: new Date().toISOString(),
+    external_id: 'g1', score: 4, plan: 1, head: SHA })
+  expect(capture(w.db, () => summaryAt(SHA))).toEqual([])
+  expect(capture(w.db, () => pr({ comments: summaryAt(SHA).comments.map((c) => ({ ...c, body: c.body.replace('4/5', '3/5') })) }))).toEqual([])
 })
 
 test('our words are no signal; theirs and review state are kept', async () => {
@@ -742,17 +767,17 @@ test('an unreadable pr does not stop the pipes behind it', async () => {
     .toHaveLength(1)
 })
 
-test('a vague bot finding does not take a named one\'s slot', async () => {
+test('a bot finding that names its class escapes under it', async () => {
   const w = await PUSHED()
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
     reviews: [
-      { id: 'r1', author: { login: 'greptile[bot]' }, body: `looks fine 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-18T07:00:00Z' },
+      { id: 'r1', author: { login: 'greptile[bot]' }, body: `tight.comment 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-18T07:00:00Z' },
       { id: 'r2', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' },
     ],
   })
   capture(w.db, () => merged)
-  expect(dispositionsOf(w.db).map((d) => d.defect_class)).toEqual(['scope'])
+  expect(dispositionsOf(w.db).map((d) => d.defect_class)).toEqual(['tight.comment', 'scope'])
 })
 
 test('an approval that cannot settle its row records nothing', async () => {

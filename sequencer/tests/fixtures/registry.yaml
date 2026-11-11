@@ -101,11 +101,6 @@
   column: at
   where: staffed = 'web_specialist'
   while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND state IN ('queued', 'running', 'blocked_on_ceo') AND queued_at >= $since)
-- name: design
-  table: runs
-  column: at
-  where: seat = 'design_lead'
-  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND seat <> 'design_lead' AND step > 4 AND state != 'done')
 - name: go_specialist
   table: runs
   column: at

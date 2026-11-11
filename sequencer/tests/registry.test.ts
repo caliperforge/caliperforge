@@ -14,6 +14,7 @@ import { enable } from '../../store/lanes.ts'
 import { addPlan, advance, briefed, planById, putPlan } from '../../store/plans.ts'
 import { addReview, type Verdict } from '../../store/verdict.ts'
 import { drift, type Drifted, Entry, mechanisms } from '../drift.ts'
+import { registry } from '../registry.ts'
 import { git } from '../workspace.ts'
 import { db, NOW, REGISTRY } from './drifting.ts'
 import { world } from './world.ts'
@@ -78,6 +79,23 @@ test('folderAlone', () => {
 
 test('badEntryThrows', () => {
   expect(() => mechanisms(root({ 'rules/registry/00-b.yaml': '- name: b\n  gap: 2w\n' }))).toThrow()
+})
+
+test('a name registered twice throws naming both files', () => {
+  expect(() => registry(root({ 'rules/registry/00-a.yaml': '- name: x\n', 'rules/registry/01-b.yaml': '- name: x\n' })))
+    .toThrow(/rules\/registry\/00-a\.yaml and rules\/registry\/01-b\.yaml/)
+})
+
+test('one evidence registered twice throws', () => {
+  const line = (name: string, where: string): string => `- name: ${name}\n  table: runs\n  column: at\n  where: ${where}\n`
+  const dir = root({ 'rules/registry/00-a.yaml': `- name: p\n- name: q\n${line('a', "seat = 'x'")}${line('b', "seat = 'y'")}` })
+  expect(registry(dir).length).toBe(1)
+  writeFileSync(join(dir, 'rules/registry/01-b.yaml'), line('c', '"seat  =   \'x\'"'))
+  expect(() => registry(dir)).toThrow(/00-a\.yaml and rules\/registry\/01-b\.yaml both register runs\.at WHERE seat = 'x'/)
+})
+
+test('the checkout registry loads', () => {
+  expect(() => registry(join(import.meta.dirname, '../..'))).not.toThrow()
 })
 
 test('fixerEventFresh', () => {

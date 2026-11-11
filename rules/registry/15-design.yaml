@@ -1,5 +1,0 @@
-- name: design
-  table: runs
-  column: at
-  where: seat = 'design_lead'
-  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND seat <> 'design_lead' AND step > 4 AND state != 'done')

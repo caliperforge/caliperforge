@@ -369,6 +369,36 @@ async function unaccepted() {
   }
 }
 
+const KEYCHAIN = '  - ci.red keychain-307\n'
+const OVERRULE = `---\nmove: rule\nwhy: the runner is flaky\nanswer: ci.red keychain-307 overruled, the runner   lost its keychain\n${CARRIES}\n---\n`
+
+function redStop(spans: string, stop = 'step 6 ready refused by kernel') {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  const sha = committed(home)
+  put(home, 7, 'refusal.md', `${stop}\n\ntheir CI is red\n\nspans:\n${spans}`)
+  return { db, home, sha }
+}
+
+async function excuses() {
+  const { db, home, sha } = redStop(KEYCHAIN)
+  await run(db, home, OVERRULE)
+  expect(maybe(home, 7, 'rulings.md')).toBe(
+    `\noverruled:\n  head: ${sha.slice(0, 12)}\n  spans: ci.red keychain-307\n  reason: ci.red keychain-307 overruled, the runner lost its keychain\n`)
+  expect(row(db)).toMatchObject({ step: 6, state: 'queued' })
+  expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 6'])
+}
+
+async function unexcused() {
+  const stops = [redStop(`${KEYCHAIN}  - ci.red src CI\n`), redStop(`${KEYCHAIN}  - commit:1 upstream.number\n`),
+    redStop(KEYCHAIN, 'step 6 fork refused by kernel')]
+  for (const { db, home } of stops) {
+    await run(db, home, OVERRULE)
+    expect(maybe(home, 7, 'rulings.md')).toBeNull()
+    expect(row(db).step).toBe(2)
+  }
+}
+
 const elsewhere = () => {
   const at = join(mkdtempSync(join(tmpdir(), 'cf-other-')), 'site.ts')
   writeFileSync(at, '')
@@ -551,6 +581,8 @@ describe('rule', () => {
   test('a rule or waive with no instruction or resume at is fenced', LONG, unfielded)
   test('a rule on a Greptile stop accepts its open ids', accepts)
   test('a rails stop or no open ids writes no rulings.md', LONG, unaccepted)
+  test('a rule overruling every red span returns to step 6', excuses)
+  test('a rule leaving a span unruled goes to step 2', LONG, unexcused)
   test('a rule naming a path in or out of the repo applies', LONG, reached)
   test('a rule naming .cf/work/8/ask.md is held by the coo', foreign)
   test('an outside-files rule returns to step 2 or step 3', outside)

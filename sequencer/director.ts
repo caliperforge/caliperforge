@@ -30,7 +30,7 @@ import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
 import { redundant } from './redundant.ts'
 import { rerouted } from './reroute.ts'
-import { accepted, edits, fenced, opened, owned, rule, stray } from './rule.ts'
+import { accepted, edits, excusing, fenced, opened, owned, rule, stray } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { repeated, ticketed } from './ticket.ts'
@@ -328,7 +328,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       if (to === null) return false
       opened(db, root, plan.id)
       if (to === 'ask.md') unhold(db, root, plan.id, 'director')
-      else afresh(root, plan.id, (owned(root, plan, m.answer ?? '') ? !edits(root, plan, m.answer ?? '') : accepted(root, plan, m.answer ?? '')) ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
+      else afresh(root, plan.id, (owned(root, plan, m.answer ?? '') ? !edits(root, plan, m.answer ?? '') : accepted(root, plan, m.answer ?? '') || excusing(root, plan, m.answer ?? '')) ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       const ref = originRef(plan)
       if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true

@@ -80,6 +80,7 @@ function first(read: Read, exec: Run): string[] {
   if (Numbers.parse(read(['issue', 'list', '--repo', home, '--label', 'seat:design_lead', '--state', 'all', '--json', 'number'])).length > 0) return []
   exec(['label', 'create', 'seat:design_lead', '--repo', home, '--force'])
   exec(['label', 'create', 'lane:loupe', '--repo', home, '--force'])
+  // Not through covered() in ticket.ts: the design lead's tickets are filed once, guarded by the label and wave checks above.
   const url = exec(['issue', 'create', '--repo', home, '--title', TITLE, '--body-file', '-', '--label', 'lane:loupe', '--label', 'seat:design_lead'], BODY)
   return [`first pass: ${url.trim()}`]
 }
@@ -100,6 +101,7 @@ function drafts(read: Read, exec: Run): string[] {
   return found.map(({ path, lines }) => {
     if (!cites(lines)) return `wave 1: ${path} cites no DESIGN.md section`
     const [head = '', ...rest] = lines
+    // Not through covered() in ticket.ts: the design lead's tickets are filed once, guarded by the label and wave checks above.
     const url = exec(['issue', 'create', '--repo', home, '--title', head.replace(/^# /, ''), '--body-file', '-', '--label', 'lane:loupe',
       '--label', 'wave:1'], rest.join('\n').trim())
     return `wave 1: ${url.trim()}`

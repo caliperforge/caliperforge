@@ -595,3 +595,9 @@
   where: "actor = 'brief_writer' AND outcome = 'escalate' AND message LIKE '%hand-run brief%'"
   gap: 7d
   expected: 0
+- name: filed_covered
+  table: events
+  column: at
+  where: "kind = 'covered' AND actor = 'ticketed' AND message GLOB '*: filed' AND pointer IN (SELECT 'https://github.com/' || repo || '/issues/' || number FROM tickets WHERE state_reason IN ('DUPLICATE', 'NOT_PLANNED'))"
+  gap: 7d
+  expected: 0

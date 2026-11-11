@@ -59,6 +59,17 @@ export function accepted(root: string, plan: PlanRow, answer: string): boolean {
   return true
 }
 
+/** A ruling on a red-CI stop at ready that overrules every red span excuses those runs at this head only. */
+export function excusing(root: string, plan: PlanRow, answer: string): boolean {
+  const text = maybe(root, plan.id, 'refusal.md') ?? ''
+  const rows = (/^spans:\n((?: {2}.*(?:\n|$))*)/m.exec(text)?.[1] ?? '').split('\n').filter((l) => l.startsWith('  - ')).map((l) => l.slice(4))
+  if (!text.startsWith(`step ${String(plan.step)} ready `) || rows.length === 0
+    || !rows.every((r) => r.startsWith('ci.red ') && answer.includes(`${r} overruled`))) return false
+  put(root, plan.id, 'rulings.md', `${maybe(root, plan.id, 'rulings.md') ?? ''}\noverruled:\n  head: ${headSha(srcDir(root, plan.id)).slice(0, 12)}\n  spans: ${
+    rows.join(', ')}\n  reason: ${answer.replace(/\s+/g, ' ').trim()}\n`)
+  return true
+}
+
 /** Each path refused as outside the files that `answer` names gets a row under the brief's `## Outside the files`. */
 export function owned(root: string, plan: PlanRow, answer: string): boolean {
   const why = answer.replace(/\s+/g, ' ').trim()

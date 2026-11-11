@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { shape, split, STANDING, unclear, wide } from '../brief.ts'
@@ -6,6 +6,7 @@ import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { refilled } from '../refill.ts'
+import { unrelayed } from '../relayed.ts'
 import { unran } from '../reproduced.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
@@ -366,6 +367,58 @@ test.each([null, '[]\n'])('a landing with board %j relays nothing', async (board
   expect(ofKind(w.db, 'landed.run')).toEqual([])
   expect(calls).toEqual([])
   expect(maybe(w.root, b?.plan ?? 0, 'ask.md')).toBe(`# ${b?.title ?? ''}\n\n${b?.body ?? ''}`)
+})
+
+/** Part a landed with nothing relayed, its board since filled and its `src/` reaped; part b queued on a cloned checkout. */
+async function unrelayedB(w: World, finished = true): Promise<number> {
+  const a = await boarded(w, null)
+  following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched([], w.root, a))
+  if (finished) finish(w.db, plan(w.db, a))
+  put(w.root, a, 'ci.json', BOARD)
+  rmSync(join(planDir(w.root, a), 'src'), { recursive: true })
+  const b = partPlan(w, 1) ?? 0
+  mkdirSync(join(srcDir(w.root, b), '.git'))
+  mkdirSync(join(srcDir(w.root, b), '.github/workflows'), { recursive: true })
+  writeFileSync(join(srcDir(w.root, b), WORKFLOW), 'name: keychain-307\non: push\n')
+  return b
+}
+
+test("an earlier landing's runs reach its waiter once", async () => {
+  const w = mine()
+  const b = await unrelayedB(w)
+  const ask = maybe(w.root, b, 'ask.md') ?? ''
+  const calls: string[][] = []
+  expect(unrelayed(w.db, w.root, downloads(calls))).toEqual([])
+  const folder = join(planDir(w.root, b), 'artifacts', '307')
+  expect(calls).toEqual([['run', 'download', '307', '--repo', 'caliperforge/caliperforge', '--dir', folder]])
+  expect(existsSync(join(folder, 'results.md'))).toBe(true)
+  const relayedAsk = `${ask.trimEnd()}\n\n## Runs on part a's landed commit\n\n- CI ${CI_RUN}\n- keychain-307 ${KEYCHAIN_RUN}, artifacts in ${folder}\n`
+  expect(maybe(w.root, b, 'ask.md')).toBe(relayedAsk)
+  unrelayed(w.db, w.root, downloads(calls))
+  expect(calls).toHaveLength(1)
+  expect(maybe(w.root, b, 'ask.md')).toBe(relayedAsk)
+})
+
+test.each([
+  { by: 'a finished waiter', finished: true, set: (w: World, b: number) => { end(w.db, b, 'done') } },
+  { by: 'an unlanded part', finished: false, set: () => undefined },
+  { by: 'an uncloned waiter', finished: true, set: (w: World, b: number) => { rmSync(join(srcDir(w.root, b), '.git'), { recursive: true }) } },
+])('nothing is relayed to $by', async ({ finished, set }) => {
+  const w = mine()
+  const b = await unrelayedB(w, finished)
+  set(w, b)
+  const ask = maybe(w.root, b, 'ask.md')
+  const calls: string[][] = []
+  expect(unrelayed(w.db, w.root, downloads(calls))).toEqual([])
+  expect(calls).toEqual([])
+  expect(maybe(w.root, b, 'ask.md')).toBe(ask)
+})
+
+test('a late download that throws is returned', async () => {
+  const w = mine()
+  const b = await unrelayedB(w)
+  const runs: Wire['runs'] = () => { throw new Error('gh down') }
+  expect(unrelayed(w.db, w.root, runs)).toEqual([`keychain-307 artifacts for plan ${String(b)} not downloaded: gh down`])
 })
 
 test('D1, D2: a re-split part closes and its grandparent goes on', async () => {

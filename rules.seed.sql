@@ -125,7 +125,7 @@ VALUES
   ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', 'd538cee5f34de225f265fe981d3d654ebf29ff60fadef60503de22484ba69fdf', '2026-09-17'),
   ('claims_checker', 'card', 'rules/roster/claims_checker.yaml', 'b9abab1c779495ee547d4096962a7d8c36b628e08339c6fb2ebb7a41b21fbc88', '2026-10-20'),
   ('design_lead', 'card', 'rules/roster/design_lead.yaml', 'cd6c8c262f9a50f3bc0c15ebaa4fc33a0cab0809d13d51c9680cb79257ea3c46', '2026-10-11'),
-  ('director', 'card', 'rules/roster/director.yaml', '4e0c9bf0cf5f9a96ef6ff47f4428019f7f5cbe00a71f6d9d6b6cc44153c66a87', '2026-10-04'),
+  ('director', 'card', 'rules/roster/director.yaml', 'dcdcf2958a1272e51dae43c97bf35a18827ff6a21a5a2f2088e1377847a1f379', '2026-10-04'),
   ('fetcher', 'card', 'rules/roster/fetcher.yaml', 'f7e2769c405320ee4d59b6b1346d3edebb29c42b84db2131039d92bf43d51f0d', '2026-10-21'),
   ('fixer', 'card', 'rules/roster/fixer.yaml', 'a197eaa024e294db48bb47c44da925a5aff8b7fdd622036ebef68dc3b0efcdca', '2026-09-25'),
   ('fizz_generator', 'card', 'rules/roster/fizz_generator.yaml', '9fb0e2082232a98d908381d55ab7e493b8fe708b6e1171961efcd9bd95d46d96', '2026-10-14'),

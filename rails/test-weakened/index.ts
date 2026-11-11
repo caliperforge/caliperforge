@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { parse, type FileDiff, type Line } from '../diff.ts'
 import type { Verdict } from '../record.ts'
 import { conventionsOf } from './languages.ts'
+import { moved } from './moved.ts'
 
 export { ASSERT } from './languages.ts'
 export const TEST_FILE = /(?:^|\/)[Tt]ests?\/|\.(?:test|spec)\.[jt]sx?$|_test\.(?:go|rb|py)$|_spec\.(?:rb|lua)$|(?:^|\/)test_[^/]*\.py$|Test\.php$/
@@ -47,7 +48,8 @@ function titles(file: FileDiff): string[] {
 
 function judge(file: FileDiff, named: string, listed: string[]): string[] {
   const { assert, skip } = conventionsOf(file.path)
-  const skipped = file.added.filter((l) => skip.test(l.text)).map((l) => span(l, 'test.weakened.skipped'))
+  const isMoved = moved(file, skip)
+  const skipped = file.added.filter((l) => skip.test(l.text) && !isMoved(l)).map((l) => span(l, 'test.weakened.skipped'))
   const removedTitles = titles(file)
   if (removedTitles.length > 0 && removedTitles.every((t) => listed.includes(t))) return skipped
   if (file.deleted) {

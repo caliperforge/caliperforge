@@ -13,7 +13,7 @@ const OUTPUT = '**Output:**'
 function asked(text: string): boolean {
   const lines = text.split('\n')
   const out = lines.find((l) => l.startsWith(OUTPUT))?.slice(OUTPUT.length).trim()
-  return unasked(text).length === 0 && lines.some((l) => l.startsWith('**Measure:**')) && (out === undefined || work(out) !== null)
+  return unasked(text).length === 0 && (out === undefined ? lines.some((l) => l.startsWith('**Measure:**')) : work(out) !== null)
 }
 
 /** An unbuilt pr_path plan of ours goes to the research lane at step 0, its ask carrying the research lines. */

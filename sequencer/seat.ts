@@ -159,7 +159,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
-  return byHand(db, root, plan, step.runs, text) ??{ outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+  return byHand(db, root, plan, step.runs, text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }
 
 /** What the brief seat's reply ends in place of a brief: an allow-listed command to run, or a claimed ask held with its evidence. */

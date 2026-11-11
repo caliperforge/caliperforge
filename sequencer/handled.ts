@@ -21,7 +21,7 @@ export function handled(root: string, plan: number, head: string): { id: string;
     })
 }
 
-/** Greptile is asked once, so a finding at an earlier head holds every head after it until a commit or a ruling answers it. */
+/** A finding at an earlier head holds every later head until a commit or a ruling answers it. */
 export function unhandled(root: string, plan: number, bot: Outcome | string): Outcome | string {
   const held = typeof bot === 'string' ? handled(root, plan, headOf(root, plan).sha).filter((f) => f.holds) : []
   return held.length === 0 ? bot : { outcome: 'refuse', spans: ['greptile.unhandled'], to: 2, message: held.map((f) => f.text.trimEnd()).join('\n'),

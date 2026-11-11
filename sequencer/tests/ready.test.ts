@@ -84,14 +84,14 @@ test('D2 D3 bytes changed after senior are proved again', async () => {
   expect(readyVerdicts(w)).toBe(1)
 })
 
-test('D1 a spent month passes ready without asking Greptile', async () => {
+test('a spent month holds ready for the COO, Greptile unasked', async () => {
   const log: string[] = []
   const [w, lap] = await atReady(log, { rehearse: () => undefined })
   put(w.root, 2, ASKED, `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(CREDITS))
-  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass',
-    note: expect.stringContaining('; Greptile skipped: monthly quota spent (50/50)') as unknown })
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_coo', state: 'blocked_on_ceo', spans: ['greptile.quota'],
+    note: expect.stringMatching(/not asked: monthly quota spent \(50\/50\); held for the COO$/) as unknown })
   expect(log.filter((l) => l.startsWith('review '))).toEqual([])
-  expect(plan(w.db, 1).step).toBe(7)
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, state: 'blocked_on_ceo' })
   expect(get(w.root, 1, SKIPPED)).toBe(`${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
 })
 
@@ -135,17 +135,19 @@ const finding = (w: World, score: number, badge: string): void => {
   put(w.root, 1, `findings-${headOf(w.root, 1).sha}.md`, `- G11 <img alt="${badge}" src="https://greptile.com/p.svg"> the empty name is never refused\n`)
 }
 
-test('D1 a second head on an asked job is not asked', async () => {
+test('a second head at ready gets its own ask', async () => {
   const log: string[] = []
   const [w, lap] = await atReady(log, UNSCORED)
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
+  const first = headSha(srcDir(w.root, 1))
   built(w.root, 1, 'export const two = 2')
   for (let at = 0; at < 4; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
-  const fired = await lap()
-  expect(fired?.spans).not.toContain('greptile.missing')
-  expect(fired?.note).toMatch(/Greptile reviewed [0-9a-f]{12} once; [0-9a-f]{12} is not asked again/)
-  expect(reviews(log)).toHaveLength(1)
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
+  expect(reviews(log)).toHaveLength(2)
+  const second = headSha(srcDir(w.root, 1))
+  expect(second).not.toBe(first)
+  expect(get(w.root, 1, ASKED).trim().split('\n').map((l) => l.split(' ')[0])).toEqual([first, second])
 })
 
 test('D2 a P2-only head stays at step 6', async () => {
@@ -170,21 +172,27 @@ test('D3 an open P1 goes to the builder once', async () => {
   handback = CARRIED.replace(/---\n$/, '  - id: G11\n    status: done\n    pointer: src/hello.ts:2\n---\n')
   built(w.root, 1, 'export const two = 2')
   for (let at = 0; plan(w.db, 1).step !== 6 && at < 8; at += 1) await lap()
+  await lap()
+  scored(w.root, 1, 5)
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
-  expect(reviews(log)).toHaveLength(1)
+  expect(reviews(log)).toHaveLength(2)
 })
 
 test('an earlier finding with no fix or reply goes back', async () => {
+  const log: string[] = []
   let handback = CARRIED
-  const [w, lap] = await atReady([], UNSCORED, () => handback)
+  const [w, lap] = await atReady(log, UNSCORED, () => handback)
   await lap()
   finding(w, 4, 'P1')
   await lap()
   handback = CARRIED.replace(/---\n$/, '  - id: G11\n    status: done\n    pointer: src/untouched.ts:1\n---\n')
   built(w.root, 1, 'export const two = 2')
   for (let at = 0; plan(w.db, 1).step !== 6 && at < 8; at += 1) await lap()
+  await lap()
+  scored(w.root, 1, 5)
   expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile.unhandled'] })
+  expect(reviews(log)).toHaveLength(2)
   expect(plan(w.db, 1).step).toBe(2)
   expect(get(w.root, 1, 'refusal.md')).toContain('- G11 ')
   put(w.root, 1, 'rulings.md', 'G11 overruled: src/hello.ts:1 refuses it\n')
@@ -192,8 +200,9 @@ test('an earlier finding with no fix or reply goes back', async () => {
 })
 
 test('a fix two rebuilds back still answers its finding', async () => {
+  const log: string[] = []
   let handback = CARRIED
-  const [w, lap] = await atReady([], UNSCORED, () => handback)
+  const [w, lap] = await atReady(log, UNSCORED, () => handback)
   await lap()
   finding(w, 4, 'P1')
   await lap()
@@ -208,5 +217,8 @@ test('a fix two rebuilds back still answers its finding', async () => {
   built(w.root, 1, 'export const four = 4')
   for (let at = 0; plan(w.db, 1).step !== 6 && at < 8; at += 1) await lap()
   expect(get(w.root, 1, 'step-2.handback.prev.md')).not.toContain('G11')
+  await lap()
+  scored(w.root, 1, 5)
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(reviews(log)).toHaveLength(2)
 }, 120_000)

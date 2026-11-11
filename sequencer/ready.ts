@@ -87,24 +87,23 @@ function unsigned(root: string, plan: PlanRow, repo: string): Outcome | null {
     : { outcome: 'refuse', spans: ['ready.unsigned'], note: `${sha.slice(0, 12)} is unsigned and ${repo} requires signed commits` }
 }
 
-/** Ticks an outside head waits for Greptile's score before ready goes on without one. */
+/** Ticks an outside head waits for its score before ready holds it as `needs_coo`. */
 export const GRADING = 45
 
 /** Nothing leaves our fork with an open P0–P2 Greptile finding at this head, nor below 4/5 with none listed. */
 function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire, diff: string): Outcome | string {
   const sha = headOf(root, plan.id).sha
-  const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
+  const fork = `${FORK}/${repoName(repo)}`
+  const at = `${fork}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
   if (row === null) {
-    const first = (maybe(root, plan.id, ASKED) ?? '').split(' ')[0] ?? ''
-    if (first !== '' && first !== sha) return `; Greptile reviewed ${first.slice(0, 12)} once; ${sha.slice(0, 12)} is not asked again`
-    const fork = `${FORK}/${repoName(repo)}`
     if (wire.greptile?.(fork) === false) {
       return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: `Greptile is not installed on ${fork}` }
     }
-    return (first === '' ? asked(root, plan.id, sha, repo, wire) : null)
+    const asks = (maybe(root, plan.id, ASKED) ?? '').split('\n')
+    return (asks.some((l) => l.startsWith(`${sha} `)) ? null : asked(root, plan.id, sha, fork, wire))
       ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, GRADES)
-      ?? `; Greptile gave no score in ${String(GRADING)} ticks`
+      ?? { outcome: 'needs_coo', spans: ['greptile.missing'], note: `${at} has no Greptile score after ${String(GRADING)} ticks; held for the COO` }
   }
   const score = row.score ?? 0
   const { found, ruled, open, refused, severe } = unruled(root, plan.id, sha, row.body ?? '')
@@ -122,15 +121,15 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ruled.join(', ')}`
 }
 
-function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): string | null {
+function asked(root: string, plan: number, sha: string, fork: string, wire: Wire): Outcome | null {
   const month = monthly(root, new Date())
   if (month >= CREDITS) {
     const why = `monthly quota spent (${String(month)}/${String(CREDITS)})`
     put(root, plan, SKIPPED, `${sha} ${why}\n`)
-    return `; Greptile skipped: ${why}`
+    return { outcome: 'needs_coo', spans: ['greptile.quota'], note: `${fork}@${sha.slice(0, 12)} not asked: ${why}; held for the COO` }
   }
-  wire.review(`${FORK}/${repoName(repo)}`, rehearsalBranch(root, plan))
-  put(root, plan, ASKED, `${sha} ${new Date().toISOString()}\n`)
+  wire.review(fork, rehearsalBranch(root, plan))
+  put(root, plan, ASKED, `${maybe(root, plan, ASKED) ?? ''}${sha} ${new Date().toISOString()}\n`)
   return null
 }
 

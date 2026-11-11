@@ -6,7 +6,7 @@ import { expect, test, vi } from 'vitest'
 import { record as railed } from '../../rails/record.ts'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
-import { all } from '../../cli/inbox.ts'
+import { all, events } from '../../cli/inbox.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
 import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, planRows, requeue, resume, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { amend, set, width } from '../../store/lanes.ts'
@@ -1276,7 +1276,7 @@ const FINDINGS = 'Confidence Score: 3/5\n\nThe empty name is never refused.'
 
 const readyVerdicts = (w: World): unknown => ({ n: verdictRows(w.db, 1).filter((v) => v.rail_id === 'ready').length })
 
-test('no Greptile score holds ready to tick 45; 46 goes on', async () => {
+test('no Greptile score holds to tick 45; 46 holds for the COO', async () => {
   const [w, lap] = await unscored()
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running', spans: ['greptile.missing'],
     note: expect.stringMatching(/has no Greptile score yet, tick 1 of 45$/) as unknown })
@@ -1284,8 +1284,12 @@ test('no Greptile score holds ready to tick 45; 46 goes on', async () => {
   expect((await lap())?.note).toMatch(/tick 45 of 45$/)
   expect(readyVerdicts(w)).toEqual({ n: 0 })
   expect(plan(w.db, 1).step).toBe(6)
-  expect((await lap())?.note).toMatch(/Greptile gave no score in 45 ticks$/)
-  expect(plan(w.db, 1).step).toBe(7)
+  const out = await lap() ?? expect.fail('no lap at tick 46')
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_coo', state: 'blocked_on_ceo', spans: ['greptile.missing'],
+    note: expect.stringMatching(/has no Greptile score after 45 ticks; held for the COO$/) as unknown })
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, state: 'blocked_on_ceo' })
+  expect(readyVerdicts(w)).toEqual({ n: 0 })
+  expect(events(w.db, [out], '')).toMatchObject([{ kind: 'blocked', note: out.note }])
 })
 
 test('a fork without Greptile refuses ready and asks nothing', async () => {
@@ -1448,19 +1452,18 @@ const reproved = async (w: World, lap: () => Promise<Fired | undefined>, line: s
   return lap()
 }
 
-test('a later head is not asked Greptile again', async () => {
+test('a later head is asked Greptile again', async () => {
   const log: string[] = []
   const [w, lap] = await unscored(log)
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
   await lap()
   expect(asked()).toEqual(['review caliperforge/widget widget-12-a1-next'])
-  const fired = await reproved(w, lap, 'export const two = 2')
-  expect(fired).toMatchObject({ step: 6, outcome: 'pass' })
-  expect(fired?.note).toMatch(/Greptile reviewed [0-9a-f]{12} once; [0-9a-f]{12} is not asked again/)
-  expect(asked()).toHaveLength(1)
-  expect(get(w.root, 1, 'greptile.asked').trim().split('\n')).toHaveLength(1)
-  expect(plan(w.db, 1).step).toBe(7)
+  expect(await reproved(w, lap, 'export const two = 2')).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'],
+    note: expect.stringMatching(/has no Greptile score yet, tick 1 of 45$/) as unknown })
+  expect(asked()).toHaveLength(2)
+  expect(get(w.root, 1, 'greptile.asked').trim().split('\n')).toHaveLength(2)
+  expect(plan(w.db, 1).step).toBe(6)
 })
 
 test('step 6 refuses a plan with no deliverable row', async () => {

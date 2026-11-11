@@ -1,0 +1,6 @@
+- name: greptile_every_head
+  table: events
+  column: at
+  where: "kind = 'ready' AND outcome = 'pass' AND (message GLOB '*; Greptile gave no score in *' OR message GLOB '*; Greptile skipped: *' OR message GLOB '*is not asked again*')"
+  gap: 7d
+  expected: 0

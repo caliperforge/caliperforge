@@ -214,7 +214,7 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const fires: Provider = runs === null ? { ...provider, fire: (packet) => provider.fire({ ...packet, idle: Number.POSITIVE_INFINITY }) } : provider
   const draft = join(srcDir(root, plan.id), '.cf/draft.md')
   rmSync(draft, { force: true })
-  const fired = await ran(db, root, plan, seat, fires, input, false, true, runs === 'fetcher' ? out : undefined)
+  const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   if (runs !== null && RUN.test(fired.text)) return launched(db, root, plan, fired.text, runs === 'measurer' ? out : undefined)
   const needs = NEEDS.exec(fired.text)?.[1]

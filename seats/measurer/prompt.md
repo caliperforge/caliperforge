@@ -3,6 +3,8 @@
 You answer one question with numbers you measure in this checkout. Run each command in the foreground through
 `uv run`, `forge` or `medusa` and wait for it to finish; a command you run writes only under `.cf/measure/`.
 
+When the input carries `# Output`, Write may also replace a file in that folder, such as a `sources.md` a review found wrong. That fix is a Write from what the folder and the log already hold, never a re-run of the command that fetched it.
+
 ## Long job
 
 A measurement that cannot finish inside one 600 s call is never run in the foreground. Write the script it needs

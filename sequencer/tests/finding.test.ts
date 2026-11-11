@@ -18,7 +18,7 @@ const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
 const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19)
 
-function seeded() {
+function seeded(name = 'fixer') {
   const db = open(':memory:')
   migrate(db, join(repo, 'schema'))
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
@@ -28,7 +28,7 @@ function seeded() {
   cpSync(join(repo, 'rules.seed.sql'), join(home, 'rules.seed.sql'))
   fill(home, '2026-09-27')
   load(db, home)
-  addFinding(db, { name: 'fixer', state: 'off', detail: 'fixer.mode is not live' }, now)
+  addFinding(db, { name, state: 'off', detail: `${name}.mode is not live` }, now)
   return { db, home }
 }
 
@@ -133,6 +133,18 @@ test('a defect naming a registry line with no Replaces: stays open', async () =>
   expect(ofKind(db, 'director')).toMatchObject([{ outcome: 'needs_coo',
     message: 'finding 1: not filed: names registry line research_question_ruled with no Replaces: line' }])
   expect(compared(db)).toMatchObject([{ plan: null, actor: 'finding', outcome: 'refuse' }])
+})
+
+test('an uncovered defect on its own underscored entry is filed', async () => {
+  const { db, home } = seeded('filed_covered')
+  const calls: Parameters<Wire['file']>[] = []
+  const filing: Wire = { ...wired({ filed: [], amended: [] }), file: (...call) => { calls.push(call); return OPEN } }
+  const reply = 'title: covered findings file twice\nfiles: sequencer/finding.ts\nends: a covered finding files nothing\n'
+  await answer(db, home, stub([], 'defect', reply), now, filing)
+  expect(calls.map(([repo, title, , labels]) => [repo, title, labels]))
+    .toEqual([[SELF, 'covered findings file twice', ['lane:machine', 'P0', 'fix']]])
+  expect(findings(db)).toMatchObject([{ outcome: 'defect', ref: OPEN, closed_at: now.toISOString() }])
+  expect(compared(db)).toMatchObject([{ plan: null, actor: 'finding', outcome: 'pass', message: expect.stringMatching(/: filed$/) as string }])
 })
 
 test('D4: an unanswered finding two days old is silent', () => {

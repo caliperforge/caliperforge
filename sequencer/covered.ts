@@ -32,7 +32,8 @@ interface Draft { title: string; text: string; spans: Cited[]; names: string[] }
 
 interface Cited { path: string; from: number; to: number }
 
-export function covered(db: Db, root: string, plan: PlanRow | null, repo: string, title: string, body: string, now: Date, read: Read): Cover {
+export function covered(db: Db, root: string, plan: PlanRow | null, repo: string, title: string, body: string, now: Date, read: Read,
+  subject?: string): Cover {
   const since = new Date(now.getTime() - DAYS * 86_400_000).toISOString().slice(0, 10)
   const open = listed(read, repo, ['--state', 'open'], 'number,title,body,url')
   const landed = listed(read, repo, ['--state', 'closed', '--search', `closed:>=${since}`], 'number,title,body,url,comments')
@@ -52,7 +53,7 @@ export function covered(db: Db, root: string, plan: PlanRow | null, repo: string
       return { verdict: 'open', no: i.number, url: i.url, plan: on?.id ?? null, ...counts }
     }
   }
-  const name = draft.names[0]
+  const name = draft.names.find((n) => n !== subject)
   if (name !== undefined && !/^Replaces: \S/m.test(body)) return { verdict: 'unreplaced', name, ...counts }
   return { verdict: 'filed', ...counts }
 }

@@ -90,7 +90,7 @@ function refOf(db: Db, root: string, m: Said, found: Finding, wire: Wire, now: D
       `main no longer has the ${found.name} entry in ${path}\nReplaces: registry entry ${found.name} in ${path}`, 'P2']
     : [m.title ?? m.why, m.files ?? '', m.ends ?? '', 'P0']
   const body = `**What:** ${title}\n**Why:** ${m.why}\n**Files:** ${files}\n**When it ends:** ${ends}\n\nDrift ${line(found)}`
-  const cover = covered(db, root, null, SELF, title, body, now, wire.merged)
+  const cover = covered(db, root, null, SELF, title, body, now, wire.merged, found.name)
   const done = acted(cover, m, found, wire, title, body, priority)
   compared(db, null, 'finding', title, cover, typeof done === 'string' ? null : done.ref)
   return done

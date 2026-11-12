@@ -1826,16 +1826,17 @@ async function overCapWakes() {
 }
 
 const PARKS = [
-  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:00.400Z', fired: 1 },
-  { message: 'park: refused by the fence', outcome: 'needs_coo', note: '2026-09-24T13:59:00.400Z', fired: 0 },
-  { message: null, outcome: 'pass', note: '2026-09-24T13:59:00.400Z', fired: 0 },
-  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:01.000Z', fired: 0 },
-] as const
+  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:00.400Z', until: null, fired: 1 },
+  { message: 'park: refused by the fence', outcome: 'needs_coo', note: '2026-09-24T13:59:00.400Z', until: null, fired: 0 },
+  { message: null, outcome: 'pass', note: '2026-09-24T13:59:00.400Z', until: null, fired: 0 },
+  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:01.000Z', until: null, fired: 0 },
+  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:00.400Z', until: '2026-09-25T15:00:00.000Z', fired: 0 },] as const
 
 async function parkedBy() {
-  for (const { message, outcome, note, fired } of PARKS) {
+  for (const { message, outcome, note, until, fired } of PARKS) {
     const { db, home } = wokeSeeded()
     blocked(db, home)
+    if (until !== null) db.exec(`UPDATE plans SET held_until = '${until}' WHERE id = 7`)
     put(home, 7, 'parked.md', `# Held ${note}\n`)
     if (message !== null) lookAt(db, message, '2026-09-24 13:59:00', outcome)
     const fires: string[] = []

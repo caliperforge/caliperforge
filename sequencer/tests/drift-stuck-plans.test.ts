@@ -110,6 +110,21 @@ test('throttleNoStuckSeen', () => {
   expect(seen(0.9, '2026-10-02 09:00:00')).toEqual([])
 })
 
+test('directorReparkHeldSeen', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'director_repark_held')
+  const seen = (until: string | null, ats: string[]): Drifted[] => {
+    const d = db()
+    d.exec(`UPDATE plans SET state = 'blocked_on_ceo', held_until = ${until === null ? 'NULL' : `'${until}'`} WHERE id = 1`)
+    for (const at of ats) logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: 'park: x', pointer: null, run: null }, at)
+    return drift(d, entry, NOW)
+  }
+  const later = '2026-10-05T00:00:00.000Z'
+  expect(seen(later, ['2026-10-03 08:00:00', '2026-10-03 09:00:00'])).toMatchObject([{ name: 'director_repark_held', state: 'seen' }])
+  expect(seen(later, ['2026-10-03 09:00:00'])).toEqual([])
+  expect(seen(later, ['2026-10-03 06:00:00', '2026-10-03 09:00:00'])).toEqual([])
+  expect(seen(null, ['2026-10-03 08:00:00', '2026-10-03 09:00:00'])).toEqual([])
+})
+
 test('stuckRestarts', () => {
   const { d, root } = stalling()
   const src = join(root, '.cf/work/1/src')

@@ -112,6 +112,7 @@ VALUES
   ('rules/registry/96-open_findings_at_signoff.yaml', 'card', 'rules/registry/96-open_findings_at_signoff.yaml', 'c7ba988be03686174dd82d09dfb6eb551a19cd29ed74f19ed8f6bf6593cf9a2d', '2026-11-11'),
   ('rules/registry/96-throttle_no_stuck.yaml', 'card', 'rules/registry/96-throttle_no_stuck.yaml', 'a1f1e9936414429209ba0f53b2bad50d4b3fd37cb90ea8ccdeb4e1f13c76d0de', '2026-11-12'),
   ('rules/registry/97-director_silent_run.yaml', 'card', 'rules/registry/97-director_silent_run.yaml', '7c462236da426466474afe42435ec4155ba530d91f8904eb2047456ce95f3603', '2026-11-12'),
+  ('rules/registry/98-director_repark_held.yaml', 'card', 'rules/registry/98-director_repark_held.yaml', 'e0224c1d0a568f6b71be9274bb3f39c2aef1764690f53cfbc5f8ffff01536678', '2026-11-12'),
   ('rules/registry/98-greptile_waived.yaml', 'card', 'rules/registry/98-greptile_waived.yaml', '0c02c60cea5fbbc0057607dc2bef10b0c5eb2b851db8312ec10f2735033647a2', '2026-11-12'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/hardware.yaml', 'card', 'rules/hardware.yaml', 'bee455a7b793606cb8f6bcff18d38296d34079eb73d666d44572f10dde561b21', '2026-11-09'),

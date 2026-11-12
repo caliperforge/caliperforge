@@ -17,6 +17,7 @@ import { busy, current, idle } from '../store/now.ts'
 import { builderRan, end, held, inWindow, needsCeo, originRef, pipeOf, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear, sentOnce } from '../store/refusals.ts'
 import { kin, runs, stopped, waitable, waking, type Stop } from '../store/stops.ts'
+import { heldAhead } from '../store/until.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { waive } from './design.ts'
@@ -389,7 +390,8 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
   const throttled = cap(db).cap === 0
   for (const plan of waking(db, WAKE)) {
     const head = headOf(root, plan)
-    const again = lasts(db, plan, now)
+    const again = plan.priority <= 1 && inWindow(pipeOf(db, plan.pipe_id), hhmm(db, now))
+      && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString()) && !heldAhead(db, plan.id, now)
     const parked = isHeld(root, plan.id)
     if (parked && !(again && ownPark(db, root, plan.id))) continue
     if (circling(db, plan.id)) continue
@@ -416,10 +418,6 @@ function ownPark(db: Db, root: string, plan: number): boolean {
   // events.at is CURRENT_TIMESTAMP in whole seconds, so a look in the note's own second is after it.
   return last?.outcome === 'pass' && last.message.startsWith('park: ') && held !== undefined
     && lookedSince(db, plan, new Date(Date.parse(held) - 1000).toISOString())
-}
-
-function lasts(db: Db, plan: PlanRow, now: Date): boolean {
-  return plan.priority <= 1 && inWindow(pipeOf(db, plan.pipe_id), hhmm(db, now)) && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString())
 }
 
 function woken(plan: PlanRow): Woken {

@@ -1,0 +1,6 @@
+- name: director_repark_held
+  table: events
+  column: at
+  where: "kind = 'director' AND message LIKE 'park:%' AND EXISTS (SELECT 1 FROM plans p WHERE p.id = events.plan AND julianday(p.held_until) > julianday(events.at)) AND EXISTS (SELECT 1 FROM events e WHERE e.plan = events.plan AND e.kind = 'director' AND e.message LIKE 'park:%' AND julianday(e.at) < julianday(events.at) AND julianday(events.at) - julianday(e.at) < 2.0 / 24)"
+  gap: 1d
+  expected: 0

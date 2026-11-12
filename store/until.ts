@@ -19,3 +19,8 @@ export function until(db: Db, plan: number): string | null {
   }
   return row.waits_on === null ? null : `until plan ${String(row.waits_on)} lands`
 }
+
+/** Whether the plan is held to a time after `at`. */
+export function heldAhead(db: Db, plan: number, at: Date): boolean {
+  return db.prepare('SELECT held_until > ? FROM plans WHERE id = ?').pluck().get(at.toISOString(), plan) === 1
+}

@@ -25,7 +25,7 @@ import { ASKED, GRADING, SKIPPED } from './ready.ts'
 import { checked } from './seat.ts'
 import { work, type Hit } from './theirs.ts'
 import { UNRUN } from './triggers.ts'
-import { listed, settled } from './unruled.ts'
+import { listed, settled, unruled } from './unruled.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 
 /**
@@ -123,6 +123,8 @@ function opening(db: Db, root: string, card: Card, desk: Desk, read: Read, now: 
   const sheeted = body.startsWith('**Fact sheet**')
   logged(db, { plan: card.id, kind: 'card_facts', actor: 'signoff', outcome: sheeted ? 'pass' : 'refuse',
     message: sheeted ? 'with fact sheet' : 'without fact sheet', pointer: made.url, run: null })
+  const open = unruled(root, card.id, headOf(root, card.id).sha).open
+  if (open.length > 0) logged(db, { plan: card.id, kind: 'open_findings', actor: 'signoff', outcome: 'refuse', message: open.join(' '), pointer: made.url, run: null })
   save(root, card.id, { no: made.no, digest: card.digest, url: made.url, shut: false })
   tell(root, card, 'signoff', `sign it off: ${made.url}`, now)
   return { plan: card.id, card: made.no, did: 'opened' }

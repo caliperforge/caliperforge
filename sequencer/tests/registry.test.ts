@@ -336,6 +336,19 @@ test('filedCoveredSeen', () => {
   expect(closed('DUPLICATE', 'covered by #4')).toEqual([])
 })
 
+test('openFindingsAtSignoffSeen', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'open_findings_at_signoff')
+  expect(entry).toMatchObject([{ name: 'open_findings_at_signoff', gap: '7d', expected: 0 }])
+  const d = db()
+  const log = (kind: string): void => {
+    logged(d, { plan: 1, kind, actor: 'signoff', outcome: 'refuse', message: 'B1', pointer: null, run: null }, '2026-10-02 10:00:00')
+  }
+  log('card_facts')
+  expect(drift(d, entry, NOW)).toEqual([])
+  log('open_findings')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'open_findings_at_signoff', state: 'seen', newest: '2026-10-02 10:00:00' }])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

@@ -16,7 +16,7 @@ import { addReview } from '../../store/verdict.ts'
 import { approve as approvePublish } from '../card.ts'
 import { fold } from '../handled.ts'
 import { tick } from '../index.ts'
-import { sent } from '../push.ts'
+import { headOf, sent } from '../push.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
@@ -632,6 +632,19 @@ test('the card lists each bot finding and how it was handled', async () => {
   const fix = git(src, ['log', '-1', '--format=%H', `${before}..${head}`, '--', 'src/hello.ts']).trim().slice(0, 12)
   expect(cardWith(w, CARRIED)).toContain(`**Bot findings on the pull request**\n\n- \`G1\` \`src/hello.ts:1 fixed\` — \`fixed in ${fix} at src/hello.ts:1\`\n`
     + '- `G2` `src/hello.ts:2 overruled` — `G2 overruled: src/hello.ts:1 refuses it`\n- `G3` `src/hello.ts:3 neither` — open\n\n')
+})
+
+test('a card opened over an open finding logs open_findings', async () => {
+  const w = await AT_BATCH()
+  const { dir, sha } = headOf(w.root, 1)
+  put(w.root, 1, `findings-${git(dir, ['rev-parse', `${sha}^{tree}`]).trim()}.md`, '- B1 P2 src/hello.ts:1 the name is lost\n')
+  const logs = (handback: string): unknown[] => {
+    const before = eventsOf(w.db, 1, 'open_findings').length
+    cardWith(w, handback)
+    return eventsOf(w.db, 1, 'open_findings').slice(before)
+  }
+  expect(logs(CARRIED.replace('- F1 fixed: hello takes a name\n', '$&- B1 fixed: hello keeps the name\n'))).toEqual([])
+  expect(logs(CARRIED)).toEqual([{ actor: 'signoff', outcome: 'refuse', message: 'B1' }])
 })
 
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */

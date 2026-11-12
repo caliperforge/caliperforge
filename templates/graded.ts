@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { git, gitBase, maybe, planDir, put, remote } from '../sequencer/workspace.ts'
 import { fields } from './bench.ts'
@@ -21,7 +21,7 @@ const GETTER = /\bfunction\s+(\w+)([\s\S]*?)(?=\bfunction\b|$)/g
 const BLOCK = /^files:[ \t]*\n((?:[ \t]+-[ \t]*\S.*(?:\n|$))+)/m
 const INERT = /\bencodeWithSignature\s*\(\s*"(\w+)\((?:[^"\\\n]|\\.)*"|\/\*[\s\S]*?\*\/|\/\/.*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g
 
-const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
+const read = (path: string): string => statSync(path, { throwIfNoEntry: false })?.isFile() === true ? readFileSync(path, 'utf8') : ''
 
 const bare = (name: string): string => name.slice(name.lastIndexOf('.') + 1)
 
@@ -87,7 +87,7 @@ function halves(phase: Phase, dir: string, { functions, state }: Touched): Half[
     return [['functions', names, functions.filter((f) => [...hits(f.file)].some(([line, n]) => n > 0 && line >= f.start && line <= f.end)).map((f) => f.name)]]
   }
   const handlers = join(dir, 'test/fizz/handlers')
-  const texts = readdirSync(handlers, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol')).map((p) => readFileSync(join(handlers, p), 'utf8'))
+  const texts = readdirSync(handlers, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && statSync(join(handlers, p)).isFile()).map((p) => readFileSync(join(handlers, p), 'utf8'))
   const properties = read(join(dir, 'test/fizz/Properties.sol'))
   const getters = texts.flatMap((text) => [...text.matchAll(GETTER)]).filter(([, name = '']) => named(properties, [name]).length > 0).map(([, , body = '']) => body)
   const stripped = texts.map((text) => text.replace(INERT, (...[, signed]: (string | undefined)[]) => signed === undefined ? '' : `.${signed}(`))

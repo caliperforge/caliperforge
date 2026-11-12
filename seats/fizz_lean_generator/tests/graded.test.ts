@@ -68,6 +68,13 @@ test('suite counts option and calldata calls, not mentions', () => {
     expect(suite(mention, 'X.fn')).toBe('miss: suite names none of X.fn')
 })
 
+test('suite grading skips directories named .sol', () => {
+  const read = 'function invariant_fee() public { assert(handler.currentFee() <= 1e18); }\n'
+  expect(graded('suite', written({ 'test/fizz/handlers/VaultHandler.sol': HANDLER, 'test/fizz/handlers/Foo.sol/Foo.json': '{}', 'test/fizz/Properties.sol': read }), T))
+    .toBe('hit Vault.setFee, Vault.fee')
+  expect(graded('suite', written({ 'test/fizz/handlers/VaultHandler.sol': HANDLER, 'test/fizz/Properties.sol/x.json': '{}' }), { ...T, state: [] })).toBe('hit Vault.setFee')
+})
+
 test('coverage hits a counted line in the span, misses count 0', () => {
   const lcov = (n: number): string => written({ [`${META}/corpus_medusa/coverage/lcov.info`]: `SF:/w/src/Vault.sol\nDA:27,5\nDA:29,${String(n)}\nend_of_record\n` })
   expect(graded('coverage', lcov(3), T)).toBe('hit Vault.setFee')

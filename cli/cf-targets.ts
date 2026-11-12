@@ -8,6 +8,7 @@ import { approve as approveTarget, refuseTarget } from './queue.ts'
 import { fill as fillRecord, render as renderRecord, renderOpen, still } from './record.ts'
 import { render as renderScan, scan } from './scan.ts'
 import { approve as approvePublish, refuse as refusePublish } from '../sequencer/card.ts'
+import { waive as waiveGreptile } from '../sequencer/waived.ts'
 import { HOLDERS, holderOf } from '../store/plans.ts'
 
 const BY = ['--by <holder>', `who signs it: ${HOLDERS.join(' or ')}`] as const
@@ -63,6 +64,13 @@ export function registerApprovals(cf: Command, { root, db, out }: Cli): void {
     for (const card of cards) out(render(card))
     for (const row of landed(handle)) out(renderLanded(row))
   })
+
+  const waive = cf.command('waive')
+  waive.command('greptile').argument('<plan>').requiredOption('--why <text>', 'why this head goes on without a score').requiredOption(...BY)
+    .action((plan: string, options: { why: string; by: string }) => {
+      const by = holderOf(options.by)
+      out(`plan ${plan} greptile waived at ${waiveGreptile(db(), root, Number(plan), by, options.why).slice(0, 12)}\n`)
+    })
 
   signoffs(approve, refuse, { root, db, out })
 }

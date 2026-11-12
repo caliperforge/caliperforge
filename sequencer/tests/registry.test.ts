@@ -349,6 +349,14 @@ test('openFindingsAtSignoffSeen', () => {
   expect(drift(d, entry, NOW)).toMatchObject([{ name: 'open_findings_at_signoff', state: 'seen', newest: '2026-10-02 10:00:00' }])
 })
 
+test('a greptile waiver drifts as seen', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'greptile_waived')
+  const d = db()
+  expect(drift(d, entry, NOW)).toEqual([])
+  logged(d, { plan: 1, kind: 'greptile.waived', actor: 'coo', outcome: 'pass', message: 'm', pointer: 'a'.repeat(40), run: null }, '2026-10-02 10:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'greptile_waived', state: 'seen', newest: '2026-10-02 10:00:00' }])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

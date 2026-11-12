@@ -60,8 +60,7 @@
     "lines": 74
   },
   "tickets.ts": {
-    "lines": 94,
-    "silent-catch": 1
+    "lines": 94
   },
   "ticks.ts": {
     "lines": 24

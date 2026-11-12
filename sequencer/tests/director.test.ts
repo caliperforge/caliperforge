@@ -1830,7 +1830,8 @@ const PARKS = [
   { message: 'park: refused by the fence', outcome: 'needs_coo', note: '2026-09-24T13:59:00.400Z', until: null, fired: 0 },
   { message: null, outcome: 'pass', note: '2026-09-24T13:59:00.400Z', until: null, fired: 0 },
   { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:01.000Z', until: null, fired: 0 },
-  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:00.400Z', until: '2026-09-25T15:00:00.000Z', fired: 0 },] as const
+  { message: 'park: the pipe is full', outcome: 'pass', note: '2026-09-24T13:59:00.400Z', until: '2026-09-25T15:00:00.000Z', fired: 0 },
+] as const
 
 async function parkedBy() {
   for (const { message, outcome, note, until, fired } of PARKS) {

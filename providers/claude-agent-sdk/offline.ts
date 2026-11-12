@@ -8,7 +8,7 @@ export const CACHES = ['.foundry', '.svm'].map((dir) => join(homedir(), dir))
 /** Bash in the sandbox with no host allowed and no unsandboxed retry; a sandbox that cannot start ends the run with an error result. */
 export function sealed(tmp: string | undefined): Pick<Options, 'sandbox' | 'canUseTool'> {
   return {
-    sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true },
+    sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
       filesystem: { allowWrite: [...(tmp === undefined ? [] : [tmp]), ...CACHES] } },
     canUseTool: (tool) => Promise.resolve({ behavior: 'deny', message: `ruling:run.offline refuses ${tool}: an offline run is asked nothing` }),
   }

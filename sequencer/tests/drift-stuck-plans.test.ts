@@ -3,14 +3,15 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { stalled } from '../../store/drift.ts'
 import { eventsOf, logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { set } from '../../store/lanes.ts'
+import { record as observe, set } from '../../store/lanes.ts'
 import { take } from '../../store/leases.ts'
 import { woke } from '../director.ts'
-import { drift, stuck } from '../drift.ts'
+import { drift, type Drifted, stuck } from '../drift.ts'
 import { HELD } from '../settle.ts'
 import { conflicted, drop, git, maybe, put, snapshot } from '../workspace.ts'
 import { COO, db, event, NOW, REGISTRY } from './drifting.ts'
@@ -62,6 +63,49 @@ test('stuckOnce', () => {
   expect(maybe(root, 1, 'refusal.md')).toBe(`\n# Stopped\n\n${note}.\n`)
   expect(d.prepare("SELECT actor, outcome FROM events WHERE kind = 'stuck'").all()).toEqual([{ actor: 'drift', outcome: 'escalate' }])
   expect(stuck(d, root, STUCK, at(62))).toEqual([])
+})
+
+const reading = (d: Db, utilization: number, resets: number, observed = new Date()): void => {
+  observe(d, { observed_at: observed.toISOString(), rate_limit_type: 'seven_day', resets_at: resets / 1000, status: 'allowed_warning', utilization })
+}
+
+test('stuckThrottledSkips', () => {
+  const { d, root } = stalling()
+  const resets = Math.floor(Date.now() / 1000) * 1000 + 86_400_000
+  reading(d, 0.96, resets, new Date(Date.now() - 60_000))
+  for (const minutes of [0, 61, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(ofKind(d, 'stuck')).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
+  expect(maybe(root, 1, 'stuck.json')).toBeNull()
+  const first = new Date(resets).toISOString()
+  expect(all(root)).toMatchObject([{ kind: 'throttled', ticket: `usage resets ${first}`,
+    note: `lane cap 0 at seven_day utilisation 0.96; stuck and the director leave lane_over_cap plans until ${first}` }])
+  reading(d, 0.97, resets + 86_400_000)
+  expect(stuck(d, root, STUCK, at(180))).toEqual([])
+  expect(all(root).map((e) => e.ticket)).toEqual([`usage resets ${first}`, `usage resets ${new Date(resets + 86_400_000).toISOString()}`])
+})
+
+test('wokeThrottledLeavesLaneOverCap', async () => {
+  const { d, root } = stalling()
+  for (const minutes of [0, 30]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(stuck(d, root, STUCK, at(61))).toEqual([1])
+  reading(d, 0.96, Date.now() + 86_400_000)
+  const provider: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('fired') } }
+  await woke(d, root, provider, at(90), () => undefined)
+  expect(eventsOf(d, 1, 'director')).toEqual([])
+})
+
+test('throttleNoStuckSeen', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'throttle_no_stuck')
+  const seen = (utilization: number): Drifted[] => {
+    const d = db()
+    reading(d, utilization, Date.parse('2026-10-05T00:00:00Z'), new Date('2026-10-03T08:00:00Z'))
+    logged(d, { plan: 1, kind: 'stuck', actor: 'drift', outcome: 'escalate', message: 'step 3 unchanged; waits: lane_over_cap; last: m',
+      pointer: null, run: null }, '2026-10-03 09:00:00')
+    return drift(d, entry, NOW)
+  }
+  expect(seen(0.96)).toMatchObject([{ name: 'throttle_no_stuck', state: 'seen', newest: '2026-10-03 09:00:00' }])
+  expect(seen(0.9)).toEqual([])
 })
 
 test('stuckRestarts', () => {

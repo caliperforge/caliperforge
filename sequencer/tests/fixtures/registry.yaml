@@ -608,3 +608,9 @@
   where: "kind = 'open_findings' AND actor = 'signoff'"
   gap: 7d
   expected: 0
+- name: throttle_no_stuck
+  table: events
+  column: at
+  where: "kind = 'stuck' AND outcome IN ('escalate', 'needs_coo') AND message LIKE '%waits: lane_over_cap%' AND EXISTS (SELECT 1 FROM usage u WHERE u.utilisation * 100 > (SELECT max(pct) FROM lane_bands WHERE cap > 0) AND julianday(u.observed_at) <= julianday(events.at) AND julianday(u.resets_at) > julianday(events.at))"
+  gap: 7d
+  expected: 0

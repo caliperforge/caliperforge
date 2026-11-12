@@ -2,11 +2,12 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import { gh, outside, type Pr, type Read } from '../cli/gh.ts'
+import { all, record } from '../cli/inbox.ts'
 import { fill } from '../cli/record.ts'
-import { addFinding, answered, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
+import { addFinding, answered, closeFinding, holds, newest, setting, stalled, type Stalled, unclosed, worked } from '../store/drift.ts'
 import { logged, returns } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { get, hhmm, set, zone } from '../store/lanes.ts'
+import { cap, get, hhmm, set, windows, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById, rewind } from '../store/plans.ts'
 import { added, registry } from './registry.ts'
@@ -84,8 +85,8 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
   const gap = registry.find((e) => e.name === 'stuck_plans')?.gap
   if (gap === undefined) return []
   const window = days(gap) * 86_400_000
-  return stalled(db, openPipes(db, hhmm(db, now)).map((p) => p.id)).flatMap(({ id, step, wait_reason, waits_on, last }) => {
-    if (holder(db, id, now) !== null || last?.endsWith(HELD) === true) return []
+  const free = stalled(db, openPipes(db, hhmm(db, now)).map((p) => p.id)).filter(({ id, last }) => holder(db, id, now) === null && last?.endsWith(HELD) !== true)
+  return unthrottled(db, root, free, now).flatMap(({ id, step, wait_reason, waits_on, last }) => {
     if (planById(db, id).template === 'pr_path' && step > 1 && maybe(root, id, 'issue.md') === null) {
       rewind(db, id, 1)
       drop(root, id, 'stuck.json')
@@ -115,6 +116,24 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
     drop(root, id, 'stuck.json')
     return [id]
   })
+}
+
+function unthrottled(db: Db, root: string, plans: Stalled[], now: Date): Stalled[] {
+  if (cap(db).cap !== 0) return plans
+  const left = plans.filter((p) => p.wait_reason === 'lane_over_cap')
+  for (const { id } of left) drop(root, id, 'stuck.json')
+  if (left.length > 0) throttle(db, root, now)
+  return plans.filter((p) => p.wait_reason !== 'lane_over_cap')
+}
+
+function throttle(db: Db, root: string, now: Date): void {
+  const top = windows(db).filter((w) => w.utilisation !== null).sort((a, b) => (b.utilisation ?? 0) - (a.utilisation ?? 0))[0]
+  const resets = top?.resets_at ?? 'none'
+  const ticket = `usage resets ${resets}`
+  if (all(root).some((e) => e.kind === 'throttled' && e.ticket === ticket)) return
+  const reading = top === undefined ? 'no usage reading' : `${top.kind} utilisation ${String(top.utilisation)}`
+  record(root, [{ at: now.toISOString(), plan: 0, ticket, kind: 'throttled', step: 0, name: 'drift',
+    note: `lane cap 0 at ${reading}; stuck and the director leave lane_over_cap plans until ${resets}` }])
 }
 
 export function recorded(db: Db, drifted: Drifted[], now: Date): number[] {

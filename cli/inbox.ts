@@ -12,7 +12,7 @@ import { planTarget } from '../store/targets.ts'
  * reads, and a desktop notification for the ones that need one.
  * Read is what `cf inbox --ack` has marked; nothing else counts as delivered.
  */
-export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed' | 'flow' | 'late' | 'wave'
+export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed' | 'flow' | 'late' | 'wave' | 'throttled'
 
 export interface Event {
   at: string
@@ -107,6 +107,7 @@ const HEAD: Record<Kind, string> = {
   flow: 'Stuck, cf flow names the fix',
   late: 'Weekly post not on the desk',
   wave: 'A wave passed the whole-app design pass',
+  throttled: 'Usage throttle holds every lane',
 }
 
 /** Why a job stopped, in the words a person reads on a phone; an unknown reason falls back to the machine's note. */

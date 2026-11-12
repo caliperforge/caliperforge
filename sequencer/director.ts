@@ -11,7 +11,7 @@ import { asked, setting } from '../store/drift.ts'
 import { eventsOf, kindsOf, logged, lookedSince } from '../store/events.ts'
 import { resumed, retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
-import { hhmm, wall } from '../store/lanes.ts'
+import { cap, hhmm, wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
 import { builderRan, end, held, inWindow, needsCeo, originRef, pipeOf, planById, PlanRow, retry } from '../store/plans.ts'
@@ -386,12 +386,14 @@ type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 /** The lease keeps two overlapping ticks off one stop. */
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
   released(db, root, now, post, wire.merged)
+  const throttled = cap(db).cap === 0
   for (const plan of waking(db, WAKE)) {
     const head = headOf(root, plan)
     const again = lasts(db, plan, now)
     const parked = isHeld(root, plan.id)
     if (parked && !(again && ownPark(db, root, plan.id))) continue
     if (circling(db, plan.id)) continue
+    if (throttled && plan.wait_reason === 'lane_over_cap') continue
     if (!again && (plan.wait_reason === 'over_cap' || maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head)) continue
     if (take(db, plan.id, now) === null) continue
     try {

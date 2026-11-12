@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs'
 import { inline, said, type Read } from '../cli/gh.ts'
 import type { Judged } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
@@ -7,7 +8,7 @@ import { BOT } from './capture.ts'
 import { carried } from './push.ts'
 import { rows } from './listed.ts'
 import { listed, unruled } from './unruled.ts'
-import { cloned, drop, headSha, maybe, put, srcDir } from './workspace.ts'
+import { cloned, drop, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
 
 export interface Rehearsal { root: string; list: Read }
 
@@ -66,7 +67,10 @@ export function owed(root: string, plan: number): string {
 export function blinded(db: Db, root: string, plan: number, { verdict, outcome }: { verdict: number; outcome: { message: string } }): void {
   const tree = verdictRows(db, plan).find((v) => v.id === verdict)?.tree ?? null
   if (tree === null) return
-  const lines = outcome.message.split('\n').filter((l) => /^- B\d+ P[1-3] /.test(l)).map((l) => `${l}\n`).join('')
+  const top = Math.max(0, ...readdirSync(planDir(root, plan)).filter((name) => /^findings-[0-9a-f]{40}\.md$/.test(name))
+    .flatMap((name) => rows(maybe(root, plan, name) ?? '')).filter((f) => f.id.startsWith('B')).map((f) => Number(f.id.slice(1))))
+  const lines = outcome.message.split('\n').filter((l) => /^- B\d+ P[1-3] /.test(l))
+    .map((l, i) => `${l.replace(/^- B\d+/, `- B${String(top + i + 1)}`)}\n`).join('')
   if (lines === '') drop(root, plan, `findings-${tree}.md`)
   else put(root, plan, `findings-${tree}.md`, lines)
 }

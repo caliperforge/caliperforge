@@ -122,19 +122,24 @@ test('D4 answering one of two findings refuses; both passes', async () => {
 const lap = async (w: World, handback: string): Promise<Fired | undefined> =>
   (await tick(w.db, w.root, stub(handback), undefined, undefined, watched([], w.root, 1)))[0]
 
-/** An approved outside plan at step 6 on `handback`, its head scored 5/5 at each rehearsal, with BLIND filed at the head's tree. */
-async function atReady(handback: string): Promise<World> {
+const treeOf = (w: World): string => { const { dir, sha } = headOf(w.root, 1); return git(dir, ['rev-parse', `${sha}^{tree}`]) }
+
+/** An approved outside plan at step 6 on `handback`, its head scored 5/5 at each rehearsal, with `blind` filed at the head's tree. */
+async function atReady(handback: string, blind = BLIND): Promise<World> {
   const w = world()
   await tick(w.db, w.root, stub(handback))
   approve(w.db, w.target)
   for (let at = 0; at < 5; at += 1) await lap(w, handback)
   expect(plan(w.db, 1).step).toBe(6)
-  const { dir, sha } = headOf(w.root, 1)
-  put(w.root, 1, `findings-${git(dir, ['rev-parse', `${sha}^{tree}`])}.md`, BLIND)
+  put(w.root, 1, `findings-${treeOf(w)}.md`, blind)
   return w
 }
 
 const UNANSWERED = once(() => atReady(CARRIED))
+
+const FIXED = CARRIED.replace('- F1 fixed: hello takes a name\n', '$&- B1 fixed: hello keeps the name\n')
+
+const ANSWERED = once(() => atReady(FIXED, ''))
 
 test('an unanswered blind B P2 at the head holds ready', async () => {
   const w = await UNANSWERED()
@@ -143,10 +148,18 @@ test('an unanswered blind B P2 at the head holds ready', async () => {
 })
 
 test('a B1 fixed: row in the hand-back lets ready pass', async () => {
-  const handback = CARRIED.replace('- F1 fixed: hello takes a name\n', '$&- B1 fixed: hello keeps the name\n')
-  const w = await atReady(handback)
-  expect(await lap(w, handback)).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  const w = await ANSWERED()
+  put(w.root, 1, `findings-${treeOf(w)}.md`, BLIND)
+  expect(await lap(w, FIXED)).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
+})
+
+test("round 1's B1 fixed: leaves round 2's blind row open", async () => {
+  const w = await ANSWERED()
+  blinded(w.db, w.root, 1, { verdict: blindRow(w, TREE), outcome: { message: '- B1 P2 src/hello.ts:1 an old miss' } })
+  blinded(w.db, w.root, 1, { verdict: blindRow(w, treeOf(w)), outcome: { message: '- B1 P2 src/hello.ts:1 the name is lost' } })
+  expect(await lap(w, FIXED)).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile.unhandled'] })
+  expect(maybe(w.root, 1, 'refusal.md')).toContain('- B2 P2 src/hello.ts:1 the name is lost')
 })
 
 test('a blind row at an earlier tree does not hold the head', async () => {

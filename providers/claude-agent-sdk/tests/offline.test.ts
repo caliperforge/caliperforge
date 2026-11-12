@@ -31,7 +31,7 @@ test('D3 D5 an offline packet seals Bash; others send neither', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-offline-'))
   await claudeAgentSdk.fire({ ...packet(dir, ['Read']), offline: true, env: { TMPDIR: dir } })
   expect(sent.at(-1)?.sandbox).toEqual({ enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false,
-    network: { allowedDomains: [], strictAllowlist: true }, filesystem: { allowWrite: [dir, ...CACHES] } })
+    network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true }, filesystem: { allowWrite: [dir, ...CACHES] } })
   const asked = sent.at(-1)?.canUseTool
   const options = { signal: new AbortController().signal, toolUseID: 't', requestId: 'r' }
   expect(await asked?.('Bash', { command: 'curl https://github.com' }, options)).toMatchObject({ behavior: 'deny' })
@@ -58,6 +58,8 @@ function fixture(): { cwd: string; tmp: string } {
   writeFileSync(join(cwd, 'probe2.mjs'), FETCH('reached-2'))
   writeFileSync(join(cwd, 'local.mjs'), "import { writeFileSync } from 'node:fs'\nwriteFileSync('local.txt', '')\n")
   writeFileSync(join(cwd, 'write.mjs'), `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(join(tmp, 'written'))}, '')\n`)
+  writeFileSync(join(cwd, 'listen.mjs'), "import { writeFileSync } from 'node:fs'\nimport { createServer } from 'node:net'\n" +
+    "createServer().listen(0, '127.0.0.1', () => { writeFileSync('listening', ''); process.exit(0) })\n")
   return { cwd, tmp }
 }
 
@@ -65,7 +67,7 @@ const TOP = ["bash -c 'curl https://github.com'", 'node probe.mjs']
 
 const SUB = ["bash -c 'curl https://example.com'", 'node probe2.mjs']
 
-const LOCAL = ['forge build', 'medusa fuzz --timeout 10', 'node local.mjs', 'node write.mjs']
+const LOCAL = ['forge build', 'medusa fuzz --timeout 10', 'node local.mjs', 'node write.mjs', 'node listen.mjs']
 
 const PROMPT = [`Run each of these Bash commands exactly as written, one per call, and go on when one fails: ${[...TOP, ...LOCAL].join(', ')}.`,
   `Then spawn one Agent sub-agent in the foreground (run_in_background false, never in the background), have it run each of these Bash commands exactly as written, one per call: ${SUB.join(', ')}, and wait for its result before you answer.`,
@@ -75,11 +77,12 @@ test.runIf(LIVE)('D1 D2 D6 an offline session cuts the network', async () => {
   const { cwd, tmp } = fixture()
   const fired = await claudeAgentSdk.fire({ ...packet(cwd, ['Bash(bash:*)', 'Bash(node:*)', 'Bash(forge:*)', 'Bash(medusa:*)', 'Agent'], PROMPT),
     offline: true, env: { TMPDIR: tmp } })
-  const why = JSON.stringify({ stop_reason: fired.stop_reason, denials: fired.denials, text: fired.text })
+  const why = JSON.stringify({ stop_reason: fired.stop_reason, denials: fired.denials, text: fired.text, transcript: fired.transcript_path })
+  for (const marker of ['reached-1', 'reached-2']) expect(existsSync(join(cwd, marker))).toBe(false)
+  const made = { forge: join(cwd, 'out/Counter.sol/Counter.json'), medusa: join(cwd, 'corpus'), node: join(cwd, 'local.txt'), tmpdir: join(tmp, 'written'),
+    listen: join(cwd, 'listening') }
+  expect(Object.fromEntries(Object.entries(made).map(([outcome, path]) => [outcome, existsSync(path)])))
+    .toEqual({ forge: true, medusa: true, node: true, tmpdir: true, listen: true })
   expect(fired.offline, why).toEqual(expect.arrayContaining([...TOP, ...SUB]))
   for (const command of LOCAL) expect(fired.offline).not.toContain(command)
-  for (const marker of ['reached-1', 'reached-2']) expect(existsSync(join(cwd, marker))).toBe(false)
-  const made = { forge: join(cwd, 'out/Counter.sol/Counter.json'), medusa: join(cwd, 'corpus'), node: join(cwd, 'local.txt'), tmpdir: join(tmp, 'written') }
-  expect(Object.fromEntries(Object.entries(made).map(([outcome, path]) => [outcome, existsSync(path)])))
-    .toEqual({ forge: true, medusa: true, node: true, tmpdir: true })
 }, 600_000)

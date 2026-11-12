@@ -111,6 +111,7 @@ VALUES
   ('rules/registry/96-greptile_every_head.yaml', 'card', 'rules/registry/96-greptile_every_head.yaml', '374112af336d37b1e1a5cd47f859a8f6d5045fb86767b5610bf3446872918c5a', '2026-11-11'),
   ('rules/registry/96-open_findings_at_signoff.yaml', 'card', 'rules/registry/96-open_findings_at_signoff.yaml', 'c7ba988be03686174dd82d09dfb6eb551a19cd29ed74f19ed8f6bf6593cf9a2d', '2026-11-11'),
   ('rules/registry/96-throttle_no_stuck.yaml', 'card', 'rules/registry/96-throttle_no_stuck.yaml', 'a1f1e9936414429209ba0f53b2bad50d4b3fd37cb90ea8ccdeb4e1f13c76d0de', '2026-11-12'),
+  ('rules/registry/97-director_silent_run.yaml', 'card', 'rules/registry/97-director_silent_run.yaml', '7c462236da426466474afe42435ec4155ba530d91f8904eb2047456ce95f3603', '2026-11-12'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/hardware.yaml', 'card', 'rules/hardware.yaml', 'bee455a7b793606cb8f6bcff18d38296d34079eb73d666d44572f10dde561b21', '2026-11-09'),
   ('rules/emulators.yaml', 'card', 'rules/emulators.yaml', 'd3c6eb7140b65261b1053f9d9da02042fb495e901853e7ca14d09f53e3b3a94e', '2026-11-10'),

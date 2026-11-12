@@ -8,7 +8,7 @@ import { decision } from '../store/ask.ts'
 import { appliedOf, decided, decisions } from '../store/decisions.ts'
 import { pushed } from '../store/deliverables.ts'
 import { asked, setting } from '../store/drift.ts'
-import { eventsOf, kindsOf, logged, lookedSince } from '../store/events.ts'
+import { dropped, eventsOf, kindsOf, logged, lookedSince } from '../store/events.ts'
 import { resumed, retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, wall } from '../store/lanes.ts'
@@ -22,7 +22,7 @@ import { split, type Part } from './brief.ts'
 import { waive } from './design.ts'
 import { hold, isHeld, unhold } from './hold.ts'
 import { found } from './findings.ts'
-import { fixed, stop } from './fixed.ts'
+import { attempted, fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { barred, returned } from './park.ts'
 import { prose } from './prose.ts'
@@ -86,7 +86,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
     const again = refused(m, said, n, root, plan.id, only, bar)
-    if (again !== null) return only !== FULL && m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
+    if (again !== null) return only !== FULL && m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && attempted(db, plan.id, apply, db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : only !== null ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
         : handUp(db, root, plan, { outcome: 'needs_coo', message: again.message }, said, provider, now, post, wire)
@@ -95,8 +95,8 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   const message = `${m.move}: ${m.why}`
   if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_coo', message, note: `proposes ${message}` })
   const done = m.move === 'fix' ? await fixed(db, root, plan, m.why, provider, now, post, wire)
-    : m.move !== 'ask_ceo' && m.move !== 'ask_coo' && apply(db, root, plan, m, wire, now)
-  if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
+    : m.move !== 'ask_ceo' && m.move !== 'ask_coo' && attempted(db, plan.id, apply, db, root, plan, m, wire, now)
+  if (done !== false && !(done instanceof Error)) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
   if (m.move === 'ask_coo') return handUp(db, root, plan, { outcome: 'needs_coo', message }, said, provider, now, post, wire, () => { held(db, plan.id, 'coo', m.why) })
   if (m.move === 'ask_ceo') {
@@ -104,7 +104,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     const ceo = decision(said)
     return told(db, root, plan, now, { outcome: 'needs_coo', message: 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
-  const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(root, plan, written(m)) ?? ''})` : ''}: ${m.why}`
+  const failed = `${m.move} did not apply, ${done instanceof Error ? done.message : UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(root, plan, written(m)) ?? ''})` : ''}: ${m.why}`
   const stuck = (): void => { needsCeo(db, plan); held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed) }
   if (m.move !== 'fix') return handUp(db, root, plan, { outcome: 'needs_coo', message: failed }, said, provider, now, post, wire, stuck)
   stuck()
@@ -394,7 +394,7 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
     if (parked && !(again && ownPark(db, root, plan.id))) continue
     if (circling(db, plan.id)) continue
     if (throttled && plan.wait_reason === 'lane_over_cap') continue
-    if (!again && (plan.wait_reason === 'over_cap' || maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head)) continue
+    if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head ? dropped(db, plan.id) || !again : !again && plan.wait_reason === 'over_cap') continue
     if (take(db, plan.id, now) === null) continue
     try {
       if (parked) drop(root, plan.id, 'parked.md')

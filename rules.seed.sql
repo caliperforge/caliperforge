@@ -90,7 +90,7 @@ VALUES
   ('rules/registry/79-outside_records.yaml', 'card', 'rules/registry/79-outside_records.yaml', '39693d035e7c5ef67f77cad18ae07deecbc7928ccaae551ada573cf2c5424752', '2026-10-23'),
   ('rules/registry/80-base_recut.yaml', 'card', 'rules/registry/80-base_recut.yaml', 'c6014c6a08e2f94837c9c48bcdc7475b04c27bf9f0252fed9b1394bf7f16989c', '2026-10-24'),
   ('rules/registry/80-comms_not_a_post.yaml', 'card', 'rules/registry/80-comms_not_a_post.yaml', '36ba1118c68675b787e54d589142b0cd3fe7c3c33fe7f8346966c9befae64bc6', '2026-10-24'),
-  ('rules/registry/81-bench_cost_wall.yaml', 'card', 'rules/registry/81-bench_cost_wall.yaml', '30a85325f3e9812adff04ee02050276cf6bd62be0292a80ff7a4950ddcefe4cb', '2026-10-27'),
+  ('rules/registry/81-bench_cost_wall.yaml', 'card', 'rules/registry/81-bench_cost_wall.yaml', '363cdd35cc8df69a8dd0ab1dbd87fed64a7b6edb2e7a6eb115277bd2f05f9922', '2026-10-27'),
   ('rules/registry/82-bench_degraded.yaml', 'card', 'rules/registry/82-bench_degraded.yaml', '927d20f7ffbb582f498f37c33ee18aa54c68cc4566fc2460a9510b6174495106', '2026-10-27'),
   ('rules/registry/83-fork_ready_ci.yaml', 'card', 'rules/registry/83-fork_ready_ci.yaml', '17d2367c89876f7cfc9c5d74466799605119529fdadf44a3dca64a6cd6da48eb', '2026-10-28'),
   ('rules/registry/84-waive_resumes_stop.yaml', 'card', 'rules/registry/84-waive_resumes_stop.yaml', 'c1e2bcc3cf950d892c3ca154901d1db5ef1f9e8bbe5ba252661d3f0024bf6211', '2026-10-28'),

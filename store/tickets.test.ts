@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../checks/sqlite.ts'
 import type { Read } from '../cli/gh.ts'
+import { ofKind } from './events.ts'
 import type { Db } from './index.ts'
 import { backfillTickets, HISTORY, recordListing, type Listing } from './tickets.ts'
 
@@ -62,6 +63,24 @@ test('D1 wave from a wave:N label, NULL without one', () => {
     { number: 7, wave: 2 },
     { number: 8, wave: null },
   ])
+})
+
+test('two P labels record the ticket unpriced and log the swallow', () => {
+  const db = schema()
+  recordListing(db, SELF, [issue(SELF, 9, ['lane:machine', 'P0', 'P2'])], false)
+  expect(db.prepare('SELECT number, priority FROM tickets').all()).toEqual([{ number: 9, priority: null }])
+  expect(ofKind(db, 'swallowed')).toEqual([{ plan: null, kind: 'swallowed', actor: 'tickets', outcome: 'pass',
+    message: `${SELF}#9: carries P0 and P2; one priority label at most` }])
+})
+
+test('zero or one P label logs no swallow', () => {
+  const db = schema()
+  recordListing(db, SELF, [issue(SELF, 10, ['lane:machine']), issue(SELF, 11, ['lane:machine', 'P2'])], false)
+  expect(db.prepare('SELECT number, priority FROM tickets ORDER BY number').all()).toEqual([
+    { number: 10, priority: null },
+    { number: 11, priority: 2 },
+  ])
+  expect(ofKind(db, 'swallowed')).toEqual([])
 })
 
 test('fills opened_at, closed_at and kind, idempotently', () => {

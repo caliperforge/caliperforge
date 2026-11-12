@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import type { Read } from '../cli/gh.ts'
+import { firstLine } from '../sequencer/unpolled.ts'
+import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { LANE, LANES, laneOf, priorityOf } from './lanes.ts'
 
@@ -68,7 +70,7 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
     const kind = i.labels.some((l) => l.name === 'fix') ? 'fix' : 'build'
     const wrong = i.labels.some((l) => l.name === 'diagnosis:wrong') ? 1 : 0
     const afters = afterOf(i.body)
-    put.run(repo, i.number, i.title, lane, priority(i.labels), afters.length === 0 ? null : JSON.stringify(afters), partOf(i.title),
+    put.run(repo, i.number, i.title, lane, priority(db, repo, i), afters.length === 0 ? null : JSON.stringify(afters), partOf(i.title),
       i.createdAt, i.closedAt, kind,
       i.stateReason === '' ? null : i.stateReason, wrong, waveOf(i.labels) ?? null)
     kept.push(i.number)
@@ -102,10 +104,11 @@ export function backfillTickets(db: Db, read: Read): number {
 }
 
 /** Two P labels make `add` refuse the issue; the ticket is still recorded, unpriced. */
-function priority(labels: { name: string }[]): number | null {
+function priority(db: Db, repo: string, i: Listing): number | null {
   try {
-    return priorityOf(labels)
-  } catch {
+    return priorityOf(i.labels)
+  } catch (error) {
+    logged(db, { plan: null, kind: 'swallowed', actor: 'tickets', outcome: 'pass', message: `${repo}#${String(i.number)}: ${firstLine(error)}`, pointer: null, run: null })
     return null
   }
 }

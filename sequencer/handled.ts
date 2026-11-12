@@ -5,14 +5,14 @@ import { headOf } from './push.ts'
 import { accepted, listed, overruled, unruled } from './unruled.ts'
 import { maybe, planDir, put, srcDir, tried } from './workspace.ts'
 
-/** Each finding at `head` or at a head before it on its line, with the ruling or the later commit that answers it. */
+/** Each Greptile finding at `head` or at a head before it on its line, and each blind finding at `head`'s tree only, with the ruling or the later commit that answers it. */
 export function handled(root: string, plan: number, head: string): { id: string; text: string; how: string | null; holds: boolean }[] {
   const [src, reply, pointer] = [srcDir(root, plan), replies(root, plan), pointers(root, plan, true)]
-  return readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? [])
+  return [...new Set([...readdirSync(planDir(root, plan)).flatMap((name) => /^findings-([0-9a-f]{40})\.md$/.exec(name)?.[1] ?? []), head])]
     .filter((sha) => tried(src, ['merge-base', '--is-ancestor', sha, head]) !== null)
     .flatMap((sha) => {
       const { open } = unruled(root, plan, sha)
-      return listed(root, plan, sha).map(({ id, text }) => {
+      return listed(root, plan, sha).filter(({ id }) => sha === head || id.startsWith('G')).map(({ id, text }) => {
         const at = pointer(id)
         const fix = at === '' ? '' : tried(src, ['log', '-1', '--format=%H', `${sha}..${head}`, '--', at.split(':')[0] ?? ''])?.trim() ?? ''
         const how = reply(id) ?? (fix === '' ? null : `fixed in ${fix.slice(0, 12)} at ${at}`)

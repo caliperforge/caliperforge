@@ -152,6 +152,31 @@ test('refuses an assert_eq! removed from a Rust source file', () => {
   expect(verdict.spans).toEqual(['src/lib.rs:2 test.weakened.removed'])
 })
 
+const ledger = (ignore = '#[ignore = "needs a Ledger"]', name = 'diagnose_attached_ledger'): string[] => ['#[test]', ignore, `fn ${name}() {}`]
+const moving = (from: string[], to: string[]): string =>
+  `--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,4 +1,4 @@\n${from.map((l) => `-${l}\n`).join('')} fn other() {}\n${to.map((l) => `+${l}\n`).join('')}`
+
+test('passes a moved, identical ignored Rust test', () => {
+  expect(weakened(moving(ledger(), ledger()), 'green')).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+test('refuses a newly ignored Rust test, new or existing', () => {
+  expect(weakened(moving([], ledger()), 'green').spans).toEqual(['src/lib.rs:3 test.weakened.skipped'])
+  const gained = '--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,1 +1,2 @@\n+#[ignore]\n fn other() {}\n'
+  expect(weakened(gained, 'green').spans).toEqual(['src/lib.rs:1 test.weakened.skipped'])
+})
+
+test('refuses a changed ignore reason or one moved to another fn', () => {
+  expect(weakened(moving(ledger('#[ignore = "a"]'), ledger('#[ignore = "b"]')), 'green').spans).toEqual(['src/lib.rs:3 test.weakened.skipped'])
+  expect(weakened(moving(ledger('#[ignore]', 'a'), ledger('#[ignore]', 'b')), 'green').spans).toEqual(['src/lib.rs:3 test.weakened.skipped'])
+})
+
+test('passes a moved, identical skipped test beside a new one', () => {
+  const skip = (title: string): string => `${['test', 'skip'].join('.')}('${title}', () => {})`
+  const diff = `--- a/t/d.test.ts\n+++ b/t/d.test.ts\n@@ -1,2 +1,3 @@\n-${skip('later')}\n test('kept', () => {})\n+${skip('later')}\n+${skip('newer')}\n`
+  expect(weakened(diff, 'green').spans).toEqual(['t/d.test.ts:3 test.weakened.skipped'])
+})
+
 const rust = (body: string) => `diff --git a/src/old.rs b/src/old.rs\ndeleted file mode 100644\n--- a/src/old.rs\n+++ /dev/null\n@@ -1,3 +0,0 @@\n${body}`
 
 test('passes deleting a Rust file with no assertion in it', () => {

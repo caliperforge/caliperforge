@@ -29,3 +29,13 @@ export async function fixed(db: Db, root: string, plan: PlanRow, why: string, pr
     return false
   }
 }
+
+export function attempted<A extends unknown[], T>(db: Db, plan: number, apply: (...args: A) => T, ...args: A): T | Error {
+  try {
+    return apply(...args)
+  } catch (error) {
+    const thrown = error instanceof Error ? error : new Error(String(error))
+    logged(db, { plan, kind: 'apply_error', actor: 'director', outcome: 'escalate', message: thrown.message, pointer: null, run: null })
+    return thrown
+  }
+}

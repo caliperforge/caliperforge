@@ -1,0 +1,6 @@
+- name: director_silent_run
+  table: runs
+  column: at
+  where: "seat = 'director' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = runs.plan AND e.kind = 'director' AND julianday(e.at) >= julianday(runs.at) AND julianday(e.at) <= julianday(runs.at) + 120.0 / 86400)"
+  gap: 1d
+  expected: 0

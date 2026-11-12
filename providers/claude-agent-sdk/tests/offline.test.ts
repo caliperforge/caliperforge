@@ -77,12 +77,12 @@ test.runIf(LIVE)('D1 D2 D6 an offline session cuts the network', async () => {
   const { cwd, tmp } = fixture()
   const fired = await claudeAgentSdk.fire({ ...packet(cwd, ['Bash(bash:*)', 'Bash(node:*)', 'Bash(forge:*)', 'Bash(medusa:*)', 'Agent'], PROMPT),
     offline: true, env: { TMPDIR: tmp } })
-  const why = JSON.stringify({ stop_reason: fired.stop_reason, denials: fired.denials, text: fired.text })
-  expect(fired.offline, why).toEqual(expect.arrayContaining([...TOP, ...SUB]))
-  for (const command of LOCAL) expect(fired.offline).not.toContain(command)
+  const why = JSON.stringify({ stop_reason: fired.stop_reason, denials: fired.denials, text: fired.text, transcript: fired.transcript_path })
   for (const marker of ['reached-1', 'reached-2']) expect(existsSync(join(cwd, marker))).toBe(false)
   const made = { forge: join(cwd, 'out/Counter.sol/Counter.json'), medusa: join(cwd, 'corpus'), node: join(cwd, 'local.txt'), tmpdir: join(tmp, 'written'),
     listen: join(cwd, 'listening') }
   expect(Object.fromEntries(Object.entries(made).map(([outcome, path]) => [outcome, existsSync(path)])))
     .toEqual({ forge: true, medusa: true, node: true, tmpdir: true, listen: true })
+  expect(fired.offline, why).toEqual(expect.arrayContaining([...TOP, ...SUB]))
+  for (const command of LOCAL) expect(fired.offline).not.toContain(command)
 }, 600_000)

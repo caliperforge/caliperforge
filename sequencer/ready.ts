@@ -87,7 +87,7 @@ function unsigned(root: string, plan: PlanRow, repo: string): Outcome | null {
     : { outcome: 'refuse', spans: ['ready.unsigned'], note: `${sha.slice(0, 12)} is unsigned and ${repo} requires signed commits` }
 }
 
-/** Ticks an outside head waits for its score before ready holds it as `needs_coo`. */
+/** Ticks an outside head waits for its score before ready holds it. */
 export const GRADING = 45
 
 /** Nothing leaves our fork with an open P0–P2 Greptile finding at this head, nor below 4/5 with none listed. */

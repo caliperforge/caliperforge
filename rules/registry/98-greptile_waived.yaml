@@ -1,0 +1,6 @@
+- name: greptile_waived
+  table: events
+  column: at
+  where: "kind = 'greptile.waived'"
+  gap: 7d
+  expected: 0

@@ -621,3 +621,9 @@
   where: "seat = 'director' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = runs.plan AND e.kind = 'director' AND julianday(e.at) >= julianday(runs.at) AND julianday(e.at) <= julianday(runs.at) + 120.0 / 86400)"
   gap: 1d
   expected: 0
+- name: greptile_waived
+  table: events
+  column: at
+  where: "kind = 'greptile.waived'"
+  gap: 7d
+  expected: 0

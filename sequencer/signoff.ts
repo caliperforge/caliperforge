@@ -26,6 +26,7 @@ import { checked } from './seat.ts'
 import { work, type Hit } from './theirs.ts'
 import { UNRUN } from './triggers.ts'
 import { listed, settled, unruled } from './unruled.ts'
+import { waived } from './waived.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 
 /**
@@ -308,7 +309,8 @@ function greptileLine(db: Db, root: string, plan: number, sha: string): string {
   const score = graded(db, plan, sha)?.score ?? null
   const [at, ...why] = (maybe(root, plan, SKIPPED) ?? '').trim().split(' ')
   if (score === null && at === sha) return `skipped: ${why.join(' ')}`
-  return score === null ? `no score at this head; ready went on after ${String(GRADING)} ticks without one` : `${String(score)}/5 at this head`
+  if (score === null) return waived(root, plan, sha) ?? `no score at this head; ready went on after ${String(GRADING)} ticks without one`
+  return `${String(score)}/5 at this head`
 }
 
 function forkPass(db: Db, root: string, plan: number, sha: string): string[] {

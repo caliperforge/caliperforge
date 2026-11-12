@@ -26,6 +26,7 @@ import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 import { stacked } from './stacked.ts'
 import { unruled } from './unruled.ts'
+import { waived } from './waived.ts'
 
 export { proven, target, unanswered, type Target } from '../store/ready.ts'
 
@@ -100,8 +101,9 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
     if (wire.greptile?.(fork) === false) {
       return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: `Greptile is not installed on ${fork}` }
     }
+    const waiver = waived(root, plan.id, sha)
     const asks = (maybe(root, plan.id, ASKED) ?? '').split('\n')
-    return (asks.some((l) => l.startsWith(`${sha} `)) ? null : asked(root, plan.id, sha, fork, wire))
+    return waiver !== null ? `; Greptile ${waiver}` : (asks.some((l) => l.startsWith(`${sha} `)) ? null : asked(root, plan.id, sha, fork, wire))
       ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, GRADES)
       ?? { outcome: 'needs_coo', spans: ['greptile.missing'], note: `${at} has no Greptile score after ${String(GRADING)} ticks; held for the COO` }
   }

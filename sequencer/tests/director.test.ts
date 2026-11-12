@@ -1061,10 +1061,15 @@ describe('close', () => {
 
 async function filedParks() {
   const { db, home } = seeded('1')
-  await run(db, home, REPLY.file ?? '')
+  const bodies: string[] = []
+  await cooLite(db, home, row(db), stub(REPLY.file ?? ''), now, () => undefined, filing(bodies))
   expect(plan7(db)?.waits_on).toBe(allPlans(db).find((p) => p.origin === FILED)?.id)
   expect(maybe(home, 7, 'parked.md')).toContain(FILED)
   expect(ofKind(db, 'return')).toEqual([])
+  expect(ofKind(db, 'covered').map(({ actor, message }) => ({ actor, message }))).toEqual([{ actor: 'ticketed', message: expect.stringMatching(/: filed$/) as string }])
+  expect(bodies).toHaveLength(1)
+  expect(told(db).map((t) => t.outcome)).toEqual(['pass'])
+  expect(pointers(db, 'director')).toEqual([FILED])
 }
 
 async function replayed() {
@@ -1157,8 +1162,30 @@ async function settledAgain() {
   }
 }
 
+async function throwsOnce() {
+  const { db, home } = wokeSeeded()
+  blocked(db, home)
+  addSetting(db, { key: 'director.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
+  db.exec('UPDATE plans SET priority = 1 WHERE id = 7')
+  hours(db, 99, ...ALL)
+  const bodies: string[] = []
+  const full = [...Array(100).keys()].map((i) => ({ number: i + 1, title: `t${String(i)}`, body: '', url: `${FILED}${String(i)}` }))
+  const wired: Wire = { ...filing(bodies), merged: (args) => args.includes('open') ? full : [] }
+  const at = Date.now()
+  const wake = (hour: number) => woke(db, home, wokeStub(REPLY.file ?? '', []), new Date(at + hour * 3_600_000), () => undefined, wired)
+  await wake(0)
+  expect(wokeTold(db)).toEqual([{ outcome: 'needs_coo', message: expect.stringMatching(/^file did not apply, gh issue list on \S+ hit its cap of 100; /) as string }])
+  expect(bodies).toEqual([])
+  await wake(2)
+  expect(wokeRuns(db)).toHaveLength(1)
+  put(home, 7, 'refusal.md', 'step 4 review refused by code_quality\n\na different finding\n')
+  await wake(2)
+  expect(wokeRuns(db)).toHaveLength(2)
+}
+
 describe('file', () => {
   test('a file parks the job on the filed plan', filedParks)
+  test('a file whose ticketing throws is told once, not re-woken', LONG, throwsOnce)
   test('a filed job asked again an hour later stays parked', replayed)
   test('the same stop on three plans in a day files one ticket', LONG, repeats)
   test('a plan sent round since its refusal files no repeat', LONG, sentRound)

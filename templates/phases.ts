@@ -52,7 +52,7 @@ export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provid
 export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling, refire }: Bench, manifest: Seat, hash: string, map?: Range[]): Fire {
   return async (prompt, issue, sum, phase) => {
     const { gross } = spend(db, plan.id)
-    if (gross >= walls.usd) return { outcome: 'needs_ceo', spans: ['bench.cost_wall'], note: `plan ${String(plan.id)} spent $${gross.toFixed(2)} gross against the $${String(walls.usd)} bench.cost_wall_usd wall` }
+    if (gross >= walls.usd) return crashed({ outcome: 'needs_ceo', spans: ['bench.cost_wall'], note: `plan ${String(plan.id)} spent $${gross.toFixed(2)} gross against the $${String(walls.usd)} bench.cost_wall_usd wall` }, sum)
     const built = packet(manifest, prompt, '', issue, dir,
       pending(planDir(root, plan.id), `step-${String(step.step)}${phase === undefined ? '' : `-${phase}`}`), false, [...manifest.write_paths, tmp])
     const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: ceiling - sum.tokens,

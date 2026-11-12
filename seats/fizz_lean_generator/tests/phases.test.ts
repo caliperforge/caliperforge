@@ -628,6 +628,12 @@ test('a crashed batch refires alone; a rerun fires only it', async () => {
   expect(fires.slice(before).map((f) => f.phase)).toEqual(['invariants-batch-2'])
 })
 
+test('a batched plan at the wall is held for the CEO', async () => {
+  const { fires, sum } = await v5(undefined, { 'invariants-batch-1': { usage: { input: 0, cache: 0, output: 1, cost: 100 } } })
+  expect(fires.map((f) => f.phase)).toEqual(BATCHED.slice(0, -1))
+  expect(sum).toEqual({ outcome: 'needs_ceo', spans: ['bench.cost_wall'], note: 'plan 1 spent $100.00 gross against the $100 bench.cost_wall_usd wall' })
+})
+
 test('a v5 run compiles once after the last batch, then inherits', async () => {
   vi.clearAllMocks()
   const { handoffs } = await v5()

@@ -90,12 +90,12 @@ export function peer(db: Db, r: Refused, green: Green): number | undefined {
     && ((f.base !== null && f.base === r.base) || (f.recent === 1 && !green(f.repo, f.at))))?.plan
 }
 
-/** The refusals recorded on `day` (local `yyyy-mm-dd`, `minutes` from UTC), blips left out, at local time. */
-export function ofDay(db: Db, day: string, minutes: number): { id: number; plan: number; step: number; title: string | null; at: string }[] {
+/** The refusals recorded from `from` to `to` (local `yyyy-mm-dd`, `minutes` from UTC), blips left out, at local time. */
+export function refusedIn(db: Db, from: string, to: string, minutes: number): { id: number; plan: number; step: number; title: string | null; at: string }[] {
   const shift = `${String(minutes)} minutes`
   return db.prepare(`SELECT f.id, f.plan, f.step, p.title, datetime(f.at, ?) AS at FROM refusals f LEFT JOIN plans p ON p.id = f.plan
-    WHERE f.blip = 0 AND date(f.at, ?) = ? ORDER BY f.id`)
-    .all(shift, shift, day) as { id: number; plan: number; step: number; title: string | null; at: string }[]
+    WHERE f.blip = 0 AND date(f.at, ?) BETWEEN ? AND ? ORDER BY f.id`)
+    .all(shift, shift, from, to) as { id: number; plan: number; step: number; title: string | null; at: string }[]
 }
 
 /** Step 1 refusals on `pr_path` plans in the 7 UTC days ending on `now`'s, blips left out. */

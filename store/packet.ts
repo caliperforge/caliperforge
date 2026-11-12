@@ -1,24 +1,33 @@
+import { learningsIn } from './desk.ts'
 import type { Db } from './index.ts'
 import { zone } from './lanes.ts'
-import { ofDay } from './refusals.ts'
+import { refusedIn } from './refusals.ts'
 
 /** What was learned, drifted, decided, landed and refused on the local day `plan`'s title ends in, or today. */
 export function packetOf(db: Db, plan: number) {
   const minutes = zone(db)
   const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan) as { title: string | null }
   const day = /\d{4}-\d{2}-\d{2}$/.exec(title ?? '')?.[0] ?? new Date(Date.now() + minutes * 60000).toISOString().slice(0, 10)
-  const shift = `${String(minutes)} minutes`
-  const on = [shift, shift, day]
   const learned = db.prepare('SELECT items FROM desk_learnings WHERE date = ?').get(day) as { items: string } | undefined
+  return { day, learned: JSON.parse(learned?.items ?? '[]') as unknown[], ...between(db, day, day) }
+}
+
+/** What was learned, drifted, decided, landed and refused on the local dates from `from` to `to`. */
+export function spanOf(db: Db, from: string, to: string) {
+  return { from, to, learnings: learningsIn(db, from, to), ...between(db, from, to) }
+}
+
+function between(db: Db, from: string, to: string) {
+  const minutes = zone(db)
+  const shift = `${String(minutes)} minutes`
+  const on = [shift, shift, from, to]
   return {
-    day,
-    learned: JSON.parse(learned?.items ?? '[]') as unknown[],
     drift: db.prepare(`SELECT number, title, datetime(opened_at, ?) AS at FROM tickets
-      WHERE title GLOB 'Drift: *' AND date(opened_at, ?) = ? ORDER BY opened_at, number`).all(...on),
+      WHERE title GLOB 'Drift: *' AND date(opened_at, ?) BETWEEN ? AND ? ORDER BY opened_at, number`).all(...on),
     decisions: db.prepare(`SELECT e.plan, p.title, e.actor, e.kind, e.message AS why, datetime(e.at, ?) AS at FROM events e
-      LEFT JOIN plans p ON p.id = e.plan WHERE e.actor IN ('director', 'coo_lite') AND date(e.at, ?) = ? ORDER BY e.id`).all(...on),
-    landed: landedIn(db, day, day),
-    refusals: ofDay(db, day, minutes),
+      LEFT JOIN plans p ON p.id = e.plan WHERE e.actor IN ('director', 'coo_lite') AND date(e.at, ?) BETWEEN ? AND ? ORDER BY e.id`).all(...on),
+    landed: landedIn(db, from, to),
+    refusals: refusedIn(db, from, to, minutes),
   }
 }
 

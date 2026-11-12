@@ -53,8 +53,6 @@ export const refiring = <A extends [bench: Bench, manifest: Seat, hash: string, 
 
 export const refired = (bench: Bench, refire: string | undefined, resumed: boolean): Bench => resumed && refire !== undefined ? { ...bench, refire } : bench
 
-export const net = (db: Db, plan: number, sum: Sum): number => sum.usd - credited(db, plan, sum.runs)
-
 export function tallied(db: Db, plan: number, refire: string | undefined, sum: Sum, run: number): Sum {
   if (refire !== undefined) logged(db, { plan, kind: 'bench.credit', actor: 'machine', outcome: 'pass', message: refire, pointer: null, run })
   const runs = [...sum.runs, run]

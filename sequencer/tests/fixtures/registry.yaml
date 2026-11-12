@@ -477,6 +477,7 @@
   where: "kind = 'draft' AND outcome = 'refuse' AND message LIKE 'not a post plan:%'"
   gap: 7d
   expected: 0
+# bench.cost_wall_usd is checked before each generate sub-run against the plan's gross spend; at or past it the plan is held for the CEO and nothing fires.
 - name: bench_cost_wall
   table: events
   column: at

@@ -4,6 +4,7 @@ import { credit } from '../../../cli/bench.ts'
 import { seat } from '../../../runner/rules.ts'
 import type { Db } from '../../../store/index.ts'
 import { pipeNamed, putPlan } from '../../../store/plans.ts'
+import { runTokens } from '../../../store/runs.ts'
 import { firing, START, type Sum } from '../../../templates/phases.ts'
 import { benched } from './benched.ts'
 
@@ -29,11 +30,11 @@ function replayed() {
   return { db, walls, fire }
 }
 
-test('credited runs come off the wall; usd stays gross', async () => {
+test('credited runs stay on the wall; usd stays gross', async () => {
   const { db, walls, fire } = replayed()
   credit(db, 1, [...CREDITED.keys()], 'machine bugs')
   const sum = await fire(SUM) as Sum
-  expect(walls[0]).toBeCloseTo(15.9302701, 9)
+  expect(walls[0]).toBeCloseTo(40 - 33.1212625, 9)
   expect(sum.runs).toEqual([...RUNS, 14569])
   expect(sum.usd).toBeCloseTo(40.6818336, 9)
   expect(sum.machine).toBeCloseTo(9.0515326, 9)
@@ -49,6 +50,20 @@ test('a credit outside the sum or plan takes nothing off', async () => {
   credit(db, 1, [14535], 'thrown round')
   credit(db, 2, [14600], 'another plan')
   const sum = await fire({ ...SUM, runs: [...RUNS, 14600] }) as Sum
-  expect(walls[0]).toBe(40 - SUM.usd)
+  expect(walls[0]).toBeCloseTo(40 - (SUM.usd + 3), 9)
   expect(sum.machine).toBe(0)
+})
+
+test('a plan at the wall is held and fires nothing', async () => {
+  const walls: number[] = []
+  const { db, bench } = benched((packet) => {
+    walls.push(packet.cost_wall?.usd ?? NaN)
+    return {}
+  })
+  ran(db, 1, 1, 45)
+  ran(db, 1, 2, 15)
+  const got = await firing({ ...bench, walls: { ...bench.walls, usd: 60 } }, manifest, hash)('Generate.', 'Generate.', START, 'invariants')
+  expect(got).toEqual({ outcome: 'needs_ceo', spans: ['bench.cost_wall'], note: 'plan 1 spent $60.00 gross against the $60 bench.cost_wall_usd wall' })
+  expect(walls).toEqual([])
+  expect(runTokens(db, 1).map((r) => r.id)).toEqual([1, 2])
 })

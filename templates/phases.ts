@@ -9,11 +9,12 @@ import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
+import { spend } from '../store/runs.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { criticCheck } from './critic.ts'
 import { compiled, extract } from './extract.ts'
 import { fixing } from './fixing.ts'
-import { costWalled, faulted, net, refired, refiring, tallied } from './generated.ts'
+import { costWalled, faulted, refired, refiring, tallied } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
 import { grader } from './missed.ts'
@@ -50,10 +51,12 @@ export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provid
 
 export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling, refire }: Bench, manifest: Seat, hash: string, map?: Range[]): Fire {
   return async (prompt, issue, sum, phase) => {
+    const { gross } = spend(db, plan.id)
+    if (gross >= walls.usd) return { outcome: 'needs_ceo', spans: ['bench.cost_wall'], note: `plan ${String(plan.id)} spent $${gross.toFixed(2)} gross against the $${String(walls.usd)} bench.cost_wall_usd wall` }
     const built = packet(manifest, prompt, '', issue, dir,
       pending(planDir(root, plan.id), `step-${String(step.step)}${phase === undefined ? '' : `-${phase}`}`), false, [...manifest.write_paths, tmp])
     const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: ceiling - sum.tokens,
-      cost_wall: { ...walls, usd: walls.usd - net(db, plan.id, sum) }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], offline: true, ...(map !== undefined ? { map: { ranges: map, slice: map } } : name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
+      cost_wall: { ...walls, usd: walls.usd - gross }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], offline: true, ...(map !== undefined ? { map: { ranges: map, slice: map } } : name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
     const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
       effort: manifest.effort, exit: fired.exit, fired, staffed: name, phase })
     for (const command of fired.offline ?? []) logged(db, { plan: plan.id, kind: 'run.offline', actor: name, outcome: 'refuse', message: command, pointer: null, run })

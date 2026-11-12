@@ -16,7 +16,7 @@ import { drop, get, maybe, move, put } from '../sequencer/workspace.ts'
 import { edited, learningsIn, noted, packsIn, proofed, returned, scorecardOf, substackIn } from '../store/desk.ts'
 import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { landedIn, packetOf } from '../store/packet.ts'
+import { landedIn, packetOf, spanOf } from '../store/packet.ts'
 import { planTitle, type PlanRow } from '../store/plans.ts'
 import { caught } from './catchup.ts'
 import { Fence, HEAD, noting, Stored } from './fence.ts'
@@ -44,7 +44,8 @@ export function gather(db: Db, root: string, plan: PlanRow): Outcome {
     put(root, plan.id, 'packet.json', JSON.stringify({ learnings, landed: landedIn(db, from, to) }))
     return { outcome: 'pass', spans: [], note: `${String(learnings.length)} date(s)` }
   }
-  const packet = packetOf(db, plan.id)
+  const end = titled(db, plan, 'growth')?.slice('growth '.length)
+  const packet = end === undefined ? packetOf(db, plan.id) : spanOf(db, shift(end, -6), end)
   put(root, plan.id, 'packet.json', JSON.stringify(packet))
   return { outcome: 'pass', spans: [], note: `${String(packet.landed.length)} landed, ${String(packet.refusals.length)} refused` }
 }

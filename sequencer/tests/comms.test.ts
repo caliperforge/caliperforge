@@ -267,6 +267,23 @@ test('D1-D6: gather packs the titled day at local time', () => {
   })
 })
 
+test('growth gather packs the 7 local days ending its date', () => {
+  const w = comms()
+  titled(w, 1, 'growth 2026-11-12')
+  const [inside, before, d] = ['2026-11-08 18:00:00', '2026-11-04 18:00:00', 'd'.repeat(64)]
+  w.db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title, lane, seat, origin, head_digest) VALUES
+      (2, 1, 'pr_path', 'done', '${inside}', 0, 0, 'job 2', 'machine', 'typescript_specialist', 'https://github.com/r/issues/2', '${d}'),
+      (3, 1, 'pr_path', 'done', '${before}', 0, 0, 'job 3', 'machine', 'typescript_specialist', 'https://github.com/r/issues/3', '${d}');
+    INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at) VALUES
+      ('plan', 2, '${d}', 'gates', 'approved', '${inside}'), ('plan', 3, '${d}', 'gates', 'approved', '${before}')`)
+  const kept = refusal(w, 0, '2026-11-10 18:00:00')
+  refusal(w, 0, before)
+  expect(gather(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass', note: '1 landed, 1 refused' })
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toMatchObject({
+    from: '2026-11-06', to: '2026-11-12', landed: [{ plan: 2 }], refusals: [{ id: kept }],
+  })
+})
+
 test('D2: desk writes the post in proof and its day\'s learnings', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')

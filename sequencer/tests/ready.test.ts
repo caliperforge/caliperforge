@@ -10,6 +10,7 @@ import type { Fired } from '../kind.ts'
 import { headOf, type Wire } from '../push.ts'
 import { ASKED, CREDITS, proved, readyGate, SKIPPED } from '../ready.ts'
 import { mapOf } from '../steps.ts'
+import { waive, WAIVED } from '../waived.ts'
 import { cloned, get, headSha, put, srcDir } from '../workspace.ts'
 import { TEMPLATED } from './bases.ts'
 import { approve, built, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
@@ -222,3 +223,28 @@ test('a fix two rebuilds back still answers its finding', async () => {
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass' })
   expect(reviews(log)).toHaveLength(2)
 }, 120_000)
+
+test('a waiver at another head holds on greptile.missing', async () => {
+  const [w, lap] = await atReady([], UNSCORED)
+  put(w.root, 1, WAIVED, `${'f'.repeat(40)} coo fork silent\n`)
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
+  expect(plan(w.db, 1).step).toBe(6)
+})
+
+test('a waiver at the head passes to step 7, Greptile unasked', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(log, UNSCORED)
+  const sha = waive(w.db, w.root, 1, 'coo', 'fork silent')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: [],
+    note: expect.stringContaining(`; Greptile waived at ${sha.slice(0, 12)} by coo: fork silent`) as unknown })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(reviews(log)).toEqual([])
+})
+
+test('a waiver at the head passes on a spent month', async () => {
+  const [w, lap] = await atReady([], UNSCORED)
+  put(w.root, 2, ASKED, `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(CREDITS))
+  waive(w.db, w.root, 1, 'ceo', 'fork silent')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: [] })
+  expect(plan(w.db, 1).step).toBe(7)
+})

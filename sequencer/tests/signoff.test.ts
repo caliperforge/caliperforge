@@ -19,6 +19,7 @@ import { tick } from '../index.ts'
 import { headOf, sent } from '../push.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
+import { WAIVED } from '../waived.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { TEX } from './bases.ts'
 import { approve, CARRIED, internalPlan, once, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
@@ -456,6 +457,14 @@ test('the card shows Greptile\'s score, a skip, or none', async () => {
   const skipped = fake()
   signoffs(w.db, w.root, skipped, none)
   expect(skipped.cards.get(100)?.body).toContain('- Greptile on our fork: skipped: monthly quota spent (50/50)\n')
+
+  drop(w.root, 1, 'greptile.skipped')
+  put(w.root, 1, WAIVED, `${headSha(srcDir(w.root, 1))} coo fork silent since 10-27\n`)
+  drop(w.root, 1, 'signoff')
+  const waiver = fake()
+  signoffs(w.db, w.root, waiver, none)
+  expect(waiver.cards.get(100)?.body)
+    .toContain(`- Greptile on our fork: waived at ${headSha(srcDir(w.root, 1)).slice(0, 12)} by coo: fork silent since 10-27\n`)
 
   scored(w.root, 1, 4, 'Confidence Score: 4/5')
   drop(w.root, 1, 'signoff')

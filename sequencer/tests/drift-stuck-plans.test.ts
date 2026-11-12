@@ -72,7 +72,7 @@ const reading = (d: Db, utilization: number, resets: number, observed = new Date
 test('stuckThrottledSkips', () => {
   const { d, root } = stalling()
   const resets = Math.floor(Date.now() / 1000) * 1000 + 86_400_000
-  reading(d, 0.96, resets, new Date(Date.now() - 60_000))
+  reading(d, 0.96, resets, new Date(Date.now() - 7 * 3_600_000))
   for (const minutes of [0, 61, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
   expect(ofKind(d, 'stuck')).toEqual([])
   expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
@@ -97,15 +97,17 @@ test('wokeThrottledLeavesLaneOverCap', async () => {
 
 test('throttleNoStuckSeen', () => {
   const entry = REGISTRY.filter((e) => e.name === 'throttle_no_stuck')
-  const seen = (utilization: number): Drifted[] => {
+  const seen = (utilization: number, at: string): Drifted[] => {
     const d = db()
-    reading(d, utilization, Date.parse('2026-10-05T00:00:00Z'), new Date('2026-10-03T08:00:00Z'))
+    reading(d, utilization, Date.parse('2026-10-03T00:00:00Z'), new Date('2026-10-02T08:00:00Z'))
     logged(d, { plan: 1, kind: 'stuck', actor: 'drift', outcome: 'escalate', message: 'step 3 unchanged; waits: lane_over_cap; last: m',
-      pointer: null, run: null }, '2026-10-03 09:00:00')
+      pointer: null, run: null }, at)
     return drift(d, entry, NOW)
   }
-  expect(seen(0.96)).toMatchObject([{ name: 'throttle_no_stuck', state: 'seen', newest: '2026-10-03 09:00:00' }])
-  expect(seen(0.9)).toEqual([])
+  expect(seen(0.96, '2026-10-02 09:00:00')).toMatchObject([{ name: 'throttle_no_stuck', state: 'seen', newest: '2026-10-02 09:00:00' }])
+  expect(seen(0.96, '2026-10-02 15:00:00')).toMatchObject([{ name: 'throttle_no_stuck', state: 'seen' }])
+  expect(seen(0.96, '2026-10-03 01:00:00')).toEqual([])
+  expect(seen(0.9, '2026-10-02 09:00:00')).toEqual([])
 })
 
 test('stuckRestarts', () => {

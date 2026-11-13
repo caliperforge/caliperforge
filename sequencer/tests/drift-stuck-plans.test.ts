@@ -8,7 +8,7 @@ import type { Provider } from '../../providers/kind.ts'
 import { stalled } from '../../store/drift.ts'
 import { eventsOf, logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { record as observe, set } from '../../store/lanes.ts'
+import { cap, record as observe, set } from '../../store/lanes.ts'
 import { take } from '../../store/leases.ts'
 import { woke } from '../director.ts'
 import { drift, type Drifted, stuck } from '../drift.ts'
@@ -83,6 +83,32 @@ test('stuckThrottledSkips', () => {
   reading(d, 0.97, resets + 86_400_000)
   expect(stuck(d, root, STUCK, at(180))).toEqual([])
   expect(all(root).map((e) => e.ticket)).toEqual([`usage resets ${first}`, `usage resets ${new Date(resets + 86_400_000).toISOString()}`])
+})
+
+test('stuckUsageOverageSkips', () => {
+  const sweep = (utilization: number, resets: string, observed: string): { d: Db; root: string } => {
+    const { d, root } = stalling()
+    reading(d, utilization, Date.parse(resets), new Date(observed))
+    expect(cap(d).cap).toBe(2)
+    return { d, root }
+  }
+  const resets = '2026-10-04T00:00:00.000Z'
+  const { d, root } = sweep(0.96, resets, '2026-10-03T09:00:00Z')
+  for (const minutes of [0, 61, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(ofKind(d, 'stuck')).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
+  expect(maybe(root, 1, 'stuck.json')).toBeNull()
+  expect(all(root)).toMatchObject([{ kind: 'throttled', ticket: `usage resets ${resets}`,
+    note: `usage over the top band at seven_day utilisation 0.96; stuck and the director leave lane_over_cap plans until ${resets}` }])
+  for (const [utilization, until] of [[0.9, resets], [0.96, NOW.toISOString()]] as const) {
+    const { d, root } = sweep(utilization, until, '2026-10-03T09:00:00Z')
+    for (const minutes of [0, 30]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+    expect(stuck(d, root, STUCK, at(61))).toEqual([1])
+  }
+  const late = sweep(0.96, resets, '2026-10-03T11:00:00Z')
+  for (const minutes of [0, 30]) expect(stuck(late.d, late.root, STUCK, at(minutes))).toEqual([])
+  expect(JSON.parse(maybe(late.root, 1, 'stuck.json') ?? '{}')).toMatchObject({ since: NOW.toISOString() })
+  expect(all(late.root)).toEqual([])
 })
 
 test('wokeThrottledLeavesLaneOverCap', async () => {

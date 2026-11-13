@@ -218,3 +218,11 @@ export function forget(db: Db): void {
 export function usage(db: Db): { kind: string; utilisation: number }[] {
   return db.prepare('SELECT kind, utilisation FROM usage ORDER BY id').all() as { kind: string; utilisation: number }[]
 }
+
+/** The highest reading at `now` above the top band that holds a lane; `lane_cap` judges only the newest per kind, on the wall clock. */
+export function overage(db: Db, now: Date): { kind: string; utilisation: number; resets_at: string } | undefined {
+  return db.prepare(`SELECT kind, utilisation, resets_at FROM usage
+    WHERE utilisation * 100 > (SELECT max(pct) FROM lane_bands WHERE cap > 0)
+      AND julianday(observed_at) <= julianday(@at) AND julianday(resets_at) > julianday(@at)
+    ORDER BY utilisation DESC LIMIT 1`).get({ at: now.toISOString() }) as { kind: string; utilisation: number; resets_at: string } | undefined
+}

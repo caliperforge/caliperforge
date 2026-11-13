@@ -7,7 +7,7 @@ import { fill } from '../cli/record.ts'
 import { addFinding, answered, closeFinding, holds, newest, setting, stalled, type Stalled, unclosed, worked } from '../store/drift.ts'
 import { logged, returns } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { cap, get, hhmm, set, windows, zone } from '../store/lanes.ts'
+import { cap, get, hhmm, overage, set, windows, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById, rewind } from '../store/plans.ts'
 import { added, registry } from './registry.ts'
@@ -119,21 +119,23 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
 }
 
 function unthrottled(db: Db, root: string, plans: Stalled[], now: Date): Stalled[] {
-  if (cap(db).cap !== 0) return plans
+  const zero = cap(db).cap === 0
+  const over = zero ? undefined : overage(db, now)
+  if (!zero && over === undefined) return plans
   const left = plans.filter((p) => p.wait_reason === 'lane_over_cap')
   for (const { id } of left) drop(root, id, 'stuck.json')
-  if (left.length > 0) throttle(db, root, now)
+  if (left.length > 0) throttle(db, root, now, over)
   return plans.filter((p) => p.wait_reason !== 'lane_over_cap')
 }
 
-function throttle(db: Db, root: string, now: Date): void {
-  const top = windows(db).filter((w) => w.utilisation !== null).sort((a, b) => (b.utilisation ?? 0) - (a.utilisation ?? 0))[0]
+function throttle(db: Db, root: string, now: Date, over: ReturnType<typeof overage>): void {
+  const top = over ?? windows(db).filter((w) => w.utilisation !== null).sort((a, b) => (b.utilisation ?? 0) - (a.utilisation ?? 0))[0]
   const resets = top?.resets_at ?? 'none'
   const ticket = `usage resets ${resets}`
   if (all(root).some((e) => e.kind === 'throttled' && e.ticket === ticket)) return
   const reading = top === undefined ? 'no usage reading' : `${top.kind} utilisation ${String(top.utilisation)}`
   record(root, [{ at: now.toISOString(), plan: 0, ticket, kind: 'throttled', step: 0, name: 'drift',
-    note: `lane cap 0 at ${reading}; stuck and the director leave lane_over_cap plans until ${resets}` }])
+    note: `${over === undefined ? 'lane cap 0' : 'usage over the top band'} at ${reading}; stuck and the director leave lane_over_cap plans until ${resets}` }])
 }
 
 export function recorded(db: Db, drifted: Drifted[], now: Date): number[] {

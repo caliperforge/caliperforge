@@ -21,7 +21,7 @@ export function cancel(fork: string, branch: string, gh: Gh): void {
     try {
       gh(['run', 'cancel', id, '--repo', fork])
     } catch (e) {
-      if (Status.parse(JSON.parse(gh(['run', 'view', id, '--repo', fork, '--json', 'status']))).status !== 'completed') throw e
+      if (!(e as Error).message.includes('completed') && Status.parse(JSON.parse(gh(['run', 'view', id, '--repo', fork, '--json', 'status']))).status !== 'completed') throw e
     }
   }
 }

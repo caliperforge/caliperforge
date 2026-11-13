@@ -11,15 +11,15 @@ const FORK = 'caliperforge/widget'
 const OLD = 'widget-12-a1-next'
 const NEW = 'widget-12-a2-next'
 
-/** `statuses` are the runs listed on `branch`, ids from 1; a `run cancel` goes in `log` once the first `throws` have thrown; `run view` reads `viewed`. */
-function runs(log: string[], branch: string, statuses: string[], throws = 0, viewed = 'completed'): Gh {
+/** `statuses` are the runs listed on `branch`, ids from 1; a `run cancel` goes in `log` once the first `throws` have thrown `message`; `run view` reads `viewed`. */
+function runs(log: string[], branch: string, statuses: string[], throws = 0, viewed = 'completed', message = 'HTTP 502'): Gh {
   let thrown = 0
   return (args) => {
     if (args[1] === 'view') return JSON.stringify({ status: viewed })
     if (args[1] === 'cancel') {
       if (thrown < throws) {
         thrown += 1
-        throw new Error('run already completed')
+        throw new Error(message)
       }
       log.push(args.join(' '))
       return ''
@@ -117,6 +117,12 @@ test('a cancel that throws leaves the rest cancelled', () => {
 
 test('a cancel that throws on a run still in progress rethrows', () => {
   const log: string[] = []
-  expect(() => { cancel(FORK, OLD, runs(log, OLD, ['queued', 'in_progress'], 1, 'in_progress')) }).toThrow('run already completed')
+  expect(() => { cancel(FORK, OLD, runs(log, OLD, ['queued', 'in_progress'], 1, 'in_progress')) }).toThrow('HTTP 502')
   expect(log).toEqual([])
+})
+
+test('a cancel refused as completed passes over a stale status', () => {
+  const log: string[] = []
+  cancel(FORK, OLD, runs(log, OLD, ['queued', 'in_progress'], 1, 'queued', 'Cannot cancel a workflow run that is completed'))
+  expect(log).toEqual([`run cancel 2 --repo ${FORK}`])
 })

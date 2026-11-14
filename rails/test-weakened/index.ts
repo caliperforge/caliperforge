@@ -1,15 +1,13 @@
 import { createHash } from 'node:crypto'
 import { parse, type FileDiff, type Line } from '../diff.ts'
 import type { Verdict } from '../record.ts'
-import { conventionsOf } from './languages.ts'
+import { conventionsOf, QUOTED, TITLE } from './languages.ts'
 import { moved } from './moved.ts'
 
 export { ASSERT } from './languages.ts'
 export const TEST_FILE = /(?:^|\/)[Tt]ests?\/|\.(?:test|spec)\.[jt]sx?$|_test\.(?:go|rb|py)$|_spec\.(?:rb|lua)$|(?:^|\/)test_[^/]*\.py$|Test\.php$/
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/
-const QUOTED = /\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\])+)\1/.source
-const TITLE = new RegExp(`\\b(?:test|it|describe)${QUOTED}`)
 export const TEST = new RegExp(`\\b(?:test|it)${QUOTED}`)
 const REMOVED = /^[ \t]*(?:[-*][ \t]+)?`?(- removed: (.+?) \| file: (\S+) \| why: (?:replaced by '.+'|retired by brief line '.+'))`?\s*$/gm
 const RETIRE = "a test retired on purpose goes in the hand-back or removed-tests.md as `- removed: <exact test title> | file: <path> | why: replaced by '<new title>'` (or `why: retired by brief line '<quote>'`), one line per removed title in that file, and a skip is never spared"
@@ -18,8 +16,8 @@ export function retired(...texts: string[]): string {
   return texts.flatMap((t) => [...t.matchAll(REMOVED)].map((m) => m[1] ?? '')).join('\n')
 }
 
-export function titleOf(text: string, pattern = TITLE): string | undefined {
-  return pattern.exec(text)?.[2]?.replace(/\\(.)/g, '$1')
+export function titleOf(text: string, pattern: RegExp): string | undefined {
+  return pattern.exec(text)?.at(-1)?.replace(/\\(.)/g, '$1')
 }
 
 export function weakened(diff: string, suite: 'green' | 'red', named = '', removed = ''): Verdict {
@@ -43,7 +41,8 @@ export function weakened(diff: string, suite: 'green' | 'red', named = '', remov
 }
 
 function titles(file: FileDiff): string[] {
-  return file.removed.flatMap((l) => titleOf(l.text) ?? [])
+  const { title } = conventionsOf(file.path)
+  return file.removed.flatMap((l) => titleOf(l.text, title) ?? [])
 }
 
 function judge(file: FileDiff, named: string, listed: string[]): string[] {
@@ -74,7 +73,7 @@ function exempt(removed: Line[], named: string): Set<Line> {
   let title: string | undefined
   removed.forEach((l, i) => {
     if (removed[i - 1]?.line !== l.line) title = undefined
-    title = titleOf(l.text) ?? title
+    title = titleOf(l.text, TITLE) ?? title
     if (title !== undefined && named.includes(title)) spared.add(l)
   })
   return spared

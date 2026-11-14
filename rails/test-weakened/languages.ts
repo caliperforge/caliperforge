@@ -2,7 +2,7 @@ export interface Conventions { source: RegExp; assert: RegExp; skip: RegExp; com
 
 export const ASSERT = /\b(?:expect|assert)\s*\(/
 export const QUOTED = /\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\])+)\1/.source
-const TITLE = new RegExp(`\\b(?:test|it|describe)${QUOTED}`)
+export const TITLE = new RegExp(`\\b(?:test|it|describe)${QUOTED}`)
 
 const SLASHES = /^\s*(?:\/\/|\/\*|\*)/
 const HASH = /^\s*#/

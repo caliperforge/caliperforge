@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { parse, type FileDiff, type Line } from '../diff.ts'
 import type { Verdict } from '../record.ts'
-import { conventionsOf, QUOTED } from './languages.ts'
+import { conventionsOf, QUOTED, TITLE } from './languages.ts'
 import { moved } from './moved.ts'
 
 export { ASSERT } from './languages.ts'
@@ -46,7 +46,7 @@ function titles(file: FileDiff): string[] {
 }
 
 function judge(file: FileDiff, named: string, listed: string[]): string[] {
-  const { assert, skip, title } = conventionsOf(file.path)
+  const { assert, skip } = conventionsOf(file.path)
   const isMoved = moved(file, skip)
   const skipped = file.added.filter((l) => skip.test(l.text) && !isMoved(l)).map((l) => span(l, 'test.weakened.skipped'))
   const removedTitles = titles(file)
@@ -55,7 +55,7 @@ function judge(file: FileDiff, named: string, listed: string[]): string[] {
     const asserted = TEST_FILE.test(file.path) || file.removed.some((l) => assert.test(l.text))
     return asserted && !named.includes(file.path) ? [gone(file, assert)] : []
   }
-  const spared = exempt(file.removed, named, title)
+  const spared = exempt(file.removed, named)
   const removed = file.removed.filter((l) => assert.test(l.text) && !spared.has(l))
   const added = file.added.filter((l) => assert.test(l.text))
   const loose = file.added.filter((l) => LOOSE.test(l.text))
@@ -68,12 +68,12 @@ function judge(file: FileDiff, named: string, listed: string[]): string[] {
 }
 
 /** `parse` does not advance the cursor on `-` lines, so one run of removed lines shares one `line`. */
-function exempt(removed: Line[], named: string, pattern: RegExp): Set<Line> {
+function exempt(removed: Line[], named: string): Set<Line> {
   const spared = new Set<Line>()
   let title: string | undefined
   removed.forEach((l, i) => {
     if (removed[i - 1]?.line !== l.line) title = undefined
-    title = titleOf(l.text, pattern) ?? title
+    title = titleOf(l.text, TITLE) ?? title
     if (title !== undefined && named.includes(title)) spared.add(l)
   })
   return spared

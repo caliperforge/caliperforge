@@ -211,7 +211,7 @@ test.each([
 ])('passes a listed removed test in %s, refuses it unlisted', (path, from, title, to, check) => {
   const diff = swapped(path, from, to, check)
   expect(weakened(diff, 'green', '', replaced(title, path))).toMatchObject({ outcome: 'pass', spans: [] })
-  const verdict = weakened(diff, 'green')
+  const verdict = weakened(diff, 'green', title)
   expect(verdict.spans).toEqual([`${path}:1 test.weakened.removed`])
   expect(verdict.message).toContain(`not listed: '${title}'`)
 })

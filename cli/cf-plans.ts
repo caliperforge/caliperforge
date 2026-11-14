@@ -17,8 +17,9 @@ import { resumesAt } from '../templates/resumed.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
 import { registerReturn } from './cf-return.ts'
+import { guarded } from './landed.ts'
 import { unleased } from './leased.ts'
-import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
+import { render as renderUnfiled, unfiled } from './plan.ts'
 import { add, note } from './queue.ts'
 
 const BY = ['--by <actor>', `who ran it: ${HOLDERS.join(' or ')}`] as const
@@ -70,9 +71,9 @@ function planned(cf: Command, { root, db, out }: Cli): Command {
   plan.command('add').requiredOption('--issue <ref>', 'an <owner/repo>#<n> github issue')
     .requiredOption('--by <who>', `who files it: ${HOLDERS.join(' or ')}`)
     .option('--pipe <name>', 'pipe to file the plan on; the lane\'s own by default')
-    .action((options: { issue: string; by: string; pipe?: string }) => {
-      const by = holderOf(options.by)
-      const filed = fileIssue(db(), root, options.issue, by, options.pipe)
+    .option('--over-landed', 'queue an issue covered() finds landed').option('--why <text>', 'why it is queued over the landed one')
+    .action((options: { issue: string; by: string; pipe?: string; overLanded?: boolean; why?: string }) => {
+      const filed = guarded(db(), root, options, holderOf(options.by))
       const origin = filed.origin === null ? '-' : `${filed.origin.origin_kind}:${filed.origin.origin_ref}`
       const ruled = filed.ruling === null ? '-' : `ruling ${String(filed.ruling)}`
       out(`plan ${filed.plan === null ? '-' : String(filed.plan)} ${filed.state}\t${filed.lane ?? '-'}\t${filed.seat ?? '-'}\t${filed.why}\t${origin}\t${ruled}\n`)

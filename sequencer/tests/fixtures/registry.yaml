@@ -639,3 +639,8 @@
   where: "kind = 'greptile.waived'"
   gap: 7d
   expected: 0
+- name: plan_add_landed
+  table: events
+  column: at
+  where: "kind = 'covered' AND actor = 'coo' AND outcome = 'refuse'"
+  gap: 14d

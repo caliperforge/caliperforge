@@ -38,6 +38,7 @@ import { capped } from '../refusal.ts'
 import { parted } from '../split.ts'
 import { mapOf } from '../steps.ts'
 import { unruled } from '../unruled.ts'
+import { issues } from './world.ts'
 import { afresh, drop, git, headSha, maybe, planDir, put, snapshot, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -140,7 +141,7 @@ function stub(text: string): Provider {
 function wire(): Wire {
   const no = (): never => { throw new Error('not in this test') }
   let n = 900
-  return { send: no, open: no, close: no, runs: no, review: no, merged: () => [], comment: () => undefined,
+  return { send: no, open: no, close: no, runs: no, review: no, merged: issues(), comment: () => undefined,
     file: () => `https://github.com/caliperforge/caliperforge/issues/${String(n++)}` }
 }
 
@@ -207,7 +208,7 @@ const targeted = (db: Db) => db.exec(TARGETED)
 function filing(bodies: string[]): Wire {
   const base = wire()
   const open: { number: number; title: string; body: string; url: string }[] = []
-  return { ...base, merged: (args) => args.includes('open') ? open : [],
+  return { ...base, merged: issues(open),
     file: (repo, title, body, labels) => {
       bodies.push(body)
       const url = base.file(repo, title, body, labels)

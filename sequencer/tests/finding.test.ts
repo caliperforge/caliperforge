@@ -13,6 +13,7 @@ import { answer } from '../finding.ts'
 import type { Wire } from '../push.ts'
 import { SELF } from '../workspace.ts'
 import { db as drifting, NOW, REGISTRY } from './drifting.ts'
+import { issues } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
@@ -54,7 +55,7 @@ interface Seen { filed: string[]; amended: string[] }
 function wired(s: Seen, opened: Listed[] = [], closed: Listed[] = []): Wire {
   const no = (): never => { throw new Error('not in this test') }
   return { send: no, open: no, close: no, runs: no, comment: no, review: no,
-    merged: (args) => args.includes('closed') ? closed : opened,
+    merged: issues(opened, closed),
     amend: (...[, n, line]) => void s.amended.push(`#${String(n)} ${line}`),
     file: (...[, title]) => { s.filed.push(title); return `https://github.com/${SELF}/issues/901` } }
 }

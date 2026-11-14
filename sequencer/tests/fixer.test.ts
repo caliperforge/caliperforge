@@ -20,6 +20,7 @@ import { cooLite, woke } from '../director.ts'
 import { stop } from '../fixed.ts'
 import { hold } from '../hold.ts'
 import { CARRY, checkout, drop, get, git, maybe, put, SELF, srcDir } from '../workspace.ts'
+import { issues } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-25T17:00:00.000Z')
@@ -60,7 +61,7 @@ function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'complete
 
 function wire(filed: string[]): Wire {
   const no = (): never => { throw new Error('not in this test') }
-  return { send: no, open: no, close: no, runs: no, comment: no, review: no, merged: () => [],
+  return { send: no, open: no, close: no, runs: no, comment: no, review: no, merged: issues(),
     file: (...args) => { const title = args[1]; filed.push(title); return 'https://github.com/caliperforge/caliperforge/issues/999' } }
 }
 
@@ -154,7 +155,7 @@ test.each([
   put(home, 8, 'ask.md', '# the run wall counts each streamed block\n')
   const filed: string[] = []
   const open = [{ number: 140, title: 'the run wall counts each streamed block', body: '', url: 'https://github.com/caliperforge/caliperforge/issues/140' }]
-  await woke(db, home, stub(TICKET, []), now, () => undefined, { ...wire(filed), merged: (args) => args.includes('open') ? open : [] })
+  await woke(db, home, stub(TICKET, []), now, () => undefined, { ...wire(filed), merged: issues(open) })
   expect(filed).toEqual(want)
   expect(waitsOn(db)).toEqual({ waits_on: on ?? ticketed(db)?.id })
 })

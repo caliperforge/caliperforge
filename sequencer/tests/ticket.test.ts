@@ -7,7 +7,7 @@ import { hold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { ticketed } from '../ticket.ts'
 import { maybe, SELF } from '../workspace.ts'
-import { internalPlan, plan, world } from './world.ts'
+import { internalPlan, issues, plan, world } from './world.ts'
 
 const now = new Date('2026-10-28T12:00:00.000Z')
 const BENCH = 'run_pair drops a seed (lane:bench, P0)'
@@ -22,7 +22,7 @@ const seen = (lists: Partial<Seen> = {}): Seen => ({ filed: [], amended: [], ope
 function wire(s: Seen): Wire {
   const no = (): never => { throw new Error('not in this test') }
   return { send: no, open: no, close: no, runs: no, comment: no, review: no,
-    merged: (args) => args.includes('closed') ? s.closed : s.open,
+    merged: issues(s.open, s.closed),
     amend: (...[, n, line]) => void s.amended.push(`#${String(n)} ${line}`),
     file: (...[repo, , , labels]) => {
       s.filed.push({ repo, labels })

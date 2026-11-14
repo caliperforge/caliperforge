@@ -36,7 +36,7 @@ export function covered(db: Db, root: string, plan: PlanRow | null, repo: string
   subject?: string): Cover {
   const since = new Date(now.getTime() - DAYS * 86_400_000).toISOString().slice(0, 10)
   const open = listed(read, repo, ['--state', 'open'], 'number,title,body,url')
-  const landed = listed(read, repo, ['--state', 'closed', '--search', `closed:>=${since}`], 'number,title,body,url,comments')
+  const landed = closed(read, repo, since)
     .flatMap((i) => {
       const sha = i.comments?.map((c) => LANDED.exec(c.body)?.[1]).find((s) => s !== undefined)
       return sha === undefined ? [] : [{ ...i, sha }]
@@ -77,6 +77,26 @@ function listed(read: Read, repo: string, state: string[], fields: string): Issu
   const found = Issues.parse(read(['issue', 'list', '--repo', repo, ...state, '--limit', String(WINDOW), '--json', fields]))
   if (found.length >= WINDOW) throw new Error(`gh issue list on ${repo} hit its cap of ${String(WINDOW)}; issues past it are unread`)
   return found
+}
+
+const PAGES = 10
+
+const SEARCH = `query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: ${String(WINDOW)}, after: $after) {
+  pageInfo { hasNextPage endCursor } nodes { ... on Issue { number title body url comments(first: ${String(WINDOW)}) { nodes { body } } } } } }`
+
+const Page = z.object({ data: z.object({ search: z.object({
+  pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullable() }),
+  nodes: z.array(z.object({ number: z.int(), title: z.string(), body: z.string(), url: z.string(),
+    comments: z.object({ nodes: z.array(z.object({ body: z.string() })) }) })),
+}) }) })
+
+function closed(read: Read, repo: string, since: string, after: string | null = null, page = 1): Issue[] {
+  const { pageInfo, nodes } = Page.parse(read(['api', 'graphql', '-f', `query=${SEARCH}`,
+    '-f', `q=repo:${repo} is:issue is:closed closed:>=${since} sort:created-desc`, ...(after === null ? [] : ['-f', `after=${after}`])])).data.search
+  const found = nodes.map((n) => ({ ...n, comments: n.comments.nodes }))
+  if (!pageInfo.hasNextPage) return found
+  if (page === PAGES) throw new Error(`gh issue list on ${repo} hit its cap of ${String(WINDOW)}; issues past it are unread`)
+  return [...found, ...closed(read, repo, since, pageInfo.endCursor, page + 1)]
 }
 
 function registry(root: string): string[] {

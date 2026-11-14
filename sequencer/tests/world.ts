@@ -6,6 +6,7 @@ import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { inject } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import type { Read } from '../../cli/gh.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import { decide } from '../../store/approvals.ts'
@@ -351,6 +352,16 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     install: () => void log.push('install'),
     merged: () => [],
   }
+}
+
+interface Listed { number: number; title: string; body: string; url: string; comments?: { body: string }[] }
+
+/** A `merged` read where `gh issue list` answers `open` and the closed search answers one last page of `closed`. */
+export function issues(open: Listed[] = [], closed: Listed[] = []): Read {
+  return (args) => args[0] === 'api'
+    ? { data: { search: { pageInfo: { hasNextPage: false, endCursor: null },
+      nodes: closed.map((i) => ({ ...i, comments: { nodes: i.comments ?? [] } })) } } }
+    : open
 }
 
 /** The same transport with a real landing: a `main` send moves our remote, so a second lander in the lap meets it. */

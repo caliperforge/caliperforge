@@ -6,6 +6,8 @@ import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerPlans } from '../cf-plans.ts'
 import type { Read } from '../gh.ts'
+import { guarded } from '../landed.ts'
+import { drift, mechanisms } from '../../sequencer/drift.ts'
 import { doneIds } from '../../sequencer/workspace.ts'
 import { add, LANE, laneOf, parse, priorityOf, seatOf, unfiled } from '../plan.ts'
 import { commsLane, fileComms } from '../../store/comms.ts'
@@ -269,6 +271,59 @@ test('D3 no Files list, or an inline one, files as today', () => {
   expect(add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([ISSUE])).state).toBe('queued')
   expect(add(db, root, 'caliperforge/caliperforge#26', 'ceo', 'internal', canned([inline])).state).toBe('queued')
   expect(allPlans(db).map((p) => p.state)).toEqual(['queued', 'queued'])
+})
+
+const LANDED = { number: 20, title: ISSUE.title, body: '', url: `${URL.slice(0, -2)}20`, comments: [{ body: 'landed on main as 4cb0e875' }] }
+
+/** `canned`, plus the open and closed `issue list` reads `covered()` makes. */
+function listing(closed: object[]): Read {
+  const read = canned([ISSUE])
+  return (args) => args[1] === 'list' ? (args.includes('closed') ? closed : []) : read(args)
+}
+
+const REFUSED = '#25 looks landed as 4cb0e875 (#20); cf plan add --issue caliperforge/caliperforge#25 --over-landed --why <text> to queue it anyway'
+
+test('a landed match refuses, files nothing, logs one refuse', () => {
+  const db = piped()
+  expect(guarded(db, root, { issue: 'caliperforge/caliperforge#25', pipe: 'internal' }, 'coo', listing([LANDED])))
+    .toMatchObject({ plan: null, state: 'refused', why: REFUSED })
+  expect(allPlans(db)).toEqual([])
+  expect(existsSync(join(root, '.cf/work'))).toBe(false)
+  expect(allEvents(db)).toMatchObject([{ plan: null, kind: 'covered', actor: 'coo', outcome: 'refuse', message: REFUSED }])
+})
+
+test('--over-landed with a why queues and logs the why', () => {
+  const db = piped()
+  const filed = guarded(db, root, { issue: 'caliperforge/caliperforge#25', pipe: 'internal', overLanded: true, why: 'it was reverted' },
+    'coo', listing([LANDED]))
+  expect(allPlans(db)).toMatchObject([{ id: filed.plan, state: 'queued', origin: URL }])
+  expect(allEvents(db)).toMatchObject([{ plan: filed.plan, kind: 'filed' }, { plan: filed.plan, kind: 'covered', outcome: 'pass' }])
+  expect(allEvents(db)[1]?.message).toMatch(/: it was reverted$/)
+})
+
+test('--over-landed without --why throws and files nothing', () => {
+  const db = piped()
+  const cf = new Command()
+  registerPlans(cf, { root, db: () => db, out: () => undefined })
+  expect(() => cf.parse(['plan', 'add', '--issue', 'caliperforge/caliperforge#25', '--by', 'coo', '--over-landed'], { from: 'user' }))
+    .toThrow('--over-landed takes --why')
+  expect(allPlans(db)).toEqual([])
+  expect(allEvents(db)).toEqual([])
+})
+
+test('an issue not landed files as add does, no covered event', () => {
+  const db = piped()
+  const filed = guarded(db, root, { issue: 'caliperforge/caliperforge#25', pipe: 'internal' }, 'coo', listing([]))
+  expect(filed).toMatchObject({ state: 'queued', lane: 'machine' })
+  expect(allEvents(db)).toEqual([{ plan: filed.plan, kind: 'filed', actor: 'coo', outcome: 'pass', message: URL }])
+})
+
+test('plan_add_landed is silent until a coo refusal', () => {
+  const db = piped()
+  const line = mechanisms(join(import.meta.dirname, '../..')).filter((e) => e.name === 'plan_add_landed').map((e) => ({ ...e, added: undefined }))
+  expect(drift(db, line, new Date())).toMatchObject([{ name: 'plan_add_landed', state: 'silent' }])
+  guarded(db, root, { issue: 'caliperforge/caliperforge#25', pipe: 'internal' }, 'coo', listing([LANDED]))
+  expect(drift(db, line, new Date())).toEqual([])
 })
 
 test('reference and lane, seat, priority labels are read exactly', () => {

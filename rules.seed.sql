@@ -114,6 +114,7 @@ VALUES
   ('rules/registry/97-director_silent_run.yaml', 'card', 'rules/registry/97-director_silent_run.yaml', '7c462236da426466474afe42435ec4155ba530d91f8904eb2047456ce95f3603', '2026-11-12'),
   ('rules/registry/98-director_repark_held.yaml', 'card', 'rules/registry/98-director_repark_held.yaml', 'e0224c1d0a568f6b71be9274bb3f39c2aef1764690f53cfbc5f8ffff01536678', '2026-11-12'),
   ('rules/registry/98-greptile_waived.yaml', 'card', 'rules/registry/98-greptile_waived.yaml', '0c02c60cea5fbbc0057607dc2bef10b0c5eb2b851db8312ec10f2735033647a2', '2026-11-12'),
+  ('rules/registry/99-plan_add_landed.yaml', 'card', 'rules/registry/99-plan_add_landed.yaml', '740501c31ae2f3c6c8a8e9b8cfe1b0d256d75ed06d8eb1a567cb99ba41a73c6b', '2026-11-14'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/hardware.yaml', 'card', 'rules/hardware.yaml', 'bee455a7b793606cb8f6bcff18d38296d34079eb73d666d44572f10dde561b21', '2026-11-09'),
   ('rules/emulators.yaml', 'card', 'rules/emulators.yaml', 'd3c6eb7140b65261b1053f9d9da02042fb495e901853e7ca14d09f53e3b3a94e', '2026-11-10'),

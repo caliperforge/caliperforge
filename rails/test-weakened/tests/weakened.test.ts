@@ -187,6 +187,35 @@ test('refuses deleting a Rust file that held an assert!', () => {
   expect(weakened(rust('-fn t() {\n-    assert!(ok());\n-}\n'), 'green').spans).toEqual(['src/old.rs:1 test.weakened.removed'])
 })
 
+const replaced = (t: string, path: string): string => `- removed: ${t} | file: ${path} | why: replaced by 'test_row_maps_to_near_record'`
+const python = '--- a/tests/test_neo.py\n+++ b/tests/test_neo.py\n@@ -1,6 +1,3 @@\n import neo\n-def test_ra_is_hours_times_15():\n-    assert ra(1) == 15\n-    assert ra(2) == 30\n-def test_times_cross_the_month_end():\n-    assert cross(31) == 1\n+def test_row_maps_to_near_record():\n+    assert near(ROW) == RECORD\n'
+
+test('passes a Python diff whose removed titles are listed', () => {
+  const listing = ['test_ra_is_hours_times_15', 'test_times_cross_the_month_end'].map((t) => replaced(t, 'tests/test_neo.py')).join('\n')
+  expect(weakened(python, 'green', '', listing)).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+test('refuses that Python diff with one title unlisted, naming it', () => {
+  const verdict = weakened(python, 'green', '', replaced('test_ra_is_hours_times_15', 'tests/test_neo.py'))
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['tests/test_neo.py:2 test.weakened.removed'])
+  expect(verdict.message).toContain("not listed: 'test_times_cross_the_month_end'")
+})
+
+const swapped = (path: string, from: string, to: string, check: string): string =>
+  `--- a/${path}\n+++ b/${path}\n@@ -1,4 +1,3 @@\n-${from} {\n-\t${check}("a")\n-\t${check}("b")\n-}\n+${to} {\n+\t${check}("c")\n+}\n`
+
+test.each([
+  ['x_test.go', 'func TestOld(t *testing.T)', 'TestOld', 'func TestNew(t *testing.T)', 't.Fatalf'],
+  ['src/lib.rs', 'fn old_parse()', 'old_parse', 'fn new_parse()', 'assert_eq!'],
+])('passes a listed removed test in %s, refuses it unlisted', (path, from, title, to, check) => {
+  const diff = swapped(path, from, to, check)
+  expect(weakened(diff, 'green', '', replaced(title, path))).toMatchObject({ outcome: 'pass', spans: [] })
+  const verdict = weakened(diff, 'green')
+  expect(verdict.spans).toEqual([`${path}:1 test.weakened.removed`])
+  expect(verdict.message).toContain(`not listed: '${title}'`)
+})
+
 test('ignores a weakened line outside a test file', () => {
   const diff = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,1 +1,1 @@\n-expect(x).toBe(1)\n+expect(x).toBeDefined()\n'
   expect(weakened(diff, 'green').spans).toEqual([])

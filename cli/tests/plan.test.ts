@@ -8,6 +8,7 @@ import { registerPlans } from '../cf-plans.ts'
 import type { Read } from '../gh.ts'
 import { guarded } from '../landed.ts'
 import { drift, mechanisms } from '../../sequencer/drift.ts'
+import { issues } from '../../sequencer/tests/world.ts'
 import { doneIds } from '../../sequencer/workspace.ts'
 import { add, LANE, laneOf, parse, priorityOf, seatOf, unfiled } from '../plan.ts'
 import { commsLane, fileComms } from '../../store/comms.ts'
@@ -275,10 +276,11 @@ test('D3 no Files list, or an inline one, files as today', () => {
 
 const LANDED = { number: 20, title: ISSUE.title, body: '', url: `${URL.slice(0, -2)}20`, comments: [{ body: 'landed on main as 4cb0e875' }] }
 
-/** `canned`, plus the open and closed `issue list` reads `covered()` makes. */
-function listing(closed: object[]): Read {
+/** `canned`, plus the open `issue list` and closed search reads `covered()` makes. */
+function listing(closed: Parameters<typeof issues>[1]): Read {
   const read = canned([ISSUE])
-  return (args) => args[1] === 'list' ? (args.includes('closed') ? closed : []) : read(args)
+  const listed = issues([], closed)
+  return (args) => args[0] === 'api' || args[1] === 'list' ? listed(args) : read(args)
 }
 
 const REFUSED = '#25 looks landed as 4cb0e875 (#20); cf plan add --issue caliperforge/caliperforge#25 --over-landed --why <text> to queue it anyway'

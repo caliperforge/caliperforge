@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 import { alive } from '../store/leases.ts'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
-import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
+import { checkouts, gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
 import { fresh, inherited } from './inherited.ts'
 import type { Outcome } from './kind.ts'
 import { contained, subprojects } from './loose.ts'
@@ -81,7 +81,7 @@ function project(src: string): string | null {
  * `tests`, given, are the only test files a vitest suite runs, and none runs on an empty list.
  */
 export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number, said?: (line: string) => void, tests?: string[]): Failure | null {
-  if (outside !== null) return gated(src, gates(src, outside, given.excused), run, given.excused ?? [], said)
+  if (outside !== null) { excluded(src, checkouts(src).map((c) => `${c.path}/`)); return gated(src, gates(src, outside, given.excused), run, given.excused ?? [], said) }
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
   const unparsed = given.json === true ? malformed(src, touched) : null
@@ -165,10 +165,10 @@ function settled(gate: Gate, ran: Ran, excused: string[]): Ran {
 export const BUILT = [`${DERIVED}/`, '__pycache__/', '.gradle/', 'build/', 'target/', 'uv.lock', 'foundry.lock', '.venv/']
 
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
-export function excluded(src: string): void {
+export function excluded(src: string, extra: string[] = []): void {
   const path = join(src, '.git', 'info', 'exclude')
   if (!existsSync(join(src, '.git'))) return
-  for (const line of BUILT) {
+  for (const line of [...BUILT, ...extra]) {
     const held = existsSync(path) ? readFileSync(path, 'utf8') : ''
     if (!held.split('\n').includes(line)) appendFileSync(path, `${held.endsWith('\n') || held === '' ? '' : '\n'}${line}\n`)
   }

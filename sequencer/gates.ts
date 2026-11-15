@@ -1,10 +1,11 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { parseDocument } from 'yaml'
-import { z } from 'zod'
 import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
 import { home, recipes, tested } from './recipes.ts'
+import { checkouts, steps, workflows } from './workflows.ts'
+
+export { checkouts }
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
 const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift', 'typescript'] as const
@@ -33,6 +34,7 @@ export interface Gate {
   quiet?: boolean
   /** The sha a red run is re-run at: only what that run did not print refuses. */
   base?: string
+  language?: OutsideLanguage
 }
 
 interface Raw {
@@ -114,9 +116,9 @@ const PREFIX: Record<OutsideLanguage, string> = { rust: 'rs-', python: 'py-', ru
 
 const JUSTFILE = 'Justfile'
 
-/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then SUSHI and its workflows' regenerate-and-diff steps at the root. */
+/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then cargo's on a crate the brief touches, then SUSHI and its workflows' regenerate-and-diff steps at the root. */
 export function gates(src: string, outside: Outside, excused: string[] = []): Gate[] {
-  return [...own(src, outside, excused), ...sushi(src, outside.base), ...regenerated(src)]
+  return [...own(src, outside, excused), ...harnessed(src, outside), ...sushi(src, outside.base), ...regenerated(src)]
 }
 
 const SUSHI = 'fsh-sushi@3.12.0'
@@ -210,23 +212,25 @@ function unique(crates: Crate[]): Crate[] {
   return crates.filter((c, at) => crates.findIndex((d) => d.name === c.name) === at)
 }
 
-function workflows(src: string): string[] {
-  const dir = join(src, '.github', 'workflows')
-  return existsSync(dir) ? readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort().map((f) => readFileSync(join(dir, f), 'utf8')) : []
+/** A `.rs` file on another language's plan: cargo's gates in its workspace, after the repos its workflows check out beside it. */
+function harnessed(src: string, outside: Outside): Gate[] {
+  const rs = outside.files.find((f) => f.endsWith('.rs'))
+  if (outside.language === 'rust' || rs === undefined) return []
+  const clones = checkouts(src).filter((c) => !existsSync(join(src, c.path))).flatMap((c): Gate[] => [
+    { script: 'clone', bin: 'git', args: ['clone', `https://github.com/${c.repository}`, c.path], dir: '', language: 'rust' },
+    ...(c.ref === undefined ? [] : [{ script: 'clone', bin: 'git', args: ['-C', c.path, 'checkout', c.ref], dir: '', language: 'rust' as const }]),
+  ])
+  const dir = workspace(src, rs)
+  const cargo = (script: string, args: string[]): Gate => ({ script, bin: 'cargo', args, dir, language: 'rust' })
+  return [...clones, cargo('format', formatLine(src)), cargo('lint', ['clippy', '--all-targets', '--', '-D', 'warnings']), cargo('build', ['build'])]
 }
-
-const Workflow = z.object({ jobs: z.record(z.string(), z.object({ steps: z.array(z.object({ run: z.string().optional() })).default([]) })) })
 
 /** `npm()` spawns without a shell, so a line needing one cannot become a gate. */
 export const SHELL = /&&|[|;$`<>]/
 
 /** Each workflow step that runs a generator then `git diff --exit-code`, at the root. */
 function regenerated(src: string): Gate[] {
-  return workflows(src).flatMap((text) => {
-    const doc = parseDocument(text)
-    const found = Workflow.safeParse(doc.errors.length === 0 ? doc.toJS() : null)
-    return found.success ? Object.values(found.data.jobs).flatMap((job) => job.steps.flatMap((step) => regenerate(step.run ?? ''))) : []
-  })
+  return steps(src).flatMap((step) => regenerate(step.run ?? ''))
 }
 
 /** Staged first: the builder's change is uncommitted, and the diff must show only what the generator rewrote. */

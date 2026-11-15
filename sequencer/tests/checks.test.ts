@@ -707,6 +707,21 @@ test('D1 excluded keeps each line once across a missing newline', () => {
   expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toBe('# local\n.cf-derived/\n__pycache__/\n.gradle/\nbuild/\ntarget/\nuv.lock\nfoundry.lock\n.venv/\n')
 })
 
+test('a workflow checkout path is excluded once before gates run', () => {
+  const src = tree({ 'pyproject.toml': '' })
+  mkdirSync(join(src, '.git', 'info'), { recursive: true })
+  mkdirSync(join(src, '.github', 'workflows'), { recursive: true })
+  writeFileSync(join(src, '.github', 'workflows', 'k.yml'), 'jobs:\n  k:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          repository: o/k\n          path: keychain\n')
+  const lines = (): string[] => readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8').split('\n')
+  const held: boolean[] = []
+  const run: Run = () => { held.push(lines().includes('keychain/')); return { ok: true, output: '' } }
+  const outside: Outside = { language: 'python', files: ['a.py'] }
+  expect(checks(src, OWN, run, [], outside)).toBeNull()
+  expect(checks(src, OWN, run, [], outside)).toBeNull()
+  expect(held).toEqual([true, true, true, true, true, true])
+  expect(lines().filter((l) => l === 'keychain/')).toHaveLength(1)
+})
+
 test('the caliperforge and atelier profiles run the same commands', () => {
   const some = recorder()
   expect(checks(tree(THREE), OWN, some.run)).toBeNull()

@@ -505,7 +505,7 @@ function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): 
     const listed = internal(plan) ? tools(src, profile(root, repoOf(db, plan) ?? '')?.commands ?? {}, parse(diff).map((f) => f.path)) : []
     if (outside === null || listed.length > 0) return listed.map(([, args, bin]) => ({ language: TOOL[bin] ?? 'python', dir: '', command: [bin, ...args].join(' ') }))
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
-      .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
+      .map((g) => ({ language: g.language ?? outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
   const paths = parse(diff).map((f) => f.path)
   const scope = contained(src, paths) ? 'no tests: the diff sits in its python subprojects'

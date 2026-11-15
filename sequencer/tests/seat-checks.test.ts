@@ -178,6 +178,19 @@ test('2022 D6 a live run of another diff adds no row', () => {
   expect(checked(db, root, plan, src, TS)).toEqual({ checks: rows })
 })
 
+const MAIN = '--- a/harness/keychain/src/main.rs\n+++ b/harness/keychain/src/main.rs\n@@ -1,1 +1,1 @@\n+x\n'
+
+test('a green ledger-rig plan lists its rust rows, none ungated', () => {
+  const { db, plan } = target(['ledger/rig.py', 'harness/keychain/src/main.rs'], 'pass', MAIN)
+  const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
+  mkdirSync(join(src, 'harness', 'keychain'), { recursive: true })
+  writeFileSync(join(src, 'pyproject.toml'), '')
+  writeFileSync(join(src, 'harness', 'keychain', 'Cargo.toml'), '')
+  const python = ['uv sync --all-extras', 'uv tool run ruff check', 'uv run --no-sync pytest'].map((c) => `- python | . | ${c} | pass`)
+  const rust = ['cargo fmt --all -- --check', 'cargo clippy --all-targets -- -D warnings', 'cargo build'].map((c) => `- rust | harness/keychain | ${c} | pass`)
+  expect(checked(db, REPO, plan, src, MAIN)).toEqual({ checks: [...python, ...rust].join('\n') })
+})
+
 test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
   expect(checked(db, REPO, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})

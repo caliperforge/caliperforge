@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { gated, type Run } from '../checks.ts'
-import { gates, outsideLanguage, sushi } from '../gates.ts'
+import { gates, type Outside, outsideLanguage, sushi } from '../gates.ts'
 
 function fixture(marker: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
@@ -269,6 +269,44 @@ test('1342b D3 sushi runs after go gates, before regenerate', () => {
   const workflow = { '.github/workflows/gen.yml': 'jobs:\n  gen:\n    steps:\n      - run: |\n          go generate ./...\n          git diff --exit-code\n' }
   expect(go(workflow).slice(3).map((g) => g.script)).toEqual(['stage', 'generate', 'diff'])
   expect(go({ ...workflow, 'sushi-config.yaml': '' })).toEqual([...own, SUSHI, ...go(workflow).slice(3)])
+})
+
+const HARNESS = { 'pyproject.toml': '', 'harness/keychain/Cargo.toml': '[package]\nname = "keychain"\n', 'harness/keychain/src/main.rs': '' }
+
+const RS: Outside = { language: 'python', files: ['harness/keychain/src/main.rs'] }
+
+const UV = [
+  { script: 'install', bin: 'uv', args: ['sync', '--all-extras'], dir: '' },
+  { script: 'lint', bin: 'uv', args: ['tool', 'run', 'ruff', 'check'], dir: '' },
+  { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'], dir: '' },
+]
+
+const cargo = (script: string, args: string[]): ReturnType<typeof gates>[number] => ({ script, bin: 'cargo', args, dir: 'harness/keychain', language: 'rust' })
+
+const CARGO = [cargo('format', ['fmt', '--all', '--', '--check']), cargo('lint', ['clippy', '--all-targets', '--', '-D', 'warnings']), cargo('build', ['build'])]
+
+const checkout = (ref = ''): Record<string, string> => ({
+  '.github/workflows/keychain-307.yml': `jobs:\n  k:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          repository: o/k\n          path: keychain\n${ref}`,
+})
+
+const clone = (args: string[]): ReturnType<typeof gates>[number] => ({ script: 'clone', bin: 'git', args, dir: '', language: 'rust' })
+
+test('a .rs file on a python plan gets cargo gates in its crate', () => {
+  expect(gates(nested(HARNESS), RS)).toEqual([...UV, ...CARGO])
+  expect(gates(nested({ ...HARNESS, ...checkout() }), { language: 'python', files: ['ledger/rig.py'] })).toEqual(UV)
+})
+
+test('a workflow checkout is cloned first, at its ref, once', () => {
+  expect(gates(nested({ ...HARNESS, ...checkout('          ref: v1\n') }), RS).slice(3))
+    .toEqual([clone(['clone', 'https://github.com/o/k', 'keychain']), clone(['-C', 'keychain', 'checkout', 'v1']), ...CARGO])
+  expect(gates(nested({ ...HARNESS, ...checkout() }), RS).slice(3)).toEqual([clone(['clone', 'https://github.com/o/k', 'keychain']), ...CARGO])
+  expect(gates(nested({ ...HARNESS, ...checkout('          ref: v1\n'), 'keychain/rust/Cargo.toml': '' }), RS).slice(3)).toEqual(CARGO)
+})
+
+test('a red clippy on a harness crate refuses as lint', () => {
+  const src = nested(HARNESS)
+  const run: Run = (...[args, , bin]) => (bin === 'cargo' && args[0] === 'clippy' ? { ok: false, code: '101', output: 'error: unused' } : { ok: true, output: '' })
+  expect(gated(src, gates(src, RS), run)).toMatchObject({ script: 'lint', command: 'cargo clippy --all-targets -- -D warnings (in harness/keychain/)', code: '101' })
 })
 
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {

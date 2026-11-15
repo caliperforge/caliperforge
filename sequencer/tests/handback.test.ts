@@ -234,6 +234,20 @@ test('D1 a Diff stands. ruling on the same diff runs the rails', async () => {
   expect(holdOf(w.db, 1)?.held_why ?? '').not.toMatch(/^completion-audit: rulings.md/)
 })
 
+test('an inline Diff stands. ruling on the same diff runs rails', async () => {
+  const w = await ruled('**Ruling (COO, 2026-11-15):** Diff stands. Back to step 3 when #1 lands.\n')
+  const lap = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
+  expect(lap).toMatchObject({ step: 3 })
+  expect(lap?.note).not.toMatch(/rulings.md changed/)
+})
+
+test('a ruling quoting Diff stands. mid-sentence still holds', async () => {
+  const w = await ruled('**Ruling (COO, 2026-11-15):** the note "Diff stands." is not enough; use bye()\n')
+  await tick(w.db, w.root, stub(UNPOINTED))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: rulings.md/)
+})
+
 test('D3 a new ruling with a moved tree runs the rails', async () => {
   const w = await ruled('use bye()\n', (root) => { built(root, 1, 'export const more = 1') })
   const lap = (await tick(w.db, w.root, stub(UNPOINTED)))[0]

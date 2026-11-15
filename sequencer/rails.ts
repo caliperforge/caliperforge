@@ -95,14 +95,15 @@ function completed(db: Db, root: string, plan: number, handback: string, diff: s
 
 /**
  * `step-3.judged` holds the last lap's diff, rulings.md, handback and issue.md digests: the diff standing still under a new ruling is unmoved.
- * A newest ruling block with a `Diff stands.` line is not a new ruling.
+ * A newest ruling block with a `Diff stands.` line, or whose marker `Diff stands.` follows at once, is not a new ruling.
  */
 function judged(root: string, plan: number, diff: string, handback: string): boolean {
   const rulings = maybe(root, plan, 'rulings.md')
   const now = [digestOf(diff), rulings === null ? '' : digestOf(rulings), digestOf(handback), digestOf(get(root, plan, 'issue.md'))]
   const last = maybe(root, plan, 'step-3.judged')?.split('\n')
   put(root, plan, 'step-3.judged', now.join('\n'))
-  if (/^Diff stands\.$/m.test(newest(rulings ?? ''))) return false
+  const block = newest(rulings ?? '')
+  if (/^Diff stands\.$/m.test(block) || /^\*\*Ruling \([^)]*\):\*\*[ \t]*Diff stands\.(?:\s|$)/.test(block)) return false
   return last !== undefined && last[0] === now[0] && last[2] === now[2] && last[3] === now[3] && last[1] !== now[1]
 }
 

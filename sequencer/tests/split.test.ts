@@ -613,13 +613,25 @@ test('D1: an approved outside split files our parts on asm/<plan>', async () => 
   approve(out.db, out.target)
   const log: string[] = []
   await briefed(out, 1, PARTS, log)
-  expect(log).toEqual(['file caliperforge/caliperforge p1a: file the parts', 'file caliperforge/caliperforge p1b: queue them in order'])
+  expect(log).toEqual([`send src ${maybe(out.root, 1, 'base.sha')?.trim() ?? ''}:refs/heads/asm/1`,
+    'file caliperforge/caliperforge p1a: file the parts', 'file caliperforge/caliperforge p1b: queue them in order'])
   expect(plan(out.db, 1)).toMatchObject({ state: 'done' })
   const parts = allParts(out.db).filter((p) => p.parent === 1)
   for (const { body } of parts) expect(body).toMatch(/Internal only[\s\S]*asm\/1/)
   const a = parts[0]?.plan ?? 0
   expect(plan(out.db, a)).toMatchObject({ target_id: 1 })
   expect(assembly(out.db, plan(out.db, a))?.branch).toBe('asm/1')
+})
+
+test('an outside split whose asm branch send throws files no part', () => {
+  const out = world()
+  approve(out.db, out.target)
+  put(out.root, 1, 'base.sha', `${'b'.repeat(40)}\n`)
+  const log: string[] = []
+  const wire = { ...watched(log, out.root, 1), send: () => { throw new Error('push refused') } }
+  expect(parted(out.db, out.root, plan(out.db, 1), split(PARTS) ?? [], wire)).toMatchObject({ outcome: 'refuse', spans: ['gh'], blip: true })
+  expect(log.filter((l) => l.startsWith('file '))).toEqual([])
+  expect(allParts(out.db).filter((p) => p.parent === 1)).toEqual([])
 })
 
 test('D2: an unapproved outside split files nothing and waits', () => {
@@ -739,7 +751,8 @@ test('D2, D3: each language part files on asm/1 to its own builder', async () =>
   approve(out.db, out.target)
   const log: string[] = []
   await briefed(out, 1, SPANNING, log)
-  expect(log).toEqual(['file caliperforge/caliperforge p1a: kotlin part of hello', 'file caliperforge/caliperforge p1b: typescript part of hello'])
+  expect(log).toEqual([`send src ${maybe(out.root, 1, 'base.sha')?.trim() ?? ''}:refs/heads/asm/1`,
+    'file caliperforge/caliperforge p1a: kotlin part of hello', 'file caliperforge/caliperforge p1b: typescript part of hello'])
   expect(plan(out.db, 1)).toMatchObject({ state: 'done' })
   expect(maybe(out.root, 1, 'issue.md')).toBeNull()
   const at = (n: number) => allParts(out.db).find((p) => p.parent === 1 && p.n === n)

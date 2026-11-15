@@ -28,7 +28,7 @@ const CUT = 6000
  * land, carrying the parent's lane; every part with no `after` is queued at the parent's priority and the parent's
  * issue says where its work went. The parent plan ends here with no build. A split of somebody else's
  * approved ticket is filed on our repo as internal-only parts titled `p<plan><letter>: …` that build against
- * `asm/<plan>`; an unapproved one is not the machine's to file: the parts wait for a person instead.
+ * `asm/<plan>`, pushed to our fork at the parent's `base.sha` before any part is filed; an unapproved one is not the machine's to file: the parts wait for a person instead.
  * Filing is resumable -- a part already on file is not filed twice -- so a `gh` that fails half way is
  * a blip the next tick finishes.
  */
@@ -44,6 +44,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
   const source = parent === null ? `plan ${String(plan.id)}` : `#${String(parent)}`
   const section = ask === null ? '' : carried(ask, '## Parent ticket', source)
   try {
+    if (!internal(plan)) wire.send(srcDir(root, plan.id), `${get(root, plan.id, 'base.sha').trim()}:refs/heads/asm/${String(plan.id)}`)
     const said = comments(parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? [], source)
     const carry = [section, said].filter((s) => s !== '').join('\n\n')
     const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire))

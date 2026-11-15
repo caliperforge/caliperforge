@@ -26,3 +26,11 @@ test('gardenerWhile', () => {
   expect(drift(none, GARDENER, NOW)).toEqual([])
   expect(drift(internal(0), GARDENER, NOW)).toEqual([])
 })
+
+test('three clean days raise no gardener drift', () => {
+  const db = internal()
+  for (const day of ['2026-10-01', '2026-10-02', '2026-10-03']) {
+    db.exec(`INSERT INTO gardens (day, metric, url) VALUES ('${day}', 'clean', '')`)
+  }
+  expect(drift(db, GARDENER, NOW)).toEqual([])
+})

@@ -16,7 +16,10 @@ export function garden(db: Db, root: string, now: Date, file: File): string | nu
   if (pipe === undefined || !idle(db, pipe) || gardened(db, day) || openGardens(db) >= 2) return null
   const tally = counts(root)
   const [metric, total] = worst(tally)
-  if (total === 0) return null
+  if (total === 0) {
+    record(db, day, 'clean', '')
+    return null
+  }
   const top = Object.entries(tally).map(([path, t]) => [path, t[metric] ?? 0] as const)
     .filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5)
   const body = [`**What:** lower ${metric} in ${top.map(([path]) => path).join(', ')}: ${FIX[metric]}`,

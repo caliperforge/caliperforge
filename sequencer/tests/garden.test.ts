@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
-import { fresh } from '../../checks/sqlite.ts'
+import { fresh, rejects } from '../../checks/sqlite.ts'
 import { gardened, openGardens } from '../../store/gardens.ts'
 import type { Db } from '../../store/index.ts'
 import { garden } from '../garden.ts'
@@ -112,8 +112,20 @@ test.each([
 test('D5: a tree with every non-lines metric at 0 files nothing', () => {
   const clean = mkdtempSync(join(tmpdir(), 'cf-garden-'))
   writeFileSync(join(clean, 'a.ts'), 'export const a = 1\n')
-  expect(garden(piped(), clean, NOW, file)).toBeNull()
+  const db = piped()
+  expect(garden(db, clean, NOW, file)).toBeNull()
   expect(filed).toEqual([])
+  expect(gardened(db, DAY)).toBe(true)
+  expect(rejects(db, `UPDATE gardens SET day = '' WHERE day = '${DAY}' AND metric = 'clean' AND url = ''`)).toBe(true)
+  expect(garden(db, clean, NOW, file)).toBeNull()
+  expect(rejects(db, `UPDATE gardens SET day = '' WHERE day <> '${DAY}'`)).toBe(false)
+  expect(openGardens(db)).toBe(0)
+})
+
+test('the gardens table refuses an unknown metric or a bad day', () => {
+  const db = piped()
+  expect(rejects(db, `INSERT INTO gardens (day, metric, url) VALUES ('${DAY}', 'bogus', '')`)).toBe(true)
+  expect(rejects(db, "INSERT INTO gardens (day, metric, url) VALUES ('2026-9-1', 'clean', '')")).toBe(true)
 })
 
 test('D6: a file that throws leaves no gardens row', () => {

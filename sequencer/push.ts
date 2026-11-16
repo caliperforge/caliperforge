@@ -22,6 +22,7 @@ import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Row } from './card.ts'
 import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
+import { forkBranch, forkedAs, onFork } from './forked.ts'
 import { red } from './failures.ts'
 import { rehearsal } from './greptile.ts'
 import { mirrored } from './greptile-mirror.ts'
@@ -212,7 +213,8 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const ci = outside ? rehearsed(root, plan.id, branch) : branch
   const rules = profile(root, repo, plan.id)
-  const base = !outside ? null : onFork(dir, branch) ? follow(root, plan.id, messageOf(root, plan.id, rules)) : squash(root, plan.id, rules)
+  const name = outside ? forkBranch(db, root, plan.id, dir, branch) : branch
+  const base = !outside ? null : onFork(dir, name) ? follow(root, plan.id, messageOf(root, plan.id, rules), name) : squash(root, plan.id, rules)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(db, root, plan.id, head, ci, repo, wire) : head.sha
   if (outside) based(root, plan.id, fork, wire)
@@ -472,27 +474,28 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, rules)
   const named = prTitle(root, plan.id)
   const open = opened(db, plan.id)
-  if (open === null && !onFork(head.dir, head.branch)) {
+  const name = forkedAs(root, plan.id, head.branch)
+  if (open === null && !onFork(head.dir, name)) {
     squash(root, plan.id, rules, prMessage(named, text, rules))
     bind(root, plan.id, headOf(root, plan.id).sha, signed)
   }
   const checks = [...CHECKS, size(target.repo), prosed(named, text), titled, merging(target.repo, wire.merged), ...(wire.card ?? [])]
   const card = waiting(db, root, plan.id, signed, target, checks)
   if (card !== null) return card
-  wire.send(head.dir, head.branch)
+  wire.send(head.dir, name === head.branch ? head.branch : `${head.branch}:refs/heads/${name}`)
   retire(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch), wire)
   if (open !== null) {
     const md = maybe(root, plan.id, 'pr.md')
     if (md !== null) wire.describe?.(target.repo, prNumber(open), md)
     markPushed(db, plan.id, approval, open)
-    return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
+    return { outcome: 'pass', spans: [], note: `pushed ${name} onto ${open}` }
   }
   const body = maybe(root, plan.id, 'pr.md') === null
     ? put(root, plan.id, 'pr.md', text)
     : join(planDir(root, plan.id), 'pr.md')
-  const url = wire.open(target.repo, `caliperforge:${head.branch}`, named, body)
+  const url = wire.open(target.repo, `caliperforge:${name}`, named, body)
   markPushed(db, plan.id, approval, url)
-  return { outcome: 'pass', spans: [], note: `pushed ${head.branch} as ${url}` }
+  return { outcome: 'pass', spans: [], note: `pushed ${name} as ${url}` }
 }
 
 export { opened, prBody }
@@ -587,10 +590,6 @@ export function fold(dir: string, base: string, message: string): string | null 
   return `folded ${head.slice(0, 12)} into ${sha.slice(0, 12)}, one commit over ${base.slice(0, 12)} with the brief's message`
 }
 
-function onFork(dir: string, branch: string): boolean {
-  return git(dir, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).trim() !== ''
-}
-
 function ancestor(dir: string, older: string, newer: string): boolean {
   return tried(dir, ['merge-base', '--is-ancestor', older, newer]) !== null
 }
@@ -610,9 +609,8 @@ export function rehearsalBranch(root: string, plan: number): string {
  * commits since the head our fork shows fold into one signed follow-up commit on top of it,
  * with a main merged since that head as its second parent.
  */
-export function follow(root: string, plan: number, message: string): string {
+export function follow(root: string, plan: number, message: string, branch = git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim()): string {
   const dir = srcDir(root, plan)
-  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const shown = `refs/remotes/origin/${branch}`
   git(dir, ['add', '-A', '--', '.'])
   if (!published(dir, branch, shown)) {
@@ -627,7 +625,7 @@ export function follow(root: string, plan: number, message: string): string {
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   if (!ancestor(dir, base, tip)) {
     const sha = git(dir, [...identity(dir), 'commit-tree', ...signing(dir), git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
-    git(dir, ['update-ref', `refs/heads/${branch}`, sha])
+    git(dir, ['update-ref', 'HEAD', sha])
     return tip
   }
   git(dir, ['reset', '--soft', tip])

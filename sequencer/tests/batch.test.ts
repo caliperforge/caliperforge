@@ -550,6 +550,34 @@ test.each([
   expect(git(['rev-parse', 'HEAD'])).toBe(head)
 })
 
+test('a branch the fork held before any pr goes out on a new one', { timeout: 90_000 }, async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const git = gitOf(w)
+  const sent: string[] = []
+  const wire = pushing(w, sent)
+  const until = async (step: number): Promise<void> => {
+    for (let at = 0; at < 20 && plan(w.db, 1).step !== step; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  }
+  await until(6)
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--allow-empty', '-qm', 'split'])
+  const split = git(['rev-parse', 'HEAD'])
+  git(['push', '-q', 'origin', 'widget-12-a1'])
+  git(['reset', '-q', '--hard', 'HEAD^'])
+  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+  await until(7)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(git(['rev-parse', 'HEAD^'])).toBe(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main']))
+  expect(maybe(w.root, 1, 'fork.branch')).toBe('widget-12-a1-2')
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
+  expect(published(w, wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1-2 as ${URL}` })
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-2']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0]).toBe(split)
+  expect(sent.slice(-3)).toEqual(['send src widget-12-a1:refs/heads/widget-12-a1-2', 'unrehearse caliperforge/widget widget-12-a1-next',
+    'open acme/widget caliperforge:widget-12-a1-2'])
+  expect(sent.filter((l) => l.startsWith('send src +') || l.includes('--force'))).toEqual([])
+})
+
 test('a fold whose signature fails leaves HEAD unmoved', async () => {
   const { w, git, wire, sent, left } = await sending((git, at) => {
     committing('--amend', '-qm', 'fix: rename hello')(git)

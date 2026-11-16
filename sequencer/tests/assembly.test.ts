@@ -182,7 +182,7 @@ test('D2 D3 the parent reviews asm/1, opens one PR once approved', async () => {
   expect(log.filter((l) => l.startsWith('open '))).toEqual([])
   approvePublish(a.w.db, a.w.root, 1, 'ceo')
   await laps(a, 1, wire)
-  expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1'])
+  expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1-2'])
 })
 
 const ciGreen = (a: Assembly, id: number): string | undefined =>

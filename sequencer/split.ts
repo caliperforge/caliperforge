@@ -49,17 +49,18 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     if (!internal(plan)) wire.send(srcDir(root, plan.id), `${get(root, plan.id, 'base.sha').trim()}:refs/heads/asm/${String(plan.id)}`)
     const said = comments(parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? [], source)
     const carry = [section, said].filter((s) => s !== '').join('\n\n')
+    const gated = plan.target_id === null ? [] : parts.filter((p): p is Part & { measure: string } => p.measure !== undefined)
     const kept = [...parts.keys()].filter((n) => plan.target_id === null || parts[n]?.measure === undefined)
     const urls = new Map(kept.map((n) => [n, filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire)]))
     const on = (n: number): string => ref(urls.get(n) ?? '')
     const started = kept.filter((n) => waited(parts, n) === null)
     for (const n of started) queue(db, root, plan, n)
     const waits = kept.flatMap((n) => { const at = waited(parts, n); return at === null ? [] : [`${on(n)} waits on ${on(at)}`] })
-    const gates = plan.target_id === null ? [] : parts.flatMap((p) => p.measure === undefined ? [] : [`COO gate: ${p.title}: ${p.measure}; ends: ${p.ends}`])
+    const gates = gated.map((p) => `COO gate: ${p.title}: ${p.measure}; ends: ${p.ends}`)
     const fresh = gates.filter((g) => !(ask ?? '').split('\n').includes(g))
     if (fresh.length > 0) put(root, plan.id, 'ask.md', `${(ask ?? '').trimEnd()}\n\n${fresh.join('\n')}\n`)
     if (parent !== null) {
-      wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(kept.length)} jobs, not one: ${kept.map(on).join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every one lands.`)
+      wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one: ${[...kept.map(on), ...gated.map((p) => `the COO gate "${p.title}"`)].join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every ${gated.length === 0 ? 'one' : 'filed part'} lands.`)
     }
     return { outcome: 'pass', spans: [], split: true, note: [`split into ${kept.map(on).join(', ')}; ${started.map(on).join(', ')} queued`, ...gates].join('; ') }
   } catch (error) {
@@ -206,7 +207,7 @@ export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, 
   // Not through covered() in ticket.ts: a part names its parent's files, so the open parent would cover it.
   const url = wire.file(homeOf(parent), title, body, labels(parent))
   addPart(db, { parent: parent.id, n, url, title, body, after: null })
-  return made(db, root, parent, n, { url, title, body })
+  return made(db, root, parent, n, { url, title, body }, false)
 }
 
 /** A part whose `After:` issue is closed is queued, once the plan of ours behind that issue has landed; `open` is every open issue number of `repo`. */
@@ -226,12 +227,13 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
   if (row.plan !== null) return row.plan
   const held = planOfOrigin(db, row.url)
   if (held !== null) return linkPart(db, parent.id, n, held)
-  return made(db, root, parent, n, row)
+  // A part's own lines end at its first blank line; the parent's ask and comments follow, and may carry their own `**Measure:**`.
+  return made(db, root, parent, n, row, (row.body.split('\n\n')[0] ?? '').includes(`\n${MEASURE}`))
 }
 
-function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }): number {
+function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }, measured: boolean): number {
   const id = queuePart(db, parent, n, row.url, parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat)
-  if (row.body.split('\n').some((l) => l.startsWith(MEASURE))) moved(db, root, id)
+  if (measured) moved(db, root, id)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
   put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)
   return id

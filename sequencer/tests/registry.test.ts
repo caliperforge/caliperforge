@@ -352,15 +352,16 @@ test('openFindingsAtSignoffSeen', () => {
 
 test('a held pr_path measure part is seen; a research one not', () => {
   const entry = REGISTRY.filter((e) => e.name === 'split_measure_only')
-  const held = (template: 'pr_path' | 'research'): Drifted[] => {
+  const held = (template: 'pr_path' | 'research', body = '**What:** w\n**Measure:** runs a day\n\nPart b of #1'): Drifted[] => {
     const d = db()
     putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template, state: 'blocked_on_ceo', queued_at: '2026-10-02 10:00:00',
       step: 1, retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/a/b/issues/2' })
-    addPart(d, { parent: 1, n: 0, url: 'https://github.com/a/b/issues/2', title: 't', body: '**Measure:** runs a day', plan: 2 })
+    addPart(d, { parent: 1, n: 0, url: 'https://github.com/a/b/issues/2', title: 't', body, plan: 2 })
     return drift(d, entry, NOW)
   }
   expect(held('pr_path')).toMatchObject([{ name: 'split_measure_only', state: 'seen', newest: '2026-10-02 10:00:00' }])
   expect(held('research')).toEqual([])
+  expect(held('pr_path', '**What:** w\n\n## Parent ticket\n\n**Measure:** the parent counts')).toEqual([])
 })
 
 test('catchupRangeClearsSilent D4', () => {

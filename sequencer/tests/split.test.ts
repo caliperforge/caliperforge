@@ -649,6 +649,7 @@ const FENCE = (...parts: string[][]): string => ['---', 'outcome: split', 'parts
 
 test('a measure part goes to the measurer; the rest build', () => {
   const w = mine()
+  put(w.root, ID, 'ask.md', '# t\n\n**Measure:** the parent counts too\n')
   parted(w.db, w.root, plan(w.db, ID), split(FENCE(BUILD, COUNT)) ?? [], watched([], w.root, ID))
   const [a, b] = [partPlan(w, 0) ?? 0, partPlan(w, 1) ?? 0]
   expect(allPlans(w.db).filter((p) => p.template === 'pr_path' && p.id !== ID).map((p) => p.id)).toEqual([a])
@@ -669,6 +670,14 @@ test('an outside measure part is one COO gate on the parent', () => {
   const rows = allParts(out.db).filter((p) => p.parent === 1)
   expect(rows.map((p) => [p.n, p.plan === null ? null : plan(out.db, p.plan).state, p.body.includes('After:')])).toEqual([[0, 'queued', false], [2, 'queued', false]])
   expect(maybe(out.root, 1, 'ask.md')?.match(/^COO gate: .*$/gm)).toEqual(['COO gate: count it: runs a day, by cf measure; ends: the numbers are written'])
+})
+
+test('a gated parent issue is told its jobs and its COO gate', () => {
+  const w = mine()
+  const said: string[] = []
+  parted(w.db, w.root, { ...plan(w.db, ID), target_id: 1 }, split(FENCE(BUILD, COUNT)) ?? [],
+    { ...watched([], w.root, ID), comment: (...args) => void said.push(args[2]) })
+  expect(said).toEqual(['The brief writer found this is 2 jobs, not one: #901, the COO gate "count it". #901 started. This issue closes when every filed part lands.'])
 })
 
 test('a wide internal brief goes back to the brief writer', async () => {

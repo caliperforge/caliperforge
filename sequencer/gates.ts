@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
 import { home, recipes, tested } from './recipes.ts'
@@ -225,9 +225,11 @@ function harnessed(src: string, outside: Outside): Gate[] {
   return [...clones, cargo('format', formatLine(src)), cargo('lint', ['clippy', '--all-targets', '--', '-D', 'warnings']), cargo('build', ['build'])]
 }
 
-/** Removes each checkout path a `git clone` made: a folder their repo commits has no `.git`, and a submodule's `.git` is a file. */
+/** Removes each checkout path inside `src` a `git clone` made: a folder their repo commits has no `.git`, and a submodule's `.git` is a file. */
 export function unclone(src: string): void {
-  for (const { path } of checkouts(src)) if (existsSync(join(src, path, '.git', 'HEAD'))) rmSync(join(src, path), { recursive: true, force: true })
+  for (const rel of checkouts(src).map(({ path }) => relative(src, join(src, path)))) {
+    if (rel !== '' && !rel.startsWith('..') && existsSync(join(src, rel, '.git', 'HEAD'))) rmSync(join(src, rel), { recursive: true, force: true })
+  }
 }
 
 /** `npm()` spawns without a shell, so a line needing one cannot become a gate. */

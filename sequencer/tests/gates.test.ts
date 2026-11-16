@@ -313,6 +313,17 @@ test('unclone removes a checkout path only when git cloned it', () => {
   expect(gates(committed, RS).slice(3)).toEqual(CARGO)
 })
 
+test('unclone leaves a checkout path at or above the checkout', () => {
+  const step = (path: string): string => `      - uses: actions/checkout@v4\n        with:\n          repository: o/k\n          path: ${path}\n`
+  const workflow = { '.github/workflows/k.yml': `jobs:\n  k:\n    steps:\n${step('.')}${step("''")}${step('..')}`, '.git/HEAD': '' }
+  const outer = nested({ '.git/HEAD': '', ...Object.fromEntries(Object.entries({ ...HARNESS, ...workflow }).map(([p, b]) => [`src/${p}`, b])) })
+  const src = join(outer, 'src')
+  unclone(src)
+  expect(existsSync(join(src, '.git/HEAD'))).toBe(true)
+  expect(existsSync(join(outer, '.git/HEAD'))).toBe(true)
+  expect(Object.keys(HARNESS).every((p) => existsSync(join(src, p)))).toBe(true)
+})
+
 test('a red clippy on a harness crate refuses as lint', () => {
   const src = nested(HARNESS)
   const run: Run = (...[args, , bin]) => (bin === 'cargo' && args[0] === 'clippy' ? { ok: false, code: '101', output: 'error: unused' } : { ok: true, output: '' })

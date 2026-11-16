@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { amendIssue } from '../amend.ts'
+import { heard } from '../heard.ts'
 import { actions, describePr, dispatch, fileIssue, forward, gh, installed, openPr, rehearse, run, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
@@ -216,6 +217,19 @@ test('D5 actions reads the fork\'s registered workflows', () => {
   expect(actions(FORK, count(2))).toBe(true)
   expect(calls).toEqual([['api', `repos/${FORK}/actions/workflows`], ['api', `repos/${FORK}/actions/workflows`]])
   expect(() => actions(FORK, () => ({ workflows: [] }))).toThrow()
+})
+
+test('heard dates the newest Greptile post on the fork', () => {
+  const calls: string[][] = []
+  const post = (login: string | null, at: string): unknown => ({ user: login === null ? null : { login }, created_at: at })
+  const read: Read = (args) => {
+    calls.push(args)
+    return [post('someone', '2026-11-03T00:00:00Z'), post(null, '2026-11-02T00:00:00Z'),
+      post('greptile-apps[bot]', '2026-10-26T09:00:00Z'), post('greptile-apps[bot]', '2026-10-20T09:00:00Z')]
+  }
+  expect(heard(FORK, read)).toBe('2026-10-26T09:00:00Z')
+  expect(calls).toEqual([['api', `repos/${FORK}/issues/comments?sort=created&direction=desc&per_page=100`]])
+  expect(heard(FORK, () => [post('someone', '2026-11-03T00:00:00Z'), post(null, '2026-11-02T00:00:00Z')])).toBeNull()
 })
 
 test('D7 dispatch posts the workflow on the branch', () => {

@@ -611,6 +611,12 @@
   where: "kind = 'ready' AND outcome = 'pass' AND (message GLOB '*; Greptile gave no score in *' OR message GLOB '*; Greptile skipped: *' OR message GLOB '*is not asked again*')"
   gap: 7d
   expected: 0
+- name: greptile_silent
+  table: events
+  column: at
+  where: "kind = 'greptile.silent'"
+  gap: 14d
+  expected: 0
 - name: open_findings_at_signoff
   table: events
   column: at

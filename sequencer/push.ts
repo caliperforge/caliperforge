@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
 import { amendIssue } from '../cli/amend.ts'
 import { actions, closeIssue, commentIssue, describePr, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, prNumber, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { heard } from '../cli/heard.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh, type Head as At } from '../rails/ci-green/index.ts'
@@ -58,6 +59,7 @@ export interface Wire {
   at?: (dir: string, ref: string) => string
   review: (fork: string, branch: string) => void
   greptile?: (fork: string) => boolean
+  heard?: (fork: string) => string | null
   actions?: (fork: string) => boolean
   dispatch?: (fork: string, file: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
@@ -85,7 +87,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   at: (dir, ref) => git(dir, ['ls-remote', 'origin', ref]).split('\t')[0] ?? '',
-  review, greptile: installed, actions, dispatch,
+  review, greptile: installed, heard, actions, dispatch,
   install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),

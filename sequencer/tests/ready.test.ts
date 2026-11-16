@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { built as builtRow, newest } from '../../store/deliverables.ts'
+import { eventsOf } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
 import { refusalsOf } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
@@ -10,8 +11,8 @@ import type { Fired } from '../kind.ts'
 import { headOf, type Wire } from '../push.ts'
 import { ASKED, CREDITS, proved, readyGate, SKIPPED } from '../ready.ts'
 import { mapOf } from '../steps.ts'
-import { waive, WAIVED } from '../waived.ts'
-import { cloned, get, headSha, put, srcDir } from '../workspace.ts'
+import { SILENT, waive, WAIVED } from '../waived.ts'
+import { cloned, get, headSha, maybe, put, srcDir } from '../workspace.ts'
 import { TEMPLATED } from './bases.ts'
 import { approve, built, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
@@ -239,6 +240,30 @@ test('a waiver at the head passes to step 7, Greptile unasked', async () => {
     note: expect.stringContaining(`; Greptile waived at ${sha.slice(0, 12)} by coo: fork silent`) as unknown })
   expect(plan(w.db, 1).step).toBe(7)
   expect(reviews(log)).toEqual([])
+})
+
+const ago = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString()
+
+test('a fork silent past 14 days passes to step 7 unasked', async () => {
+  const log: string[] = []
+  const last = ago(SILENT + 1)
+  const silent = { ...UNSCORED, heard: (): string => last }
+  const [w, lap] = await atReady(log, silent)
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: [],
+    note: expect.stringContaining(`; no Greptile score: Greptile silent on caliperforge/widget since ${last.slice(0, 10)}`) as unknown })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(reviews(log)).toEqual([])
+  expect(maybe(w.root, 1, ASKED)).toBeNull()
+  expect(readyGate(w.db, w.root, plan(w.db, 1), { ...watched([], w.root, 1), ...silent })).toMatchObject({ outcome: 'pass' })
+  expect(eventsOf(w.db, 1, 'greptile.silent')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'caliperforge/widget' }])
+})
+
+test('a fork heard within 14 days is asked and holds', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(log, { ...UNSCORED, heard: () => ago(SILENT - 1) })
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
+  expect(reviews(log)).toHaveLength(1)
+  expect(eventsOf(w.db, 1, 'greptile.silent')).toEqual([])
 })
 
 test('a waiver at the head passes on a spent month', async () => {

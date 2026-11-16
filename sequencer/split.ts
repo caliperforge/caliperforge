@@ -241,7 +241,7 @@ function render(part: Part, n: number): string {
   return `${letter(n)}. ${part.title}\n**What:** ${part.what}\n**Why:** ${part.why}\n**When it ends:** ${part.ends}`
 }
 
-/** The part part `n` waits on; none when it names a measure part, which adds no code. */
+/** The index of the part that part `n` waits on; null for `after: none` or when that part is a measure part. */
 function waited(parts: Part[], n: number): number | null {
   const after = parts[n]?.after ?? 'none'
   const at = after === 'none' ? null : LETTERS.indexOf(after)

@@ -34,7 +34,7 @@ import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { owed, owing } from './owed.ts'
 import { prBody, prTitle } from './pr.ts'
-import { assembled, cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
+import { assembled, cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
 import { assembly, forkOf, homeOf, onto } from './home.ts'
 import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
@@ -571,10 +571,9 @@ export function said(brief: string, keys = ['**What:**', '**Why:**']): string[] 
 export function squash(root: string, plan: number, rules: Profile | null = null, message = messageOf(root, plan, rules)): string {
   const dir = srcDir(root, plan)
   git(dir, ['add', '-A', '--', '.'])
-  const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
-  const count = Number(git(dir, ['rev-list', '--count', `${base}..HEAD`]).trim())
+  const base = get(root, plan, 'base.sha').trim()
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
-  if (!staged && count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message) return base
+  if (!staged && tried(dir, ['rev-parse', 'HEAD^'])?.trim() === base && git(dir, ['log', '-1', '--format=%B']).trim() === message) return base
   git(dir, ['reset', '--soft', base])
   sign(dir, message)
   return base

@@ -19,7 +19,7 @@ import { approvedPlan } from '../approve.ts'
 import { approve as approvePublish } from '../card.ts'
 import type { Fired, Outcome } from '../kind.ts'
 import { profile } from '../../store/profile.ts'
-import { COMMIT, follow, forkCi, headOf, messageOf, prBody, push, sent as next, type Wire } from '../push.ts'
+import { carried, COMMIT, follow, forkCi, headOf, messageOf, prBody, push, sent as next, type Wire } from '../push.ts'
 import { started, words } from '../signals.ts'
 import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
@@ -512,7 +512,7 @@ test('a second round is one commit with the brief message', async () => {
   expect(git(['rev-parse', 'HEAD'])).toBe(head)
 })
 
-/** A round on a branch the fork shows, whose send then runs `after` on the checkout and keeps the head it leaves. */
+/** A round on a branch the fork shows, whose first send then runs `after` on the checkout and keeps the head it leaves. */
 async function sending(after: (git: (args: string[]) => string, w: World) => void): Promise<{ w: World; git: (args: string[]) => string; wire: Wire; sent: string[]; left: string[] }> {
   const w = await PUSHED()
   const src = srcDir(w.root, 1)
@@ -524,6 +524,7 @@ async function sending(after: (git: (args: string[]) => string, w: World) => voi
   const log = watched(sent, w.root, 1)
   const wire = { ...log, send: (dir: string, ref: string) => {
     log.send(dir, ref)
+    if (left.length > 0) return
     after(git, w)
     left.push(git(['rev-parse', 'HEAD']), git(['rev-parse', 'HEAD^{tree}']))
   } }
@@ -536,9 +537,12 @@ test.each([
   { is: 'an amended', after: committing('--amend', '-qm', 'fix: rename hello') },
   { is: 'a two-commit', after: committing('--allow-empty', '-qm', 'second') },
 ])('$is head over the fork is folded once', async ({ after }) => {
-  const { w, git, wire, left } = await sending(after)
+  const { w, git, wire, sent, left } = await sending(after)
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['fold'] })
   const head = git(['rev-parse', 'HEAD'])
+  const sends = sent.filter((l) => l.startsWith('send '))
+  const folded = sends[1]?.slice('send src '.length, 'send src '.length + 40) ?? ''
+  expect([sends.length, sends[1], carried(w.root, 1, folded)]).toEqual([2, `send src ${folded}:refs/heads/widget-12-a1-next`, head])
   const shown = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0] ?? ''
   expect([git(['rev-list', '--parents', '-1', 'HEAD']), git(['rev-parse', 'HEAD^{tree}']), git(['log', '-1', '--format=%B'])])
     .toEqual([`${head} ${shown}`, left[1], messageOf(w.root, 1, profile(w.root, 'acme/widget'))])
@@ -554,6 +558,20 @@ test('a fold whose signature fails leaves HEAD unmoved', async () => {
   expect(() => forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toThrow()
   expect(git(['rev-parse', 'HEAD'])).toBe(left[0])
   expect(sent.filter((l) => l.startsWith('send '))).toHaveLength(1)
+})
+
+test('a folded head the fork rejects is refused, not held', async () => {
+  const { w, wire } = await sending(committing('--amend', '-qm', 'fix: rename hello'))
+  let shown = ''
+  const keeps = { ...wire, at: () => shown, send: (dir: string, ref: string) => {
+    wire.send(dir, ref)
+    if (shown === '') shown = ref.slice(0, 40)
+  } }
+  const outcome = forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', keeps)
+  const folded = tipsOf(w).at(-1) ?? ''
+  expect(outcome).toEqual({ outcome: 'refuse', spans: ['fork.sent'], to: 6,
+    note: expect.stringContaining(`rejected refs/heads/widget-12-a1-next: it is at ${shown.slice(0, 12)}, not the pushed ${folded.slice(0, 12)}`) as string })
+  expect(folded).not.toBe(shown)
 })
 
 test('a moved main is the parent of a one-commit head', { timeout: 90_000 }, async () => {

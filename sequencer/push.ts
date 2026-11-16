@@ -27,6 +27,7 @@ import { rehearsal } from './greptile.ts'
 import { mirrored } from './greptile-mirror.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
+import { resent } from './resent.ts'
 import { based, moved, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
@@ -127,10 +128,9 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
-  const { fork, head, ci, tip, base: onto, rejected } = sent(db, root, plan, repo, wire)
+  const { fork, head, ci, tip, rejected, folded } = resent(db, root, plan, repo, wire)
   if (rejected !== null) return { outcome: 'refuse', spans: ['fork.sent'], to: 6, note: rejected }
-  const folded = onto === null ? null : fold(head.dir, onto, messageOf(root, plan.id, profile(root, repo, plan.id)))
-  if (folded !== null) return { outcome: 'pass', held: true, spans: ['fold'], note: folded }
+  if (folded !== null) return { outcome: 'pass', held: true, spans: ['fold'], note: `${folded}; sent as ${tip.slice(0, 12)}` }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
   const on = { fork, branch: ci, sha: tip }
@@ -577,7 +577,7 @@ export function squash(root: string, plan: number, rules: Profile | null = null,
   return base
 }
 
-function fold(dir: string, base: string, message: string): string | null {
+export function fold(dir: string, base: string, message: string): string | null {
   const head = git(dir, ['rev-parse', 'HEAD']).trim()
   if (head === base) return null
   const parent = git(dir, ['rev-parse', 'HEAD^']).trim()

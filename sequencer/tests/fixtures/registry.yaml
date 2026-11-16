@@ -632,7 +632,7 @@
 - name: director_silent_run
   table: runs
   column: at
-  where: "seat = 'director' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = runs.plan AND e.kind = 'director' AND julianday(e.at) >= julianday(runs.at) AND julianday(e.at) <= julianday(runs.at) + 120.0 / 86400)"
+  where: "seat = 'director' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = runs.plan AND e.kind = 'director' AND julianday(e.at) >= julianday(runs.at) AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.plan = runs.plan AND r.seat NOT IN ('director', 'fixer') AND julianday(r.at) > julianday(runs.at) AND julianday(r.at) < julianday(e.at)))"
   gap: 1d
   expected: 0
 - name: director_repark_held

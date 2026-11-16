@@ -97,6 +97,27 @@ test('a hand-off with no step-2 or step-1 research build is seen', () => {
   expect(state(1, 'measurer', '2026-10-03 11:00:00')).toBe('seen')
 })
 
+test('a director run speaks if its event lands before other seats', () => {
+  const silent = REGISTRY.filter((e) => e.name === 'director_silent_run')
+  const states = (runs: [string, string][], events: [number, string, string][]): string[] => {
+    const d = db()
+    putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template: 'comms', state: 'queued', queued_at: '2026-10-01', step: 0, retries: 0 })
+    for (const seat of ['director', 'fixer', 'typescript_specialist']) {
+      addRule(d, { id: seat, kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
+    }
+    for (const [seat, at] of runs) runAt(d, 1, 2, seat, at)
+    for (const [plan, kind, at] of events) logged(d, { plan, kind, actor: kind, outcome: 'pass', message: 'm', pointer: null, run: null }, at)
+    return drift(d, silent, NOW).map((r) => r.state)
+  }
+  expect(states([['director', '2026-10-02 12:00:00'], ['fixer', '2026-10-02 12:01:00'], ['director', '2026-10-02 12:02:00']],
+    [[1, 'fixer', '2026-10-02 12:01:30'], [1, 'director', '2026-10-02 12:02:18']])).toEqual([])
+  expect(states([['director', '2026-10-02 12:00:00'], ['typescript_specialist', '2026-10-02 12:05:00']],
+    [[1, 'director', '2026-10-02 12:06:00']])).toEqual(['seen'])
+  expect(states([['director', '2026-10-02 12:00:00']], [])).toEqual(['seen'])
+  expect(states([['director', '2026-10-02 12:00:00']], [[2, 'director', '2026-10-02 12:00:10']])).toEqual(['seen'])
+  expect(states([['director', '2026-10-02 12:00:00']], [[1, 'director', '2026-10-02 12:00:10']])).toEqual([])
+})
+
 test('D1-D6 a fork left with Actions off a day is seen', () => {
   const off = REGISTRY.filter((e) => e.name === 'fork_actions_off')
   const states = (after: [number, string, string] | null, at: string | null = '2026-10-02 10:00:00', now = NOW): string[] => {

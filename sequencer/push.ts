@@ -129,8 +129,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip, base: onto, rejected } = sent(db, root, plan, repo, wire)
   if (rejected !== null) return { outcome: 'refuse', spans: ['fork.sent'], to: 6, note: rejected }
-  const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo, plan.id)))
-  if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
+  const folded = onto === null ? null : fold(head.dir, onto, messageOf(root, plan.id, profile(root, repo, plan.id)))
+  if (folded !== null) return { outcome: 'pass', held: true, spans: ['fold'], note: folded }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
   const on = { fork, branch: ci, sha: tip }
@@ -577,12 +577,14 @@ export function squash(root: string, plan: number, rules: Profile | null = null,
   return base
 }
 
-function unfolded(dir: string, base: string, message: string): string | null {
+function fold(dir: string, base: string, message: string): string | null {
   const head = git(dir, ['rev-parse', 'HEAD']).trim()
   if (head === base) return null
   const parent = git(dir, ['rev-parse', 'HEAD^']).trim()
   if (parent === base && git(dir, ['log', '-1', '--format=%B']).trim() === message) return null
-  return `${head.slice(0, 12)} is not one commit over ${base.slice(0, 12)} with the brief's message; fold it again`
+  const sha = git(dir, [...identity(dir), 'commit-tree', ...signing(dir), 'HEAD^{tree}', '-p', base, '-m', message]).trim()
+  git(dir, ['update-ref', 'HEAD', sha, head])
+  return `folded ${head.slice(0, 12)} into ${sha.slice(0, 12)}, one commit over ${base.slice(0, 12)} with the brief's message`
 }
 
 function onFork(dir: string, branch: string): boolean {

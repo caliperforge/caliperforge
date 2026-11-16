@@ -389,15 +389,20 @@ test('pre-pr rounds move -next; push sends the branch', async () => {
 const SIGNS = String.raw`printf '\n[GNUPG:] SIG_CREATED \n' >&2
 printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'`
 
-/** The checkout signs through `gpg`, and HEAD is amended to a head no tip carries yet. */
-function signer(w: World, gpg: string): (args: string[]) => string {
+/** The checkout signs through `gpg`. */
+function signs(w: World, gpg: string): void {
   vi.stubEnv('GIT_CONFIG_COUNT', '0')
-  const src = srcDir(w.root, 1)
-  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   const program = join(w.root, 'gpg.sh')
   writeFileSync(program, `#!/bin/sh\ncat >/dev/null\n${gpg}\n`, { mode: 0o755 })
-  git(['config', 'commit.gpgsign', 'true'])
-  git(['config', 'gpg.program', program])
+  execFileSync('git', ['config', 'commit.gpgsign', 'true'], { cwd: srcDir(w.root, 1) })
+  execFileSync('git', ['config', 'gpg.program', program], { cwd: srcDir(w.root, 1) })
+}
+
+/** The checkout signs through `gpg`, and HEAD is amended to a head no tip carries yet. */
+function signer(w: World, gpg: string): (args: string[]) => string {
+  signs(w, gpg)
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "signed"\n')
   git(['-c', 'commit.gpgsign=false', '-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
     'commit', '-qa', '--amend', '--no-edit'])
@@ -507,19 +512,48 @@ test('a second round is one commit with the brief message', async () => {
   expect(git(['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('a follow-up with the handback summary is refused', async () => {
+/** A round on a branch the fork shows, whose send then runs `after` on the checkout and keeps the head it leaves. */
+async function sending(after: (git: (args: string[]) => string, w: World) => void): Promise<{ w: World; git: (args: string[]) => string; wire: Wire; sent: string[]; left: string[] }> {
   const w = await PUSHED()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   git(['push', '-q', 'origin', 'widget-12-a1'])
   writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hi"\n')
-  put(w.root, 1, 'step-2.handback.md', 'Renamed.\n\n---\nsummary: rename hello\ndone:\n  - id: D1\n---\n')
-  const log = watched([], w.root, 1)
+  const sent: string[] = []
+  const left: string[] = []
+  const log = watched(sent, w.root, 1)
   const wire = { ...log, send: (dir: string, ref: string) => {
     log.send(dir, ref)
-    git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--amend', '-qm', 'fix: rename hello'])
+    after(git, w)
+    left.push(git(['rev-parse', 'HEAD']), git(['rev-parse', 'HEAD^{tree}']))
   } }
-  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toMatchObject({ outcome: 'refuse', spans: ['fold'], to: 2 })
+  return { w, git, wire, sent, left }
+}
+
+const committing = (...args: string[]) => (git: (args: string[]) => string): void => void git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', ...args])
+
+test.each([
+  { is: 'an amended', after: committing('--amend', '-qm', 'fix: rename hello') },
+  { is: 'a two-commit', after: committing('--allow-empty', '-qm', 'second') },
+])('$is head over the fork is folded once', async ({ after }) => {
+  const { w, git, wire, left } = await sending(after)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['fold'] })
+  const head = git(['rev-parse', 'HEAD'])
+  const shown = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0] ?? ''
+  expect([git(['rev-list', '--parents', '-1', 'HEAD']), git(['rev-parse', 'HEAD^{tree}']), git(['log', '-1', '--format=%B'])])
+    .toEqual([`${head} ${shown}`, left[1], messageOf(w.root, 1, profile(w.root, 'acme/widget'))])
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))?.spans ?? []).not.toContain('fold')
+  expect(git(['rev-parse', 'HEAD'])).toBe(head)
+})
+
+test('a fold whose signature fails leaves HEAD unmoved', async () => {
+  const { w, git, wire, sent, left } = await sending((git, at) => {
+    committing('--amend', '-qm', 'fix: rename hello')(git)
+    signs(at, 'exit 1')
+  })
+  expect(() => forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toThrow()
+  expect(git(['rev-parse', 'HEAD'])).toBe(left[0])
+  expect(sent.filter((l) => l.startsWith('send '))).toHaveLength(1)
 })
 
 test('a moved main is the parent of a one-commit head', { timeout: 90_000 }, async () => {

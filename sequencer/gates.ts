@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
@@ -223,6 +223,11 @@ function harnessed(src: string, outside: Outside): Gate[] {
   const dir = workspace(src, rs)
   const cargo = (script: string, args: string[]): Gate => ({ script, bin: 'cargo', args, dir, language: 'rust' })
   return [...clones, cargo('format', formatLine(src)), cargo('lint', ['clippy', '--all-targets', '--', '-D', 'warnings']), cargo('build', ['build'])]
+}
+
+/** Removes each checkout path a `git clone` made: a folder their repo commits has no `.git`, and a submodule's `.git` is a file. */
+export function unclone(src: string): void {
+  for (const { path } of checkouts(src)) if (existsSync(join(src, path, '.git', 'HEAD'))) rmSync(join(src, path), { recursive: true, force: true })
 }
 
 /** `npm()` spawns without a shell, so a line needing one cannot become a gate. */

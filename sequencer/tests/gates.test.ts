@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { gated, type Run } from '../checks.ts'
-import { gates, type Outside, outsideLanguage, sushi } from '../gates.ts'
+import { gates, type Outside, outsideLanguage, sushi, unclone } from '../gates.ts'
 
 function fixture(marker: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
@@ -301,6 +301,16 @@ test('a workflow checkout is cloned first, at its ref, once', () => {
     .toEqual([clone(['clone', 'https://github.com/o/k', 'keychain']), clone(['-C', 'keychain', 'checkout', 'v1']), ...CARGO])
   expect(gates(nested({ ...HARNESS, ...checkout() }), RS).slice(3)).toEqual([clone(['clone', 'https://github.com/o/k', 'keychain']), ...CARGO])
   expect(gates(nested({ ...HARNESS, ...checkout('          ref: v1\n'), 'keychain/rust/Cargo.toml': '' }), RS).slice(3)).toEqual(CARGO)
+})
+
+test('unclone removes a checkout path only when git cloned it', () => {
+  const cloned = nested({ ...HARNESS, ...checkout(), 'keychain/.git/HEAD': '' })
+  const committed = nested({ ...HARNESS, ...checkout(), 'keychain/rust/Cargo.toml': '' })
+  unclone(cloned)
+  unclone(committed)
+  expect(existsSync(join(cloned, 'keychain'))).toBe(false)
+  expect(existsSync(join(committed, 'keychain/rust/Cargo.toml'))).toBe(true)
+  expect(gates(committed, RS).slice(3)).toEqual(CARGO)
 })
 
 test('a red clippy on a harness crate refuses as lint', () => {

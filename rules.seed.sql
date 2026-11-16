@@ -108,7 +108,7 @@ VALUES
   ('rules/registry/93-lane_fix_runs.yaml', 'card', 'rules/registry/93-lane_fix_runs.yaml', '0877969a7a2151c08dab324f48db4efd5afec03e4a8de1387e5b6fea6852f9d1', '2026-11-10'),
   ('rules/registry/94-test_only_not_hand_run.yaml', 'card', 'rules/registry/94-test_only_not_hand_run.yaml', '83e9e4884b02982cb20401af6d7ed29e4403b2afc840247669a9553002985d33', '2026-11-10'),
   ('rules/registry/95-filed_covered.yaml', 'card', 'rules/registry/95-filed_covered.yaml', '5d92623b1c37a78dfcc018a45cc19406529352af7c16cab521c5106ba960d56e', '2026-11-11'),
-  ('rules/registry/96-greptile_every_head.yaml', 'card', 'rules/registry/96-greptile_every_head.yaml', '374112af336d37b1e1a5cd47f859a8f6d5045fb86767b5610bf3446872918c5a', '2026-11-11'),
+  ('rules/registry/96-greptile_every_head.yaml', 'card', 'rules/registry/96-greptile_every_head.yaml', '9d3e87122758f3c81707cf4c72f371e6651c2cc786621eb22a299772883d78b7', '2026-11-11'),
   ('rules/registry/96-open_findings_at_signoff.yaml', 'card', 'rules/registry/96-open_findings_at_signoff.yaml', 'c7ba988be03686174dd82d09dfb6eb551a19cd29ed74f19ed8f6bf6593cf9a2d', '2026-11-11'),
   ('rules/registry/96-throttle_no_stuck.yaml', 'card', 'rules/registry/96-throttle_no_stuck.yaml', 'a1f1e9936414429209ba0f53b2bad50d4b3fd37cb90ea8ccdeb4e1f13c76d0de', '2026-11-12'),
   ('rules/registry/97-director_silent_run.yaml', 'card', 'rules/registry/97-director_silent_run.yaml', 'e9a273c07ec0924985bf4f1d0bc06c4b3d6c0a2d08598b7ea6f02c35f8f650cd', '2026-11-12'),

@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 import { alive } from '../store/leases.ts'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
-import { checkouts, gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
+import { checkouts, gates, type Gate, type Outside, type OutsideLanguage, unclone, waived } from './gates.ts'
 import { fresh, inherited } from './inherited.ts'
 import type { Outcome } from './kind.ts'
 import { contained, subprojects } from './loose.ts'
@@ -81,7 +81,7 @@ function project(src: string): string | null {
  * `tests`, given, are the only test files a vitest suite runs, and none runs on an empty list.
  */
 export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number, said?: (line: string) => void, tests?: string[]): Failure | null {
-  if (outside !== null) { excluded(src, checkouts(src).map((c) => `${c.path}/`)); return gated(src, gates(src, outside, given.excused), run, given.excused ?? [], said) }
+  if (outside !== null) { excluded(src, checkouts(src).map((c) => `${c.path}/`)); unclone(src); try { return gated(src, gates(src, outside, given.excused), run, given.excused ?? [], said) } finally { unclone(src) } }
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
   const unparsed = given.json === true ? malformed(src, touched) : null

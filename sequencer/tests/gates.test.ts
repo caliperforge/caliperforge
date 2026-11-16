@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { gated, type Run } from '../checks.ts'
-import { gates, type Outside, outsideLanguage, sushi } from '../gates.ts'
+import { gates, type Outside, outsideLanguage, sushi, unclone } from '../gates.ts'
 
 function fixture(marker: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
@@ -301,6 +301,27 @@ test('a workflow checkout is cloned first, at its ref, once', () => {
     .toEqual([clone(['clone', 'https://github.com/o/k', 'keychain']), clone(['-C', 'keychain', 'checkout', 'v1']), ...CARGO])
   expect(gates(nested({ ...HARNESS, ...checkout() }), RS).slice(3)).toEqual([clone(['clone', 'https://github.com/o/k', 'keychain']), ...CARGO])
   expect(gates(nested({ ...HARNESS, ...checkout('          ref: v1\n'), 'keychain/rust/Cargo.toml': '' }), RS).slice(3)).toEqual(CARGO)
+})
+
+test('unclone removes a checkout path only when git cloned it', () => {
+  const cloned = nested({ ...HARNESS, ...checkout(), 'keychain/.git/HEAD': '' })
+  const committed = nested({ ...HARNESS, ...checkout(), 'keychain/rust/Cargo.toml': '' })
+  unclone(cloned)
+  unclone(committed)
+  expect(existsSync(join(cloned, 'keychain'))).toBe(false)
+  expect(existsSync(join(committed, 'keychain/rust/Cargo.toml'))).toBe(true)
+  expect(gates(committed, RS).slice(3)).toEqual(CARGO)
+})
+
+test('unclone leaves a checkout path at or above the checkout', () => {
+  const step = (path: string): string => `      - uses: actions/checkout@v4\n        with:\n          repository: o/k\n          path: ${path}\n`
+  const workflow = { '.github/workflows/k.yml': `jobs:\n  k:\n    steps:\n${step('.')}${step("''")}${step('..')}`, '.git/HEAD': '' }
+  const outer = nested({ '.git/HEAD': '', ...Object.fromEntries(Object.entries({ ...HARNESS, ...workflow }).map(([p, b]) => [`src/${p}`, b])) })
+  const src = join(outer, 'src')
+  unclone(src)
+  expect(existsSync(join(src, '.git/HEAD'))).toBe(true)
+  expect(existsSync(join(outer, '.git/HEAD'))).toBe(true)
+  expect(Object.keys(HARNESS).every((p) => existsSync(join(src, p)))).toBe(true)
 })
 
 test('a red clippy on a harness crate refuses as lint', () => {

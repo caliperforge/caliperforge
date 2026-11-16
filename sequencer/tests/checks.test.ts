@@ -722,6 +722,34 @@ test('a workflow checkout path is excluded once before gates run', () => {
   expect(lines().filter((l) => l === 'keychain/')).toHaveLength(1)
 })
 
+const KEYCHAIN = {
+  'pyproject.toml': '', 'harness/keychain/Cargo.toml': '[package]\nname = "keychain"\n', 'harness/keychain/src/main.rs': '',
+  '.github/workflows/k.yml': 'jobs:\n  k:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          repository: o/k\n          path: keychain\n',
+}
+
+test.each([null, '101'])('a harness clone is gone after clippy exits %s, each lap', (code) => {
+  const src = nested({ ...KEYCHAIN, '.git/info/exclude': '', 'keychain/.git/HEAD': '' })
+  const seen: string[] = []
+  const held: boolean[] = []
+  const run: Run = (args, cwd, bin) => {
+    seen.push(args.join(' '))
+    if (bin === 'uv') held.push(existsSync(join(src, 'keychain')))
+    if (args[0] === 'clone') {
+      mkdirSync(join(cwd, 'keychain', '.git'), { recursive: true })
+      writeFileSync(join(cwd, 'keychain', '.git', 'HEAD'), '')
+    }
+    return code !== null && args[0] === 'clippy' ? { ok: false, code, output: 'error: unused' } : { ok: true, output: '' }
+  }
+  const outside: Outside = { language: 'python', files: ['harness/keychain/src/main.rs'] }
+  const first = checks(src, OWN, run, [], outside)
+  expect(existsSync(join(src, 'keychain'))).toBe(false)
+  expect(checks(src, OWN, run, [], outside)).toEqual(first)
+  expect(existsSync(join(src, 'keychain'))).toBe(false)
+  expect(first?.code ?? null).toBe(code)
+  expect(held).toEqual([false, false, false, false, false, false])
+  expect(seen.filter((c) => c === 'clone https://github.com/o/k keychain')).toHaveLength(2)
+})
+
 test('the caliperforge and atelier profiles run the same commands', () => {
   const some = recorder()
   expect(checks(tree(THREE), OWN, some.run)).toBeNull()

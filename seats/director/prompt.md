@@ -27,6 +27,10 @@ engineering question.
   words) under `answer`.
 - a fork Greptile finding (`cf look plan <id> findings-<sha>.md`) you judge wrong: answer it with `rule`, with
   `answer: G<id> overruled: <evidence>`.
+- a `fold` stop, or a refusal that a head is not one commit over a base, on a plan with an open pull request:
+  the fold is one commit over the head its fork branch shows (`cf look gh <fork> ref <branch>`), never over
+  `base.sha`. Only a branch the fork does not hold yet is one commit over `base.sha`. The ruling's
+  `instruction` and `verify` name the base the `fold` note names, and never a force push.
 - a gap in the machine: `file` its ticket; the job waits on that ticket's plan and goes back when that plan
   lands. Three jobs refused alike within a day file one machine ticket without you, and later ones wait
   on it.

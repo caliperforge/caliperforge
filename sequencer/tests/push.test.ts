@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { flag } from '../../store/precedent-findings.ts'
 import { profile } from '../../store/profile.ts'
+import { setEvidence } from '../../store/targets.ts'
 import { tick } from '../index.ts'
 import { forkCi, messageOf, sent, type Wire } from '../push.ts'
 import { get, put, srcDir } from '../workspace.ts'
@@ -85,4 +86,44 @@ test('a fold over a base.sha that main lacks is sent as it stands', { timeout: 9
   expect(git(['rev-parse', 'HEAD^'])).toBe(main)
   expect(base).toBe(main)
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)?.spans ?? []).not.toContain('fold')
+})
+
+test('an open pull request folds over the fork head, not base.sha', { timeout: 90_000 }, async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: srcDir(w.root, 1), encoding: 'utf8' }).trim()
+  const as = ['-c', 'user.email=t@t', '-c', 'user.name=t']
+  const sends: string[] = []
+  const log = watched(sends, w.root, 1)
+  let amend = false
+  const wire: Wire = { ...log, send: (dir, ref) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+    if (amend) git([...as, 'commit', '--amend', '-qm', 'fix: rename hello'])
+    amend = false
+  } }
+  for (let at = 0; at < 20 && plan(w.db, 1).step !== 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'])
+  git([...as, 'commit', '--allow-empty', '-qm', 'opened'])
+  const fork = git(['rev-parse', 'HEAD'])
+  git(['push', '-q', 'origin', `HEAD:refs/heads/${branch}`])
+  setEvidence(w.db, w.target, 'https://github.com/acme/widget/pull/9')
+  const message = messageOf(w.root, 1, profile(w.root, 'acme/widget'))
+  git(['reset', '-q', '--hard', get(w.root, 1, 'base.sha').trim()])
+  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "fold"\n')
+  git([...as, 'commit', '-qam', message])
+  const before = sends.length
+  amend = true
+  const first = forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  expect(first?.spans).toEqual(['fold'])
+  expect(first?.note).toContain(`one commit over caliperforge/widget:${branch}'s head ${fork.slice(0, 12)} with the brief's message`)
+  expect([git(['rev-parse', 'HEAD^']), git(['log', '-1', '--format=%B'])]).toEqual([fork, message])
+  const head = git(['rev-parse', 'HEAD'])
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)?.spans ?? []).not.toContain('fold')
+  expect(git(['rev-parse', 'HEAD'])).toBe(head)
+  expect(git(['ls-remote', 'origin', `refs/heads/${branch}`]).split('\t')[0]).toBe(fork)
+  const pushed = sends.slice(before).filter((l) => l.startsWith('send '))
+  expect(pushed.length).toBeGreaterThan(0)
+  expect(pushed.filter((l) => !l.endsWith(`:refs/heads/${branch}-next`))).toEqual([])
 })

@@ -97,6 +97,12 @@ test('D5: research names Suite and Output goes to the fetcher', () => {
     + 'with no Measure line, the Output line sends it to the fetcher.')
 })
 
+test('a fold ruling with an open pr names the fork head', () => {
+  const prompt = seat(root, 'director').prompt.replace(/\n {2}/g, ' ')
+  expect(prompt).toContain('on a plan with an open pull request: the fold is one commit over the head its fork branch shows '
+    + '(`cf look gh <fork> ref <branch>`), never over `base.sha`. Only a branch the fork does not hold yet is one commit over `base.sha`.')
+})
+
 test('D8: orchestrator is refused, unlisted and unseeded', () => {
   expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\/orchestrator\.yaml/)
   const ids = rules(root).map((r) => r.id)

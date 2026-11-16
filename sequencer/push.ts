@@ -206,7 +206,7 @@ export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wi
   took(db, plan)
 }
 
-export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; rejected: string | null } {
+export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; over: string; rejected: string | null } {
   const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
@@ -214,7 +214,9 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const ci = outside ? rehearsed(root, plan.id, branch) : branch
   const rules = profile(root, repo, plan.id)
   const name = outside ? forkBranch(db, root, plan.id, dir, branch) : branch
-  const base = !outside ? null : opened(db, plan.id) !== null && onFork(dir, name) ? follow(root, plan.id, messageOf(root, plan.id, rules), name) : squash(root, plan.id, rules)
+  const followed = outside && opened(db, plan.id) !== null && onFork(dir, name)
+  const base = !outside ? null : followed ? follow(root, plan.id, messageOf(root, plan.id, rules), name) : squash(root, plan.id, rules)
+  const over = followed ? `${fork}:${name}'s head` : 'base.sha'
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(db, root, plan.id, head, ci, repo, wire) : head.sha
   if (outside) based(root, plan.id, fork, wire)
@@ -222,7 +224,7 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
   const rejected = at === tip ? null : `${fork} rejected refs/heads/${ci}: it is at ${at === '' ? 'no commit' : at.slice(0, 12)}, not the pushed ${tip.slice(0, 12)}`
   if (outside && rejected === null) moved(root, plan.id, fork, ci, wire)
-  return { fork, head, ci, tip, base, rejected }
+  return { fork, head, ci, tip, base, over, rejected }
 }
 
 /** A head re-cut from main after its branch was pushed takes the pushed head as a second parent and keeps its own tree. */
@@ -579,14 +581,14 @@ export function squash(root: string, plan: number, rules: Profile | null = null,
   return base
 }
 
-export function fold(dir: string, base: string, message: string): string | null {
+export function fold(dir: string, base: string, message: string, over: string): string | null {
   const head = git(dir, ['rev-parse', 'HEAD']).trim()
   if (head === base) return null
   const parent = git(dir, ['rev-parse', 'HEAD^']).trim()
   if (parent === base && git(dir, ['log', '-1', '--format=%B']).trim() === message) return null
   const sha = git(dir, [...identity(dir), 'commit-tree', ...signing(dir), 'HEAD^{tree}', '-p', base, '-m', message]).trim()
   git(dir, ['update-ref', 'HEAD', sha, head])
-  return `folded ${head.slice(0, 12)} into ${sha.slice(0, 12)}, one commit over ${base.slice(0, 12)} with the brief's message`
+  return `folded ${head.slice(0, 12)} into ${sha.slice(0, 12)}, one commit over ${over} ${base.slice(0, 12)} with the brief's message`
 }
 
 function ancestor(dir: string, older: string, newer: string): boolean {

@@ -17,7 +17,7 @@ export const SILENT = 14
 
 /** `last` is the fork's newest Greptile post, null when none is in reach, undefined when nothing read it. */
 export function silent(db: Db, plan: number, fork: string, at: string, last: string | null | undefined): string | null {
-  if (last === undefined || (last !== null && Date.now() - Date.parse(last) <= SILENT * 86_400_000)) return null
+  if (last === undefined || (last !== null && !(Date.now() - Date.parse(last) > SILENT * 86_400_000))) return null
   if (!pointers(db, 'greptile.silent').includes(at)) {
     logged(db, { plan, kind: 'greptile.silent', actor: 'ready', outcome: 'pass', message: fork, pointer: at, run: null })
   }

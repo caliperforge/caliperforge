@@ -561,7 +561,10 @@ test('a fold whose signature fails leaves HEAD unmoved', async () => {
 })
 
 test('a folded head the fork rejects is refused, not held', async () => {
-  const { w, wire } = await sending(committing('--amend', '-qm', 'fix: rename hello'))
+  const { w, wire } = await sending((git, at) => {
+    writeFileSync(join(srcDir(at.root, 1), 'src/hello.ts'), 'export const hello = (): string => "rejected"\n')
+    committing('--amend', '-qam', 'fix: rename hello')(git)
+  })
   let shown = ''
   const keeps = { ...wire, at: () => shown, send: (dir: string, ref: string) => {
     wire.send(dir, ref)

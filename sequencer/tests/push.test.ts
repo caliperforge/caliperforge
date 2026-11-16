@@ -5,8 +5,8 @@ import { expect, test } from 'vitest'
 import { flag } from '../../store/precedent-findings.ts'
 import { profile } from '../../store/profile.ts'
 import { tick } from '../index.ts'
-import { messageOf, sent, type Wire } from '../push.ts'
-import { put, srcDir } from '../workspace.ts'
+import { forkCi, messageOf, sent, type Wire } from '../push.ts'
+import { get, put, srcDir } from '../workspace.ts'
 import { GREPTILED, RULED, THEIR_RULE } from './bases.ts'
 import { approve, CARRIED, plan, stub, tip, watched, world } from './world.ts'
 
@@ -60,9 +60,29 @@ test('a held fork branch with no pr goes out squashed over base', { timeout: 90_
   writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
   const before = sends.length
   const { base, tip: made } = sent(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
-  expect(base).toBe(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main']))
+  expect(base).toBe(get(w.root, 1, 'base.sha').trim())
   expect(git(['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${git(['rev-parse', 'HEAD'])} ${String(base)}`)
   expect(git(['log', '-1', '--format=%B'])).toBe(messageOf(w.root, 1, profile(w.root, 'acme/widget')))
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-2']).split('\t')[0]).toBe(held)
   expect(sends.slice(before).filter((l) => l.startsWith('send '))).toEqual([`send src ${made}:refs/heads/widget-12-a1-next`])
+})
+
+test('a fold over a base.sha that main lacks is sent as it stands', { timeout: 90_000 }, async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: srcDir(w.root, 1), encoding: 'utf8' }).trim()
+  const wire = watched([], w.root, 1)
+  for (let at = 0; at < 20 && plan(w.db, 1).step !== 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+  const old = get(w.root, 1, 'base.sha').trim()
+  const main = git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', `${old}^{tree}`, '-p', old, '-m', 'main'])
+  put(w.root, 1, 'base.sha', `${main}\n`)
+  const message = messageOf(w.root, 1, profile(w.root, 'acme/widget'))
+  git(['reset', '-q', '--hard', git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', 'HEAD^{tree}', '-p', main, '-m', message])])
+  const folded = git(['rev-parse', 'HEAD'])
+  const { base } = sent(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  expect(git(['rev-parse', 'HEAD'])).toBe(folded)
+  expect(git(['rev-parse', 'HEAD^'])).toBe(main)
+  expect(base).toBe(main)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)?.spans ?? []).not.toContain('fold')
 })

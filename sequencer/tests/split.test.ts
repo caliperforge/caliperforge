@@ -19,7 +19,7 @@ import { question } from '../../templates/research.ts'
 import { refile } from '../../cli/refile.ts'
 import { measure } from '../steps.ts'
 import { logged, ofKind, pointers, runLogged, runRows } from '../../store/events.ts'
-import { priority } from '../../store/lanes.ts'
+import { LANE, priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
 import { allPlans, dropPlan, end, finish, putPlan } from '../../store/plans.ts'
@@ -640,6 +640,35 @@ test('D2: an unapproved outside split files nothing and waits', () => {
   expect(parted(out.db, out.root, plan(out.db, 1), split(PARTS) ?? [], watched(log, out.root, 1))).toMatchObject({ outcome: 'needs_ceo' })
   expect(log).toEqual([])
   expect(maybe(out.root, 1, 'question.md')).toMatch(/split by the COO[\s\S]*a\. file the parts/)
+})
+
+const BUILD = ['  - title: build it', '    what: w', '    why: y', '    ends: e', '    after: none']
+const COUNT = ['  - title: count it', '    what: count the runs', '    why: y', '    ends: the numbers are written', '    after: none',
+  '    measure: runs a day, by cf measure']
+const FENCE = (...parts: string[][]): string => ['---', 'outcome: split', 'parts:', ...parts.flat(), '---', ''].join('\n')
+
+test('a measure part goes to the measurer; the rest build', () => {
+  const w = mine()
+  parted(w.db, w.root, plan(w.db, ID), split(FENCE(BUILD, COUNT)) ?? [], watched([], w.root, ID))
+  const [a, b] = [partPlan(w, 0) ?? 0, partPlan(w, 1) ?? 0]
+  expect(allPlans(w.db).filter((p) => p.template === 'pr_path' && p.id !== ID).map((p) => p.id)).toEqual([a])
+  expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research', seat: LANE.research.seat, state: 'queued' })
+  expect(maybe(w.root, b, 'ask.md')).toContain('**Measure:** runs a day, by cf measure')
+  expect(question(w.root, plan(w.db, b))).toMatchObject({ outcome: 'pass' })
+})
+
+test('an outside measure part is one COO gate on the parent', () => {
+  const out = world()
+  approve(out.db, out.target)
+  put(out.root, 1, 'base.sha', `${'b'.repeat(40)}\n`)
+  const log: string[] = []
+  const parts = split(FENCE(BUILD, COUNT, ['  - title: use it', '    what: w', '    why: y', '    ends: e', '    after: b'])) ?? []
+  parted(out.db, out.root, plan(out.db, 1), parts, watched(log, out.root, 1))
+  expect(parted(out.db, out.root, plan(out.db, 1), parts, watched(log, out.root, 1))).toMatchObject({ outcome: 'pass' })
+  expect(log.filter((l) => l.startsWith('file '))).toEqual(['file caliperforge/caliperforge p1a: build it', 'file caliperforge/caliperforge p1c: use it'])
+  const rows = allParts(out.db).filter((p) => p.parent === 1)
+  expect(rows.map((p) => [p.n, p.plan === null ? null : plan(out.db, p.plan).state, p.body.includes('After:')])).toEqual([[0, 'queued', false], [2, 'queued', false]])
+  expect(maybe(out.root, 1, 'ask.md')?.match(/^COO gate: .*$/gm)).toEqual(['COO gate: count it: runs a day, by cf measure; ends: the numbers are written'])
 })
 
 test('a wide internal brief goes back to the brief writer', async () => {

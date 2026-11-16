@@ -58,6 +58,12 @@
   column: at
   where: staffed = 'typescript_specialist' AND mode = 'review'
   gap: 7d
+- name: split_measure_only
+  table: plans
+  column: queued_at
+  where: "template = 'pr_path' AND step = 1 AND state = 'blocked_on_ceo' AND id IN (SELECT plan FROM parts WHERE body LIKE '%**Measure:**%')"
+  gap: 7d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

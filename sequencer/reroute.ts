@@ -22,7 +22,7 @@ function researchable(db: Db, plan: PlanRow, text: string): boolean {
   return plan.template === 'pr_path' && internal(plan) && plan.target_id === null && !builderRan(db, plan.id) && asked(text)
 }
 
-function moved(db: Db, root: string, id: number): void {
+export function moved(db: Db, root: string, id: number): void {
   db.transaction(() => {
     lanePipe(db, LANE.research.pipe)
     const pipe = pipeNamed(db, LANE.research.pipe)

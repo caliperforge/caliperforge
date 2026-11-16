@@ -19,9 +19,11 @@ import { words } from './signals.ts'
 import { landed } from './landed.ts'
 import { firstLine } from './unpolled.ts'
 import { relayed } from './relayed.ts'
+import { moved } from './reroute.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 const CUT = 6000
+const MEASURE = '**Measure:**'
 
 /**
  * Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
@@ -47,15 +49,19 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     if (!internal(plan)) wire.send(srcDir(root, plan.id), `${get(root, plan.id, 'base.sha').trim()}:refs/heads/asm/${String(plan.id)}`)
     const said = comments(parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? [], source)
     const carry = [section, said].filter((s) => s !== '').join('\n\n')
-    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire))
-    const on = (n: number): string => ref(urls[n] ?? '')
-    const started = [...parts.keys()].filter((n) => parts[n]?.after === 'none')
+    const kept = [...parts.keys()].filter((n) => plan.target_id === null || parts[n]?.measure === undefined)
+    const urls = new Map(kept.map((n) => [n, filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire)]))
+    const on = (n: number): string => ref(urls.get(n) ?? '')
+    const started = kept.filter((n) => waited(parts, n) === null)
     for (const n of started) queue(db, root, plan, n)
-    const waits = parts.flatMap((p, n) => p.after === 'none' ? [] : [`${on(n)} waits on ${on(LETTERS.indexOf(p.after))}`])
+    const waits = kept.flatMap((n) => { const at = waited(parts, n); return at === null ? [] : [`${on(n)} waits on ${on(at)}`] })
+    const gates = plan.target_id === null ? [] : parts.flatMap((p) => p.measure === undefined ? [] : [`COO gate: ${p.title}: ${p.measure}; ends: ${p.ends}`])
+    const fresh = gates.filter((g) => !(ask ?? '').split('\n').includes(g))
+    if (fresh.length > 0) put(root, plan.id, 'ask.md', `${(ask ?? '').trimEnd()}\n\n${fresh.join('\n')}\n`)
     if (parent !== null) {
-      wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one: ${urls.map(ref).join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every one lands.`)
+      wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(kept.length)} jobs, not one: ${kept.map(on).join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every one lands.`)
     }
-    return { outcome: 'pass', spans: [], split: true, note: `split into ${urls.map(ref).join(', ')}; ${started.map(on).join(', ')} queued` }
+    return { outcome: 'pass', spans: [], split: true, note: [`split into ${kept.map(on).join(', ')}; ${started.map(on).join(', ')} queued`, ...gates].join('; ') }
   } catch (error) {
     logged(db, { plan: plan.id, kind: 'swallowed', actor: 'split', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     const note = error instanceof Error ? error.message : String(error)
@@ -168,13 +174,14 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
   if (held !== undefined) return held.url
   const part = parts[n]
   if (part === undefined) throw new Error(`no part ${String(n)}`)
-  const after = part.after === 'none' ? null : LETTERS.indexOf(part.after)
+  const after = waited(parts, n)
   const prior = after === null ? undefined : partAt(db, plan.id, after)?.url
   const title = `${prefix}${letter(n)}: ${part.title}`
   const of = `${letter(n)} of ${String(parts.length)}`
   const id = String(plan.id)
-  const asked = plan.template !== 'research' ? [] : [`**Question:** ${part.what}`,
-    `**Would be wrong if:** it leaves out what this part asks, or answers what another part of #${prefix} asks`, `**Done when:** ${part.ends}`]
+  const asked = plan.template !== 'research' && part.measure === undefined ? [] : [`**Question:** ${part.what}`,
+    `**Would be wrong if:** it leaves out what this part asks, or answers what another part of #${prefix} asks`, `**Done when:** ${part.ends}`,
+    ...(part.measure === undefined ? [] : [`${MEASURE} ${part.measure}`])]
   const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, ...asked, '',
     internal(plan) ? `Part ${of} of #${prefix}, split by the brief writer.`
       : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
@@ -224,6 +231,7 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
 
 function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }): number {
   const id = queuePart(db, parent, n, row.url, parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat)
+  if (row.body.split('\n').some((l) => l.startsWith(MEASURE))) moved(db, root, id)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
   put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)
   return id
@@ -231,6 +239,13 @@ function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: stri
 
 function render(part: Part, n: number): string {
   return `${letter(n)}. ${part.title}\n**What:** ${part.what}\n**Why:** ${part.why}\n**When it ends:** ${part.ends}`
+}
+
+/** The part part `n` waits on; none when it names a measure part, which adds no code. */
+function waited(parts: Part[], n: number): number | null {
+  const after = parts[n]?.after ?? 'none'
+  const at = after === 'none' ? null : LETTERS.indexOf(after)
+  return at === null || parts[at]?.measure !== undefined ? null : at
 }
 
 function letter(n: number): string {

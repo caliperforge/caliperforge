@@ -127,7 +127,7 @@ const Unclear = z.object({ outcome: z.literal('unclear'), question: z.string().m
 const Claimed = z.object({ outcome: z.literal('claimed'), evidence: z.string().min(1) })
 
 const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1),
-  after: z.string().optional() })
+  after: z.string().optional(), measure: z.string().min(1).optional() })
 
 const Split = z.object({ outcome: z.literal('split'), parts: z.array(Part).min(2) })
   .refine((v) => v.parts.every((p, i) => named(p.after, i)))

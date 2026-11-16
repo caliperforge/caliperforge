@@ -140,11 +140,16 @@ parts:
     why: <one line>
     ends: <one line>
     after: <none, or the letter of the earlier part it builds on>
+    measure: <only on a measure part: what it counts, and the run or command that counts it>
 ---
 ```
 
 Name an earlier part in `after:` only when this part reads or changes code that part adds; parts that touch
 different files are `after: none`.
+
+A part whose `what` names no file to change, and whose `ends` names only measurements (run a workflow, count
+results, write the numbers), carries `measure:`, and no part names it in `after:`. The machine sends it to the
+measurer, or, on someone else's repository, writes it as a `COO gate:` line on the parent.
 
 On someone else's repository, a brief whose files span languages is still one brief, not a split: the machine
 splits it into one part per language, each built by that language's builder.

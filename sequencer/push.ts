@@ -214,7 +214,7 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const ci = outside ? rehearsed(root, plan.id, branch) : branch
   const rules = profile(root, repo, plan.id)
   const name = outside ? forkBranch(db, root, plan.id, dir, branch) : branch
-  const base = !outside ? null : onFork(dir, name) ? follow(root, plan.id, messageOf(root, plan.id, rules), name) : squash(root, plan.id, rules)
+  const base = !outside ? null : opened(db, plan.id) !== null && onFork(dir, name) ? follow(root, plan.id, messageOf(root, plan.id, rules), name) : squash(root, plan.id, rules)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(db, root, plan.id, head, ci, repo, wire) : head.sha
   if (outside) based(root, plan.id, fork, wire)

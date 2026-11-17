@@ -64,6 +64,12 @@
   where: "template = 'pr_path' AND step = 1 AND state = 'blocked_on_ceo' AND id IN (SELECT plan FROM parts WHERE instr(body, char(10) || '**Measure:**') BETWEEN 1 AND instr(body, char(10) || char(10)))"
   gap: 7d
   expected: 0
+- name: github_read_bare_repo
+  table: events
+  column: at
+  where: "kind = 'github_read' AND outcome = 'refuse' AND message LIKE '%is not github.com/<owner>/<repo>%' AND message NOT LIKE '%.%/%@%'"
+  gap: 7d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

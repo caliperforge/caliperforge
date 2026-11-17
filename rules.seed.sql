@@ -14,6 +14,7 @@ VALUES
   ('rules/registry/09-php_review.yaml', 'card', 'rules/registry/09-php_review.yaml', 'd984817f32d08dcd998f4c95480ce441cfef4c81499e2ff879b443fcd6bddafa', '2026-10-04'),
   ('rules/registry/10-typescript_review.yaml', 'card', 'rules/registry/10-typescript_review.yaml', 'd6aa5ab5d7b711b64c580ce5bc8bc09debaaefad87b614e64ccf3944ee49ea51', '2026-10-04'),
   ('rules/registry/100-split_measure_only.yaml', 'card', 'rules/registry/100-split_measure_only.yaml', '343046e266f9ddfc532166772ab43f6aafe35b6a3a4f3b08628f949d0098b88b', '2026-11-16'),
+  ('rules/registry/101-github_read_bare_repo.yaml', 'card', 'rules/registry/101-github_read_bare_repo.yaml', '44ebdaf847364abfa2c7f507096997410a09b39cbbff7bc73c6db68f44fe83b2', '2026-11-17'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
   ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', '0874da2c14e5efbe2e938ab57552695b724b46618e7e452c4f2ba637f3217929', '2026-10-11'),

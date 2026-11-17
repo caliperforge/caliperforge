@@ -809,7 +809,7 @@ test('a standing 0-line brief on a research ask goes to research', async () => {
 test('a Measure line only under Parent ticket stays on pr_path', async () => {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))
-  put(w.root, ID, 'ask.md', `${askOf(w)}\n## Parent ticket\n\n**Measure:** time one tick\n`)
+  put(w.root, ID, 'ask.md', `${askOf(w)}\n**What:** time one tick\n**When it ends:** the tick is timed\n\n## Parent ticket\n\n**Measure:** time one tick\n`)
   put(w.root, ID, 'issue.md', estimated(plain(w), 0))
 
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })

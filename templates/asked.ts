@@ -39,4 +39,4 @@ export const measured = (ask: string): boolean => {
   return [...(parent === -1 ? lines : lines.slice(0, parent)), ...ruling(lines).block].some((l) => l.startsWith('**Measure:**'))
 }
 
-export const unasked =(ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
+export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)

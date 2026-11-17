@@ -20,6 +20,7 @@ import { landed } from './landed.ts'
 import { firstLine } from './unpolled.ts'
 import { relayed } from './relayed.ts'
 import { moved } from './reroute.ts'
+import { own } from './misrouted.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 const CUT = 6000
@@ -227,8 +228,7 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
   if (row.plan !== null) return row.plan
   const held = planOfOrigin(db, row.url)
   if (held !== null) return linkPart(db, parent.id, n, held)
-  // A part's own lines end at its first blank line; the parent's ask and comments follow, and may carry their own `**Measure:**`.
-  return made(db, root, parent, n, row, (row.body.split('\n\n')[0] ?? '').includes(`\n${MEASURE}`))
+  return made(db, root, parent, n, row, own(row.body))
 }
 
 function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }, measured: boolean): number {

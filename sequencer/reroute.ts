@@ -29,6 +29,10 @@ export function moved(db: Db, root: string, id: number): void {
     if (pipe === null) throw new Error(`no ${LANE.research.pipe} pipe`)
     toResearch(db, id, pipe.id, LANE.research.seat)
   })()
+  aside(root, id)
+}
+
+export function aside(root: string, id: number): void {
   for (const name of ['refusal.md', 'question.md', 'issue.md']) {
     if (maybe(root, id, name) !== null) move(root, id, name, name.replace('.md', '.prev.md'))
   }

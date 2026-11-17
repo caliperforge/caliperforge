@@ -29,6 +29,7 @@ import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
 import { ripe, sitedata } from './site.ts'
 import { relane } from './relane.ts'
+import { misrouted } from './misrouted.ts'
 import { evict, noting } from './evict.ts'
 import { landless } from './landless.ts'
 import { longJobs } from './long-job.ts'
@@ -48,6 +49,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   accounts(db, root, now)
   ripe(db, now)
   relane(db)
+  misrouted(db, root, now)
   longJobs(db, root, now)
   if (registry !== undefined) await watched(db, root, registry, now, read, labels)
   if (labels !== undefined) { (lines ?? []).push(...landless(db, root, labels), ...intake(db, root, labels), ...refill(db, root, labels, now)); await harvested(db, root, provider, now, labels) }

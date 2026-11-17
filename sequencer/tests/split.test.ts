@@ -5,6 +5,11 @@ import { shape, split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
+import { misrouted } from '../misrouted.ts'
+import { moved } from '../reroute.ts'
+import { holdOf } from '../../store/holds.ts'
+import { take } from '../../store/leases.ts'
+import { openRefusals, refused } from '../../store/refusals.ts'
 import { refilled } from '../refill.ts'
 import { unrelayed } from '../relayed.ts'
 import { unran } from '../reproduced.ts'
@@ -22,7 +27,7 @@ import { logged, ofKind, pointers, runLogged, runRows } from '../../store/events
 import { LANE, priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { allPlans, dropPlan, end, finish, putPlan } from '../../store/plans.ts'
+import { allPlans, dropPlan, end, finish, holdOn, putPlan } from '../../store/plans.ts'
 import { afterOf, recordListing } from '../../store/tickets.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -656,6 +661,46 @@ test('a measure part goes to the measurer; the rest build', () => {
   expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research', seat: LANE.research.seat, state: 'queued' })
   expect(maybe(w.root, b, 'ask.md')).toContain('**Measure:** runs a day, by cf measure')
   expect(question(w.root, plan(w.db, b))).toMatchObject({ outcome: 'pass' })
+})
+
+function forced(): { w: World; a: number; b: number } {
+  const w = mine()
+  put(w.root, ID, 'ask.md', '# t\n\n**Measure:** the parent counts too\n')
+  parted(w.db, w.root, plan(w.db, ID), split(FENCE(BUILD, COUNT)) ?? [], watched([], w.root, ID))
+  const [a, b] = [partPlan(w, 0) ?? 0, partPlan(w, 1) ?? 0]
+  moved(w.db, w.root, a)
+  return { w, a, b }
+}
+
+test('a part on research by its parent Measure goes back to build', () => {
+  const { w, a, b } = forced()
+  put(w.root, a, 'refusal.md', 'nothing found\n')
+  refused(w.db, { plan: a, step: 1, fingerprint: 'f'.repeat(64), diff: null })
+  holdOn(w.db, a, 'nothing found', ID, '2026-12-01T00:00:00.000Z')
+  misrouted(w.db, w.root, new Date())
+  const parent = plan(w.db, ID)
+  const lane = parent.lane ?? 'machine'
+  expect(plan(w.db, a)).toMatchObject({ template: parent.template, pipe_id: parent.pipe_id, lane,
+    seat: parent.seat ?? LANE.machine.seat, state: 'queued', step: 0, retries: 0, wait_reason: null })
+  expect(holdOf(w.db, a)).toEqual({ held_by: null, held_why: null })
+  expect(openRefusals(w.db, a)).toEqual([])
+  expect([maybe(w.root, a, 'refusal.md'), maybe(w.root, a, 'refusal.prev.md')]).toEqual([null, 'nothing found\n'])
+  expect(ofKind(w.db, 'return').map((e) => [e.plan, e.message])).toEqual([[a, `research → ${lane}: its own lines carry no **Measure:**`]])
+  expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research' })
+})
+
+test.each([
+  { by: 'a research parent', set: (w: World) => { w.db.exec(`UPDATE plans SET template = 'research' WHERE id = ${String(ID)}`) } },
+  { by: 'done', set: (w: World, a: number) => { end(w.db, a, 'done') } },
+  { by: 'refused', set: (w: World, a: number) => { end(w.db, a, 'refused') } },
+  { by: 'a live lease', set: (w: World, a: number) => { take(w.db, a) } },
+])('a research part stays put under $by', ({ set }) => {
+  const { w, a } = forced()
+  set(w, a)
+  const before = plan(w.db, a)
+  misrouted(w.db, w.root, new Date())
+  expect(plan(w.db, a)).toEqual(before)
+  expect(ofKind(w.db, 'return')).toEqual([])
 })
 
 test('an outside measure part is one COO gate on the parent', () => {

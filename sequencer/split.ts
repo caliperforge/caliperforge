@@ -19,12 +19,10 @@ import { words } from './signals.ts'
 import { landed } from './landed.ts'
 import { firstLine } from './unpolled.ts'
 import { relayed } from './relayed.ts'
-import { moved } from './reroute.ts'
-import { own } from './misrouted.ts'
+import { MEASURE, moved, own } from './reroute.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 const CUT = 6000
-const MEASURE = '**Measure:**'
 
 /**
  * Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts

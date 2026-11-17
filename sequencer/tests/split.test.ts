@@ -5,8 +5,7 @@ import { shape, split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
-import { misrouted } from '../misrouted.ts'
-import { moved } from '../reroute.ts'
+import { misrouted, moved, rerouted } from '../reroute.ts'
 import { holdOf } from '../../store/holds.ts'
 import { take } from '../../store/leases.ts'
 import { openRefusals, refused } from '../../store/refusals.ts'
@@ -27,7 +26,7 @@ import { logged, ofKind, pointers, runLogged, runRows } from '../../store/events
 import { LANE, priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { allPlans, dropPlan, end, finish, holdOn, putPlan } from '../../store/plans.ts'
+import { allPlans, dropPlan, end, finish, holdOn, planRows, putPlan } from '../../store/plans.ts'
 import { afterOf, recordListing } from '../../store/tickets.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -663,12 +662,12 @@ test('a measure part goes to the measurer; the rest build', () => {
   expect(question(w.root, plan(w.db, b))).toMatchObject({ outcome: 'pass' })
 })
 
-function forced(): { w: World; a: number; b: number } {
+function forced(send = (w: World, a: number): void => { moved(w.db, w.root, a) }): { w: World; a: number; b: number } {
   const w = mine()
   put(w.root, ID, 'ask.md', '# t\n\n**Measure:** the parent counts too\n')
   parted(w.db, w.root, plan(w.db, ID), split(FENCE(BUILD, COUNT)) ?? [], watched([], w.root, ID))
   const [a, b] = [partPlan(w, 0) ?? 0, partPlan(w, 1) ?? 0]
-  moved(w.db, w.root, a)
+  send(w, a)
   return { w, a, b }
 }
 
@@ -683,6 +682,7 @@ test('a part on research by its parent Measure goes back to build', () => {
   expect(plan(w.db, a)).toMatchObject({ template: parent.template, pipe_id: parent.pipe_id, lane,
     seat: parent.seat ?? LANE.machine.seat, state: 'queued', step: 0, retries: 0, wait_reason: null })
   expect(holdOf(w.db, a)).toEqual({ held_by: null, held_why: null })
+  expect(planRows(w.db).find((r) => r.id === a)).toMatchObject({ waits_on: null, held_until: null })
   expect(openRefusals(w.db, a)).toEqual([])
   expect([maybe(w.root, a, 'refusal.md'), maybe(w.root, a, 'refusal.prev.md')]).toEqual([null, 'nothing found\n'])
   expect(ofKind(w.db, 'return').map((e) => [e.plan, e.message])).toEqual([[a, `research → ${lane}: its own lines carry no **Measure:**`]])
@@ -701,6 +701,13 @@ test.each([
   misrouted(w.db, w.root, new Date())
   expect(plan(w.db, a)).toEqual(before)
   expect(ofKind(w.db, 'return')).toEqual([])
+})
+
+test('a part the director sent to research stays there', () => {
+  const { w, a } = forced((w, a) => { holdOn(w.db, a, 'what does it count?', null); expect(rerouted(w.db, w.root, plan(w.db, a), '**Measure:** runs a day, by cf measure')).toBe(true) })
+  misrouted(w.db, w.root, new Date())
+  expect(plan(w.db, a)).toMatchObject({ template: 'research', lane: 'research' })
+  expect(ofKind(w.db, 'return').filter((e) => e.actor === 'tick')).toEqual([])
 })
 
 test('an outside measure part is one COO gate on the parent', () => {

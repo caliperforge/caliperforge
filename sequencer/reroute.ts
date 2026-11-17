@@ -3,7 +3,7 @@ import { LANE } from '../store/lanes.ts'
 import { lanePipe } from '../store/origins.ts'
 import { builderRan, internal, pipeNamed, type PlanRow } from '../store/plans.ts'
 import { toResearch } from '../store/reroute.ts'
-import { labelled } from '../templates/asked.ts'
+import { labelled, measured } from '../templates/asked.ts'
 import { unasked, work } from '../templates/research.ts'
 import { estimate, files, TEST } from './brief.ts'
 import { unhold } from './hold.ts'
@@ -15,7 +15,7 @@ const OUTPUT = '**Output:**'
 
 function asked(text: string): boolean {
   const out = labelled(text, OUTPUT)
-  return unasked(text).length === 0 && (out === undefined ? text.split('\n').some((l) => l.startsWith('**Measure:**')) : work(out) !== null)
+  return unasked(text).length === 0 && (out === undefined ? measured(text) : work(out) !== null)
 }
 
 function researchable(db: Db, plan: PlanRow, text: string): boolean {

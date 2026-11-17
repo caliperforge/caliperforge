@@ -33,4 +33,10 @@ export const said = (ask: string) => {
   })
 }
 
-export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
+export const measured = (ask: string): boolean => {
+  const lines = ask.split('\n')
+  const parent = lines.findIndex((l) => l === '## Parent ticket' || l === '## Parent comments')
+  return [...(parent === -1 ? lines : lines.slice(0, parent)), ...ruling(lines).block].some((l) => l.startsWith('**Measure:**'))
+}
+
+export const unasked =(ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)

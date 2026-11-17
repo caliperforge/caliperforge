@@ -22,7 +22,7 @@ import { originRef, type PlanRow } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
 import { transcripts } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
-import { labelled, said, unasked } from './asked.ts'
+import { labelled, measured as ownMeasure, said, unasked } from './asked.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { planted } from './rooted.ts'
 import { verified, type Ran } from './verified.ts'
@@ -202,7 +202,7 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
   const { out } = folder
   const job = exited(db, root, plan)
-  const measure = measured || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
+  const measure = measured || ownMeasure(ask)
   const runs = fetch || (!measure && out !== undefined) ? 'fetcher' : measure || job !== null ? 'measurer' : null
   const seat = runs === null ? step : { ...step, seat: runs, runs }
   if (out !== undefined) mkdirSync(out, { recursive: true })

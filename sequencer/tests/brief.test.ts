@@ -806,6 +806,16 @@ test('a standing 0-line brief on a research ask goes to research', async () => {
   expect(maybe(w.root, ID, 'issue.prev.md')).toBe(standing)
 })
 
+test('a Measure line only under Parent ticket stays on pr_path', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  put(w.root, ID, 'ask.md', `${askOf(w)}\n## Parent ticket\n\n**Measure:** time one tick\n`)
+  put(w.root, ID, 'issue.md', estimated(plain(w), 0))
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
+  expect(plan(w.db, ID)).toMatchObject({ template: 'pr_path', lane: 'machine' })
+})
+
 test('D4: a brief estimating 3 lines is written as before', async () => {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))

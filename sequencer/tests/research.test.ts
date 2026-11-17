@@ -835,8 +835,8 @@ test('runs D2: runs.json holds every run, oldest first', async () => {
     .toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }, { command: 'uv run warm.py', output: 'warm start:\n  9 ms' }])
 })
 
-test('measure D1: an ask with no Measure line fires researcher', async () => {
-  const w = researching()
+test.each([ASK, `${ASK}\n## Parent ticket\n\n**Measure:** time the cold start\n`])('an ask with no own Measure line fires researcher', async (ask) => {
+  const w = researching(ask)
   question(w.root, plan(w.db, 1))
   const [outcome, prompt] = await gathered(w)
   expect(outcome).toMatchObject({ outcome: 'pass' })

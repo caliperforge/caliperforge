@@ -1,0 +1,6 @@
+- name: github_read_bare_repo
+  table: events
+  column: at
+  where: "kind = 'github_read' AND outcome = 'refuse' AND message LIKE '%is not github.com/<owner>/<repo>%' AND message NOT LIKE '%.%/%@%'"
+  gap: 7d
+  expected: 0

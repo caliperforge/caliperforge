@@ -8,5 +8,6 @@ tools:
   - Write
   - Edit
   - Bash(node:*)
+  - Bash(gh workflow run:*)
 write_paths:
   - ~/cf_work

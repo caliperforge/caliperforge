@@ -242,6 +242,7 @@ function ranOutside(packet: Packet, args: unknown): string | null {
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
   const rest = unmoved(packet.cwd, command)
+  if (packet.tools.includes('Bash(gh workflow run:*)') && DISPATCH.test(rest)) return null
   if (ghWrite(rest)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
   const refused = `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
   if (packet.tools.includes('Bash(git submodule add:*)') && /^git(?:\s|$)/.test(rest)) {
@@ -266,6 +267,9 @@ const PINNED = /^git -C lib\/([\w-][\w.-]*) checkout [0-9a-f]{7,40}$/
 /** The only git a seat holding `Bash(git clone:*)` runs: a github https clone under `.cf/measure/`, and its pin. */
 const CLONE = /^git clone https:\/\/github\.com\/[\w-]+\/[\w.-]+ \.cf\/measure\/([\w-][\w.-]*)$/
 const MEASURED = /^git -C \.cf\/measure\/([\w-][\w.-]*) checkout [0-9a-f]{7,40}$/
+
+/** The only gh a seat holding `Bash(gh workflow run:*)` runs: one workflow on main of one of our repos. */
+const DISPATCH = /^gh workflow run \w[\w-]*(?:\.ya?ml)? --repo caliperforge\/[\w.-]+ --ref main$/
 
 function unmoved(cwd: string, command: string): string {
   const cd = CD.exec(command)

@@ -21,6 +21,11 @@ When the input carries `# Long job`, the job has exited: write the answer from i
 anywhere in the reply, and cite the job as a `- run:` entry whose `command:` is the `**Run:**` command exactly and
 whose `quote:` is copied from the log.
 
+## Dispatch
+
+The one gh you run is `gh workflow run <workflow> --repo caliperforge/<repo> --ref main`, exactly that shape. Cite
+its printed output as a `- run:` entry like any other run.
+
 ## Quote
 
 Quote the output word for word, never paraphrase. Each `quote:` is copied exactly from one command's output.

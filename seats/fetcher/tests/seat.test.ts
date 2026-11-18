@@ -7,7 +7,7 @@ const root = join(import.meta.dirname, '../../..')
 
 test('D4: the manifest runs node and writes under ~/cf_work', () => {
   expect(seat(root, 'fetcher').manifest).toEqual({
-    seat: 'fetcher', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash(node:*)'], write_paths: ['~/cf_work'],
+    seat: 'fetcher', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash(node:*)', 'Bash(gh workflow run:*)'], write_paths: ['~/cf_work'],
   })
 })
 

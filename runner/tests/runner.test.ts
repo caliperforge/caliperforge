@@ -206,6 +206,24 @@ test('1433a D2 D3 every other git is refused and the seat stays', () => {
     'git checkout 2aee380', 'git status', 'git push']) expect(gate(p, bash(command))).toMatchObject(refusal(command))
 })
 
+test('the fetcher dispatches one workflow on main of our repo', () => {
+  const p = held(seat(root, 'fetcher').manifest.tools)
+  const run = 'gh workflow run keychain-runbook.yml --repo caliperforge/ledger-rig --ref main'
+  for (const command of [run, 'gh workflow run keychain-runbook --repo caliperforge/ledger-rig --ref main']) {
+    expect(gate(p, bash(command))).toEqual({ continue: true })
+  }
+  for (const command of ['gh workflow run keychain-runbook.yml --repo acme/ledger-rig --ref main',
+    'gh workflow run keychain-runbook.yml --repo caliperforge/ledger-rig --ref dev', `${run} -f x=y`,
+    'gh workflow run keychain-runbook.yml -R caliperforge/ledger-rig --ref main', `${run} && gh pr comment 1`,
+    'gh workflow run -f --repo caliperforge/ledger-rig --ref main',
+    'gh workflow disable keychain-runbook.yml --repo caliperforge/ledger-rig', 'gh run view 1 --repo caliperforge/ledger-rig --log',
+    'gh api -X POST repos/caliperforge/ledger-rig/actions/workflows/x.yml/dispatches']) expect(gate(p, bash(command))).toMatchObject(denied)
+  for (const tools of [['Bash(gh:*)'], ['Bash(gh api:*)']]) {
+    expect(gate(held(tools), bash(run))).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny',
+      permissionDecisionReason: `ruling:seat.tools refuses ${JSON.stringify(run)}: gh runs only as a gh api GET read` } })
+  }
+})
+
 test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
   const p = packet(seat(root, 'kotlin_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT)
   expect(p.tools).toContain('Bash(gradle:*)')

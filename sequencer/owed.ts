@@ -4,6 +4,7 @@ import { isScalar, parseDocument } from 'yaml'
 import type { Board } from '../rails/ci-green/index.ts'
 import { carried } from '../rails/completion-audit/index.ts'
 import type { Verdict } from '../rails/record.ts'
+import { triggered } from './push.ts'
 import { maybe, srcDir } from './workspace.ts'
 
 interface Owed { file: string; name: string }
@@ -12,14 +13,16 @@ interface Owed { file: string; name: string }
 export function owed(root: string, plan: number, src = srcDir(root, plan)): Owed[] {
   const rows = carried(maybe(root, plan, 'step-2.handback.md') ?? '')
   if (typeof rows === 'string') return []
-  return [...rows.values()].filter((row) => row.status === 'ci').map((row) => {
-    const file = (row.pointer ?? '').split(':')[0] ?? ''
-    return { file, name: named(join(src, file)) ?? file }
-  })
+  return [...rows.values()].filter((row) => row.status === 'ci')
+    .map((row) => (row.pointer ?? '').split(':')[0] ?? '')
+    .filter((file) => !isFile(join(src, file)) || triggered(readFileSync(join(src, file), 'utf8')))
+    .map((file) => ({ file, name: named(join(src, file)) ?? file }))
 }
 
+const isFile = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isFile() === true
+
 function named(path: string): string | null {
-  if (statSync(path, { throwIfNoEntry: false })?.isFile() !== true) return null
+  if (!isFile(path)) return null
   const name = parseDocument(readFileSync(path, 'utf8')).get('name', true)
   return isScalar(name) && typeof name.value === 'string' ? name.value : null
 }

@@ -1030,7 +1030,14 @@ test('a ci-owed plan no fork workflow runs on goes to the ceo', async () => {
   expect(ciGreen(w)).toEqual([])
 })
 
-const now = (w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
+test('a ci row on a schedule-only workflow stands on checks', async () => {
+  const w = await railedOn(SCHEDULED)
+  put(w.root, 1, 'step-2.handback.md', OWING.replace(KEYCHAIN, '.github/workflows/weekly.yml'))
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, () => '[]'))).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+})
+
+const now =(w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
 
 test('a CI hold leaves a waiting on CI row in now', async () => {
   const w = await AT_CI()

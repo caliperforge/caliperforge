@@ -305,7 +305,7 @@ export function workflows(dir: string): boolean {
 const TRIGGERS = ['push', 'pull_request']
 
 /** A file that does not parse, or whose `on` has no known shape, counts as one that runs. */
-function triggered(text: string): boolean {
+export function triggered(text: string): boolean {
   const doc = parseDocument(text)
   return (doc.errors.length === 0 ? events(doc.get('on', true)) : null)?.some((e) => TRIGGERS.includes(e)) ?? true
 }

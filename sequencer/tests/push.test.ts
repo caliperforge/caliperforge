@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { flag } from '../../store/precedent-findings.ts'
 import { profile } from '../../store/profile.ts'
 import { setEvidence } from '../../store/targets.ts'
 import { tick } from '../index.ts'
+import { owed } from '../owed.ts'
 import { forkCi, messageOf, sent, type Wire } from '../push.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { GREPTILED, RULED, THEIR_RULE } from './bases.ts'
@@ -39,6 +41,21 @@ test('D1 D2 D3 .greptile/config.json holds both rule sets', async () => {
 test('D4 a .greptile folder with no config.json gets ours alone', async () => {
   const { git, made } = await tipped(RULED)
   expect(JSON.parse(git(['show', `${made}:.greptile/config.json`])) as unknown).toEqual({ autoReview: [], rules: [OURS] })
+})
+
+const DAILY = 'name: daily\n\non:\n  schedule:\n    - cron: "0 11 * * *"\n  workflow_dispatch:\n'
+
+test('a ci row on a schedule-only workflow is not owed', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-owed-'))
+  const src = join(root, 'tree')
+  mkdirSync(join(src, '.github/workflows'), { recursive: true })
+  const flows = { 'daily.yml': DAILY, 'push.yml': 'on: push\n', 'pr.yml': 'on: [pull_request, workflow_dispatch]\n',
+    'beside.yml': `${DAILY}  push:\n`, 'broken.yml': 'on: [push\n' }
+  for (const [name, body] of Object.entries(flows)) writeFileSync(join(src, '.github/workflows', name), body)
+  const files = [...Object.keys(flows), 'gone.yml'].map((f) => `.github/workflows/${f}`)
+  const rows = files.map((f, at) => `  - id: D${String(at + 1)}\n    status: ci\n    pointer: ${f}:1\n`).join('')
+  put(root, 1, 'step-2.handback.md', `built\n\n---\nsummary: s\ndone:\n${rows}---\n`)
+  expect(owed(root, 1, src)).toEqual(files.slice(1).map((file) => ({ file, name: file.endsWith('beside.yml') ? 'daily' : file })))
 })
 
 test('a held fork branch with no pr goes out squashed over base', { timeout: 90_000 }, async () => {

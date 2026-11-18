@@ -234,7 +234,7 @@ test('a throw blocks one plan on the director, others step',async () => {
   expect(first.find((f) => f.plan === 1)?.spans).toContain('machine_fault')
   expect(first.find((f) => f.plan === 2)).toMatchObject({ pipe: 'research' })
   expect(plan(w.db, 1).step).toBe(6)
-  expect(maybe(w.root, 1, 'refusal.md')).toBe(null)
+  expect(maybe(w.root, 1, 'refusal.md')).toMatch(/^step 6 ready [\s\S]*\n {2}- machine_fault\n/)
   expect(refusalRows(w.db, 1)).toEqual([])
 })
 

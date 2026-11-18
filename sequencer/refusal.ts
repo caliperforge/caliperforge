@@ -1,9 +1,10 @@
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import type { PlanRow } from '../store/plans.ts'
 import { briefsInRow, BUILD, fingerprint, refusalRows, WHY, type Why } from '../store/refusals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
-import { maybe, put } from './workspace.ts'
+import { maybe, move, put } from './workspace.ts'
 
 /** Builds a plan runs, since a ceo or coo last returned or retried it, before the next waits for the director, whatever `clear()` and `retry()` reset. */
 export const BUILDS = 5
@@ -78,4 +79,13 @@ export function refusalText(step: Step, outcome: Outcome): string {
   const spans = outcome.spans.length === 0 ? '  (none named)' : outcome.spans.map((s) => `  - ${s}`).join('\n')
   const words = outcome.message === undefined ? '' : `\n${outcome.message}\n`
   return `step ${String(step.step)} ${step.name} refused by ${step.runs}\n\n${outcome.note}\n\nspans:\n${spans}\n${words}`
+}
+
+/** Keeps refusal.md on the stop a settled outcome leaves: a refusal or a pr_path stop past the build writes it, a pr_path pass moves its own step's aside. */
+export function restated(root: string, plan: PlanRow, step: Step, outcome: Outcome): void {
+  const stop = outcome.outcome === 'needs_ceo' || outcome.outcome === 'needs_coo'
+  if (outcome.outcome === 'refuse') { put(root, plan.id, 'refusal.md', refusalText(step, outcome)); return }
+  if (plan.template !== 'pr_path' || outcome.rewind !== undefined) return
+  if (stop && step.step > BUILD) put(root, plan.id, 'refusal.md', refusalText(step, outcome))
+  if (!stop && maybe(root, plan.id, 'refusal.md')?.startsWith(`step ${String(step.step)} `) === true) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
 }

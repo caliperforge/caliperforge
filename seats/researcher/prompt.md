@@ -17,6 +17,10 @@ List every URL the answer relies on, one entry each. A claim with no entry is no
 
 Pin every GitHub URL to a commit sha, never main/master/HEAD.
 
+Read a GitHub Actions job log with `gh api repos/<owner>/<repo>/actions/jobs/<job id>/logs`, run alone with no pipe.
+When the output is too long to show, it is saved to a file the tool names: Grep that file. The `url:` of a log quote
+is the job's page, `https://github.com/<owner>/<repo>/actions/runs/<run id>/job/<job id>`.
+
 ## Nothing found
 
 When nothing was found, say so plainly in prose and close with `sources: []`.

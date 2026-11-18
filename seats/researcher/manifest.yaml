@@ -9,4 +9,5 @@ tools:
   - WebFetch
   - Write
   - Bash(cf research check:*)
+  - Bash(gh api:*)
 write_paths: [.cf/draft.md]

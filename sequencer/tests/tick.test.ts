@@ -1037,7 +1037,7 @@ test('a ci row on a schedule-only workflow stands on checks', async () => {
   expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
 })
 
-const now =(w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
+const now = (w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
 
 test('a CI hold leaves a waiting on CI row in now', async () => {
   const w = await AT_CI()

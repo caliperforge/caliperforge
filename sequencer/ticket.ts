@@ -1,14 +1,13 @@
 import { file, LANE, laneOf } from '../cli/plan.ts'
-import { returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import type { Lane } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { alike } from '../store/refusals.ts'
+import { built } from './built.ts'
 import { compared, type Cover, covered } from './covered.ts'
-import { hold, unhold } from './hold.ts'
+import { hold } from './hold.ts'
 import type { Wire } from './push.ts'
-import { rule } from './rule.ts'
-import { afresh, maybe, put } from './workspace.ts'
+import { maybe, put } from './workspace.ts'
 
 const ALIKE = 3
 
@@ -25,14 +24,7 @@ export function ticketed(db: Db, root: string, plan: PlanRow, title: string, bod
 function acted(db: Db, root: string, plan: PlanRow, cover: Cover, lane: Lane, title: string, body: string, why: string, wire: Wire,
   now: Date): string | false {
   switch (cover.verdict) {
-    case 'landed': {
-      const to = rule(db, root, plan, 'director', `#${String(cover.no)} landed this as ${cover.sha}: build on top of ${cover.sha} and use what it added; do not build it again.`)
-      if (to !== null && (plan.state === 'blocked_on_ceo' || plan.state === 'halted')) {
-        if (to === 'ask.md') unhold(db, root, plan.id, 'director')
-        else afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
-      }
-      return to === null ? false : cover.url
-    }
+    case 'landed': return built(db, root, plan, cover, LANE[lane].home)
     case 'open':
       wire.amend?.(LANE[lane].home, cover.no, `- Also hit on plan ${String(plan.id)}: ${why.split('\n')[0] ?? ''}`)
       hold(db, root, plan.id, `${cover.url}\n\n${why}`, now, cover.plan)

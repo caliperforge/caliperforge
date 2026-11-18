@@ -31,7 +31,7 @@ import { kept } from './merge.ts'
 import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
-import { branchOf, checkout, cloned, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
+import { branchOf, checkout, cloned, diffOf, internalBranch, maybe, move, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, forkOf, homeOf, onto } from './home.ts'
 import { rebranched, rehomed } from './rehomed.ts'
 import { BUILDS, capped, fingerprintOf, looped, refusalText, stopped, streak, STREAK } from './refusal.ts'
@@ -248,21 +248,20 @@ function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome, green: Green): string {
   if (outcome.held === true) return 'running'
   if (outcome.blip === true) return blip(db, root, plan, step, outcome)
-  if (outcome.split === true || outcome.ran === true) {
-    end(db, plan.id, 'done')
-    return 'done'
-  }
+  if (outcome.split === true || outcome.ran === true) { end(db, plan.id, 'done'); return 'done' }
   if (outcome.outcome === 'refuse') put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   if (outcome.rewind !== undefined && outcome.outcome !== 'refuse') {
     rewind(db, plan.id, outcome.rewind)
     return 'running'
   }
   if (outcome.outcome === 'needs_ceo' || outcome.outcome === 'needs_coo') {
+    if (plan.template === 'pr_path' && step.step > BUILD) put(root, plan.id, 'refusal.md', refusalText(step, outcome))
     if (repeated(root, plan, step)) { outcome.quiet = true; if (step.fires !== 'brief') return plan.state }
     needsCeo(db, plan, outcome.note)
     return 'blocked_on_ceo'
   }
   if (outcome.outcome !== 'refuse') {
+    if (plan.template === 'pr_path' && maybe(root, plan.id, 'refusal.md')?.startsWith(`step ${String(step.step)} `) === true) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
     const write = proved(db, root, plan, step)
     return db.transaction((): string => {
       write()

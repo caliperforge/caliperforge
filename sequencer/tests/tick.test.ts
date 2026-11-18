@@ -486,6 +486,7 @@ test('a review needs_ceo holds for the coo with its question', async () => {
   expect(plan1.filter((e) => e.actor === 'code_quality').map((e) => e.outcome)).toEqual(['escalate'])
   expect(plan1.filter((e) => e.kind !== 'director' && e.outcome === 'needs_ceo')).toEqual([])
   expect(eventsOf(w.db, 1, 'director')).toHaveLength(1)
+  expect(planFile(w.root, 'refusal.md')).toMatch(/^step 4 /)
 })
 
 test('a repeat escalate on an unchanged tree logs nothing', async () => {
@@ -748,8 +749,13 @@ test('a senior refusal rebuilds, then walks rails, review, senior', async () => 
   expect(planFile(w.root, 'refusal.md')).toContain(WORDS)
 
   const walked: string[] = []
-  for (let at = 0; at < 4; at += 1) walked.push((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.name ?? '')
+  const next = async (): Promise<void> => { walked.push((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.name ?? '') }
+  for (let at = 0; at < 3; at += 1) await next()
+  expect(planFile(w.root, 'refusal.md')).toContain(WORDS)
+  await next()
   expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
+  expect(maybe(w.root, 1, 'refusal.md')).toBeNull()
+  expect(planFile(w.root, 'refusal.prev.md')).toContain(WORDS)
 })
 
 const sends = (log: string[]): string[] => log.filter((l) => l.startsWith('send '))
@@ -890,11 +896,13 @@ test('a run still going is waited on past the first-run window', async () => {
 test('a gating run still going past 45 ticks goes to the COO', async () => {
   const w = await AT_CI()
   waited(w, 'ci.waits', 45)
+  put(w.root, 1, 'refusal.md', 'step 5 senior refused by senior_review\n\nthe build changed nothing since the last refusal\n')
   const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))))[0]
   expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['ci.pending'] })
   expect(out?.note).toMatch(/CI/)
   expect(ciGreen(w)).toEqual([])
   expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+  expect(planFile(w.root, 'refusal.md')).toMatch(/^step 6 ready refused by ready\n[\s\S]*\n {2}- ci\.pending\n/)
 })
 
 test('an unparked plan starts its CI window at tick 1', async () => {

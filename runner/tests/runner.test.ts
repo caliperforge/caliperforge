@@ -148,6 +148,14 @@ test('D4 gh outside gh api is denied whatever pattern is held', () => {
   }
 })
 
+test('the researcher reads a job log, no gh run, pipe or write', () => {
+  const p = held(seat(root, 'researcher').manifest.tools)
+  expect(gate(p, bash('gh api repos/o/r/actions/jobs/1/logs'))).toEqual({ continue: true })
+  for (const command of ['gh run view 1 --repo o/r --log', 'gh api repos/o/r/actions/jobs/1/logs | grep phase', 'gh api -X POST repos/o/r/issues']) {
+    expect(gate(p, bash(command))).toMatchObject(denied)
+  }
+})
+
 const SUBMODULE = ['Read', 'Bash(git submodule add:*)']
 const fenced = (paths: string[], tools = SUBMODULE): Packet => ({ ...held(tools), refuse: (path) => refuse(cwd, paths, path) })
 const refusal = (command: string) => ({ continue: true, hookSpecificOutput: { permissionDecision: 'deny',

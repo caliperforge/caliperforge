@@ -170,6 +170,27 @@ const serve = (body: string | Uint8Array<ArrayBuffer>, type?: string): void => {
 
 const quoted = (url: string, quote: string): string => JSON.stringify([{ url, fetched_at: '2026-10-04T10:00:00Z', quote, claim: 'c' }])
 
+const JOB = 'https://github.com/o/r/actions/runs/2/job/1'
+
+/** A gh on PATH that runs `script`. */
+const gh = (script: string): void => {
+  const bin = mkdtempSync(join(tmpdir(), 'cf-gh-'))
+  writeFileSync(join(bin, 'gh'), `#!/bin/sh\n${script}\n`, { mode: 0o755 })
+  vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`)
+}
+
+test('a quote cited to a job page is checked against its log', async () => {
+  gh('[ "$*" = "api repos/o/r/actions/jobs/1/logs" ] && printf "2026-11-16T10:00:00Z phase 5:\\n  12 rows\\n"')
+  expect(await checked('Phase 5 wrote 12 rows [source:1].', quoted(JOB, 'phase 5: 12 rows'))).toMatchObject({ outcome: 'pass' })
+  expect(fetched).not.toHaveBeenCalled()
+})
+
+test('a job log gh cannot read is a dead source', async () => {
+  gh('echo "HTTP 404: Not Found" >&2\nexit 1')
+  expect(await checked('Phase 5 wrote 12 rows [source:1].', quoted(JOB, 'phase 5: 12 rows')))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.dead_source'], note: expect.stringContaining(`dead source: ${JOB} (`) as unknown })
+})
+
 const HTML = '<html><head><style>p { color: red }</style><SCRIPT type="x">var decoy = "The cap is 9."</script></head>'
   + '<body><p>Explore and contribute to open issues: <a href="x">GitHub Issues</a> &amp; more</p></body></html>'
 

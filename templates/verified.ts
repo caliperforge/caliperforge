@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { shell } from '../rails/ci-green/index.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import type { Source } from './research.ts'
 
@@ -50,13 +51,20 @@ async function seen(url: string, res: Response): Promise<string | null> {
   return pathname.endsWith('.md') || hostname === 'raw.githubusercontent.com' ? text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') : text
 }
 
-const page = (url: string): Promise<Page> => fetch(url).then(
+const JOB = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/\d+\/job\/(\d+)(?:[?#]\S*)?$/
+
+const dead = (error: unknown): Page => ({ ok: false, text: error instanceof Error ? error.message : String(error), span: 'research.dead_source' })
+
+const log = (url: string): Promise<Page> => new Promise<string>((resolve) => { resolve(shell(['api', url.replace(JOB, 'repos/$1/$2/actions/jobs/$3/logs')])) })
+  .then((text): Page => ({ ok: true, text: flat(text) }), dead)
+
+const page = (url: string): Promise<Page> => JOB.test(url) ? log(url) : fetch(url).then(
   async (res): Promise<Page> => {
     if (!res.ok) return { ok: false, text: String(res.status), span: 'research.dead_source' }
     const text = await seen(url, res)
     return text === null ? { ok: false, text: url, span: 'research.pdf_unread' } : { ok: true, text: flat(text) }
   },
-  (error: unknown): Page => ({ ok: false, text: error instanceof Error ? error.message : String(error), span: 'research.dead_source' }))
+  dead)
 
 export interface Ran { command: string; output: string }
 

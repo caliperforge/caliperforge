@@ -16,17 +16,17 @@ function copied(): string {
   return tree
 }
 
-test('D1: the manifest writes only its draft and checks it', () => {
+test('D1: the manifest writes its draft, checks it, reads gh api', () => {
   expect(seat(root, 'researcher').manifest).toEqual({
     seat: 'researcher', model: 'claude-opus-5-5', effort: 'medium',
-    tools: ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'Write', 'Bash(cf research check:*)'], write_paths: ['.cf/draft.md'],
+    tools: ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'Write', 'Bash(cf research check:*)', 'Bash(gh api:*)'], write_paths: ['.cf/draft.md'],
   })
 })
 
-test('D2: its only writers are Write and the draft check', () => {
+test('D2: its writers are Write, the draft check and gh api', () => {
   const tools = seat(root, 'researcher').manifest.tools
   expect(tools).toEqual(expect.arrayContaining(['WebSearch', 'WebFetch']))
-  expect(tools.filter((t) => WRITERS.has(bare(t)))).toEqual(['Write', 'Bash(cf research check:*)'])
+  expect(tools.filter((t) => WRITERS.has(bare(t)))).toEqual(['Write', 'Bash(cf research check:*)', 'Bash(gh api:*)'])
 })
 
 test('D3: the prompt holds the four rules and the sources fence', () => {
@@ -42,6 +42,8 @@ test('D3: the prompt holds the four rules and the sources fence', () => {
     'Quote marks are only for words a person typed in a comment, review or doc, copied exactly, typos included.',
     '(opened, merged, closed, assigned, labelled)', 'stated in plain words with the URL, never in quote marks',
     'A table is not a quote.', 'no sentence says what you did or checked',
+    '`gh api repos/<owner>/<repo>/actions/jobs/<job id>/logs`, run alone with no pipe',
+    '`https://github.com/<owner>/<repo>/actions/runs/<run id>/job/<job id>`',
   ]) expect(prompt).toContain(part)
 })
 

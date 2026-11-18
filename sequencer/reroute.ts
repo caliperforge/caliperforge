@@ -45,13 +45,21 @@ export function aside(root: string, id: number): void {
   }
 }
 
+function machine(db: Db, parent: PlanRow): PlanRow {
+  lanePipe(db, LANE.machine.pipe)
+  const pipe = pipeNamed(db, LANE.machine.pipe)
+  if (pipe === null) throw new Error(`no ${LANE.machine.pipe} pipe`)
+  return { ...parent, template: LANE.machine.template, pipe_id: pipe.id, lane: 'machine', seat: LANE.machine.seat }
+}
+
 export function misrouted(db: Db, root: string, now: Date): void {
   const stray = researchParts(db).filter((r) => !own(r.body) && !measured(maybe(root, r.plan, 'ask.md') ?? '') && holder(db, r.plan, now) === null)
   for (const row of stray) {
     const parent = planById(db, row.parent)
-    const lane = parent.lane ?? 'machine'
     db.transaction(() => {
-      toBuild(db, row.plan, parent, lane, parent.seat ?? LANE.machine.seat)
+      const to = parent.template === 'research' ? machine(db, parent) : parent
+      const lane = to.lane ?? 'machine'
+      toBuild(db, row.plan, to, lane, to.seat ?? LANE.machine.seat)
       clear(db, row.plan)
       logged(db, { plan: row.plan, kind: 'return', actor: 'tick', outcome: 'pass', message: `research → ${lane}: its own lines carry no ${MEASURE}`, pointer: null, run: null })
     })()

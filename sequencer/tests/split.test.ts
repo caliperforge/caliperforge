@@ -26,7 +26,7 @@ import { logged, ofKind, pointers, runLogged, runRows } from '../../store/events
 import { LANE, priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { allPlans, dropPlan, end, finish, holdOn, planRows, putPlan } from '../../store/plans.ts'
+import { allPlans, dropPlan, end, finish, holdOn, pipeNamed, planRows, putPlan } from '../../store/plans.ts'
 import { afterOf, recordListing } from '../../store/tickets.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -689,8 +689,17 @@ test('a part on research by its parent Measure goes back to build', () => {
   expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research' })
 })
 
+test('a research part of a research parent goes to machine', () => {
+  const { w, a, b } = forced()
+  w.db.exec(`UPDATE plans SET template = 'research', lane = 'research', pipe_id = ${String(pipeNamed(w.db, 'research')?.id)} WHERE id = ${String(ID)}`)
+  misrouted(w.db, w.root, new Date())
+  expect(plan(w.db, a)).toMatchObject({ template: 'pr_path', pipe_id: pipeNamed(w.db, 'internal')?.id, lane: 'machine',
+    seat: LANE.machine.seat, state: 'queued', step: 0 })
+  expect(ofKind(w.db, 'return').map((e) => [e.plan, e.message])).toEqual([[a, 'research → machine: its own lines carry no **Measure:**']])
+  expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research' })
+})
+
 test.each([
-  { by: 'a research parent', set: (w: World) => { w.db.exec(`UPDATE plans SET template = 'research' WHERE id = ${String(ID)}`) } },
   { by: 'done', set: (w: World, a: number) => { end(w.db, a, 'done') } },
   { by: 'refused', set: (w: World, a: number) => { end(w.db, a, 'refused') } },
   { by: 'a live lease', set: (w: World, a: number) => { take(w.db, a) } },

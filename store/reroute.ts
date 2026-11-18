@@ -5,10 +5,10 @@ export function toResearch(db: Db, plan: number, pipe: number, seat: string): vo
   db.prepare("UPDATE plans SET template = 'research', lane = 'research', pipe_id = ?, seat = ? WHERE id = ?").run(pipe, seat, plan)
 }
 
-/** Open research plans that are parts of a parent off the research template. */
+/** Open research plans that are parts of any parent. */
 export function researchParts(db: Db): { plan: number; parent: number; body: string }[] {
-  return db.prepare(`SELECT p.plan, p.parent, p.body FROM parts p JOIN plans c ON c.id = p.plan JOIN plans o ON o.id = p.parent
-    WHERE c.template = 'research' AND c.state IN ('queued', 'running', 'blocked_on_ceo') AND o.template != 'research' ORDER BY p.plan`)
+  return db.prepare(`SELECT p.plan, p.parent, p.body FROM parts p JOIN plans c ON c.id = p.plan
+    WHERE c.template = 'research' AND c.state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY p.plan`)
     .all() as { plan: number; parent: number; body: string }[]
 }
 

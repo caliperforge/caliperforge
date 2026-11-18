@@ -1,12 +1,14 @@
 import { expect, test } from 'vitest'
-import { ofKind, pointers } from '../../store/events.ts'
-import type { Db } from '../../store/index.ts'
-import { pipeOf, planRows } from '../../store/plans.ts'
+import { addRun } from '../../store/brief.ts'
+import { eventsOf, ofKind, pointers } from '../../store/events.ts'
+import { holdOf } from '../../store/holds.ts'
+import { addRule, type Db } from '../../store/index.ts'
+import { pipeOf, planRows, putPlan } from '../../store/plans.ts'
 import { refused } from '../../store/refusals.ts'
 import { hold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { ticketed } from '../ticket.ts'
-import { maybe, SELF } from '../workspace.ts'
+import { maybe, put, SELF } from '../workspace.ts'
 import { internalPlan, issues, plan, world } from './world.ts'
 
 const now = new Date('2026-10-28T12:00:00.000Z')
@@ -66,15 +68,56 @@ test('a second run_pair ticket waits on the first bench plan', () => {
 
 test('a landed ticket over the refused span sends the job back', () => {
   const { db, root } = world()
-  refused(db, { plan: 1, step: 3, fingerprint: 'f'.repeat(64), diff: null, span: 'sequencer/push.ts:420' })
-  hold(db, root, 1, 'stopped', now, null, now)
+  const job = internalPlan(db, root, 5)
+  refused(db, { plan: job, step: 3, fingerprint: 'f'.repeat(64), diff: null, span: 'sequencer/push.ts:420' })
+  hold(db, root, job, 'stopped', now, null, now)
   const s = seen({ closed: [{ number: 2030, title: 'land keeps the close comment', body: 'Changes `sequencer/push.ts:410-430`.',
     url: LANDED, comments: [{ body: 'landed on main as 4cb0e875' }] }] })
-  expect(ticketed(db, root, plan(db, 1), 'the close comment is lost', 'body', 'why', wire(s), now)).toBe(LANDED)
+  expect(ticketed(db, root, plan(db, job), 'the close comment is lost', 'body', 'why', wire(s), now)).toBe(LANDED)
   expect(s.filed).toEqual([])
-  expect(maybe(root, 1, 'ask.md')).toContain('#2030 landed this as 4cb0e875: build on top of 4cb0e875')
-  expect(plan(db, 1).state).toBe('queued')
+  expect(maybe(root, job, 'ask.md')).toContain('#2030 landed this as 4cb0e875: build on top of 4cb0e875')
+  expect(plan(db, job).state).toBe('queued')
   expect(ofKind(db, 'covered')).toMatchObject([{ outcome: 'pass', message: expect.stringMatching(/: landed as 4cb0e875$/) as string }])
+})
+
+const FIX = 'the close comment is lost'
+const fixed = (no: number) => seen({ closed: [{ number: no, title: FIX, body: '', url: `https://github.com/${SELF}/issues/${String(no)}`,
+  comments: [{ body: 'landed on main as d85569e3' }] }] })
+
+test('a machine fix resumes a rubin plan once, then holds it', () => {
+  const { db, root } = world()
+  putPlan(db, { id: 2454, pipe_id: 1, target_id: null, template: 'pr_path', state: 'blocked_on_ceo', queued_at: '2026-09-18T00:00:00.000Z',
+    step: 6, retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/rubin-alert-monitor/issues/26' })
+  put(root, 2454, 'ask.md', '# rubin\n')
+  put(root, 2454, 'issue.md', '# rubin\n')
+  const stop = () => ticketed(db, root, plan(db, 2454), FIX, 'body', 'why', wire(fixed(2094)), now)
+  expect(stop()).toBe(`https://github.com/${SELF}/issues/2094`)
+  expect(eventsOf(db, 2454, 'resume')).toMatchObject([{ message: `#2094 landed the fix for this stop as d85569e3 on ${SELF}` }])
+  expect(eventsOf(db, 2454, 'return')).toMatchObject([{ message: 'step 6' }])
+  expect([maybe(root, 2454, 'ask.md'), maybe(root, 2454, 'issue.md')]).toEqual(['# rubin\n', '# rubin\n'])
+  hold(db, root, 2454, 'stopped', now, null, now)
+  expect(stop()).toBe(false)
+  expect(plan(db, 2454).state).toBe('blocked_on_ceo')
+  expect(holdOf(db, 2454)).toMatchObject({ held_by: 'coo', held_why: expect.stringMatching(/^repeat: /) as string })
+  expect(eventsOf(db, 2454, 'resume')).toHaveLength(1)
+})
+
+test('a built plan on its own repo gets the landed answer once', () => {
+  const { db, root } = world()
+  const job = internalPlan(db, root, 5)
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-25' })
+  addRun(db, { plan: job, step: 2, seat: 'typescript_specialist', rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm',
+    effort: 'high', input_tokens: 1, cache_write_tokens: 0, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 1, seconds: 1,
+    exit: 0, at: now.toISOString(), transcript_path: 'r.transcript.jsonl', cost_usd: 0 })
+  const stop = () => {
+    hold(db, root, job, 'stopped', now, null, now)
+    return ticketed(db, root, plan(db, job), FIX, 'body', 'why', wire(fixed(2094)), now)
+  }
+  expect(stop()).toBe(`https://github.com/${SELF}/issues/2094`)
+  expect(plan(db, job).state).toBe('queued')
+  expect(stop()).toBe(false)
+  expect(maybe(root, job, 'issue.md')?.split('#2094 landed this as d85569e3').length).toBe(2)
+  expect(holdOf(db, job)?.held_why).toMatch(/^repeat: #2094 landed this as d85569e3/)
 })
 
 test('an open ticket with a live plan holds the job on that plan', () => {

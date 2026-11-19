@@ -12,7 +12,7 @@ export function rehomed(root: string, plan: number, repo: string): void {
   if (cloned(src) && tried(src, ['remote', 'get-url', 'origin'])?.trim() !== remote(gitBase(root), `${FORK}/${repoName(repo)}`)) drop(root, plan, 'base.sha')
 }
 
-/** A plan not yet cut whose fork lists no heads; a missing or unreachable fork reads as not empty, and `checkout` meets it as before. */
+/** A missing or unreachable fork fails `ls-remote`, so it reads as not empty and is left to `checkout`. */
 export function empty(root: string, plan: number, repo: string): boolean {
   return maybe(root, plan, 'base.sha') === null
     && tried(planDir(root, plan), ['ls-remote', '--heads', remote(gitBase(root), `${FORK}/${repoName(repo)}`)]) === ''

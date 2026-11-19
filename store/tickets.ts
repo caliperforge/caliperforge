@@ -46,6 +46,11 @@ export function afters(db: Db, repo: string, no: number): { n: number; closed_at
   return rows.map((r) => ({ ...r, open: r.open === 1 }))
 }
 
+export function completed(db: Db, url: string): boolean {
+  return db.prepare(`SELECT 1 FROM tickets WHERE 'https://github.com/' || repo || '/issues/' || number = ?
+    AND closed_at IS NOT NULL AND state_reason = 'COMPLETED'`).get(url) !== undefined
+}
+
 export function waveOf(labels: Listing['labels']): number | undefined {
   const hit = labels.map((l) => WAVE.exec(l.name)?.[1]).find((n) => n !== undefined)
   return hit === undefined ? undefined : Number(hit)

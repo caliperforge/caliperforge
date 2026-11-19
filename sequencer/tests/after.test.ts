@@ -6,6 +6,7 @@ import type { Read } from '../../cli/gh.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open } from '../../store/index.ts'
+import { addPart } from '../../store/parts.ts'
 import { addPlan, end, planById, planRows, PlanRow } from '../../store/plans.ts'
 import { recordListing } from '../../store/tickets.ts'
 import { released } from '../fixer.ts'
@@ -16,9 +17,9 @@ const repo = join(import.meta.dirname, '../..')
 const home = 'caliperforge/caliperforge'
 const now = new Date('2026-09-28T09:00:00.000Z')
 
-function listing(number: number, body: string, closedAt: string | null = null) {
+function listing(number: number, body: string, closedAt: string | null = null, stateReason: string | null = null) {
   return { number, title: `t${String(number)}`, body, url: `https://github.com/${home}/issues/${String(number)}`,
-    labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27', closedAt, stateReason: null }
+    labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27', closedAt, stateReason }
 }
 
 function seeded(first: { state: PlanRow['state']; closedAt?: string; template?: PlanRow['template'] } | null) {
@@ -48,6 +49,13 @@ const pushed = (db: Db, id: number) => {
   addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-28' })
   pushedRow(db, { plan: id, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
     evidence: `https://github.com/${home}/pull/1` }, gates(db, id, 'd'.repeat(64)))
+}
+const part = (db: Db, parent: number | null, no: number, state: PlanRow['state'] | null) => {
+  const url = `https://github.com/${home}/issues/${String(no)}`
+  const id = state === null ? null : addPlan(db, { pipe_id: 99, target_id: null, template: 'pr_path', state,
+    queued_at: '2026-09-28', lane: 'machine', seat: 'typescript_specialist', origin: url, step: 0 })
+  addPart(db, { parent: parent ?? 0, n: no, url, title: `t${String(no)}`, body: '', plan: id })
+  return id
 }
 
 test('D1 an After issue in flight waits on its plan at step 0', () => {
@@ -115,6 +123,32 @@ test('D1 an After done research plan passes measure unheld', () => {
   expect(measured.outcome).toBe('pass')
   expect(measured.held).toBeUndefined()
   expect(row(db, two)).toMatchObject({ waits_on: null, held_by: null })
+})
+
+test('a split After whose parts landed or completed is met', () => {
+  const { db, root, one, two } = seeded({ state: 'done' })
+  pushed(db, part(db, one, 3, 'done') ?? 0)
+  part(db, one, 4, 'done')
+  recordListing(db, home, [listing(4, 'fourth', '2026-09-28', 'COMPLETED')], false)
+  const measured = measure(db, root, plan(db, two))
+  expect(measured.outcome).toBe('pass')
+  expect(measured.held).toBeUndefined()
+  expect(row(db, two)).toMatchObject({ waits_on: null, held_by: null })
+})
+
+test('a split After waits on an open part, else holds for the COO', () => {
+  const open = seeded({ state: 'done' })
+  const three = part(open.db, open.one, 3, 'queued')
+  expect(measure(open.db, open.root, plan(open.db, open.two)).held).toBe(true)
+  expect(row(open.db, open.two)).toMatchObject({ waits_on: three, held_why: `waits for #3 (part of #1), plan ${String(three)}, to land` })
+  for (const [state, closedAt, reason] of [['done', null, null], ['done', '2026-09-28', 'NOT_PLANNED'], [null, null, null]] as const) {
+    const { db, root, one, two } = seeded({ state: 'done' })
+    part(db, one, 3, state)
+    recordListing(db, home, [listing(3, 'third', closedAt, reason)], false)
+    expect(measure(db, root, plan(db, two)).held).toBe(true)
+    expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
+      held_why: '#1 split, and no open part of it has a plan' })
+  }
 })
 
 test('D3 an After refused research plan holds for the COO', () => {

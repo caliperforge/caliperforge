@@ -10,9 +10,9 @@ import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { holder, waitsFor } from '../store/slot.ts'
-import { builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, planById, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { setTargetState, targetRef } from '../store/targets.ts'
-import { afters } from '../store/tickets.ts'
+import { afters, completed } from '../store/tickets.ts'
 import { ideas, log, reading, steps as account } from '../templates/account.ts'
 import { nullChecked, scored, scratch, steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
@@ -192,7 +192,7 @@ function after(db: Db, root: string, plan: PlanRow, read?: Read): Outcome | null
 function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: string | null }): { on: number | null; issue: string; why: string } | null {
   const found = newestOfOrigin(db, `https://github.com/${repo}/issues/${String(n)}`)
   const pred = found === undefined ? undefined : { ...found, closed_at }
-  if (pred?.state === 'done' && landed(db, pred.id)) return null
+  if (pred?.state === 'done' && (landed(db, pred.id) || met(db, pred.id))) return null
   const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
   const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
   const issue = part === null ? `#${String(n)}` : `#${String(originIssue(part))}`
@@ -205,6 +205,11 @@ function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: s
     : on.closed_at === null ? (part === null ? `#${String(n)}'s plan ${String(on.id)} ended ${on.state}` : `${named} ended ${on.state}`)
     : `#${String(n)} closed without plan ${String(on.id)} landing`
   return { on: open ? on.id : null, issue, why }
+}
+
+function met(db: Db, parent: number): boolean {
+  const parts = partsOf(db, parent)
+  return parts.length > 0 && parts.every((p) => landed(db, p.plan) || (p.plan !== null && planById(db, p.plan).state === 'done' && completed(db, p.url)))
 }
 
 export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outcome {

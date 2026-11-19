@@ -1,0 +1,6 @@
+- name: after_split_parent_met
+  table: events
+  column: at
+  where: "kind = 'measure' AND message GLOB '#* split, and no open part of it has a plan' AND (SELECT min(coalesce(r.state, '') = 'done') FROM plans h JOIN plans q ON q.origin = substr(h.origin, 1, instr(h.origin, '/issues/') + 7) || substr(events.message, 2, instr(events.message, ' ') - 2) JOIN parts p ON p.parent = q.id LEFT JOIN plans r ON r.id = p.plan WHERE h.id = events.plan) = 1"
+  gap: 1d
+  expected: 0

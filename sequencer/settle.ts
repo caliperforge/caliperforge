@@ -13,7 +13,7 @@ import { newestVerdict, reviewSince } from '../store/reviewed.ts'
 import { brief } from '../templates/account.ts'
 import { generate } from '../templates/bench.ts'
 import { draft, grow, review } from '../templates/comms.ts'
-import { builder, type Step } from '../templates/pr-path.ts'
+import type { Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { breaker } from './breaker.ts'
@@ -33,7 +33,8 @@ import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
 import { branchOf, checkout, cloned, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, forkOf, homeOf, onto } from './home.ts'
-import { rebranched, rehomed } from './rehomed.ts'
+import { empty, rebranched, rehomed } from './rehomed.ts'
+import { seatless } from './seatless.ts'
 import { BUILDS, capped, fingerprintOf, looped, refusalText, restated, stopped, streak, STREAK } from './refusal.ts'
 import { NETWORK } from './checks.ts'
 import { firstLine } from './unpolled.ts'
@@ -70,11 +71,6 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
     ...(outcome.held === true ? { held: true as const } : {}),
   }
   return { fired, wait: outcome.held === true || outcome.blip === true || outcome.quiet === true }
-}
-
-function seatless(plan: PlanRow, step: Step, language: string | null): Outcome | null {
-  if (plan.template !== 'pr_path' || step.fires !== 'seat' || builder(language) !== null) return null
-  return { outcome: 'needs_ceo', spans: ['staffing'], note: `no ${String(language)} ${String(step.mode)} seat` }
 }
 
 function pointer(db: Db, plan: number, step: Step, after: number): string {
@@ -144,6 +140,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
   try {
     if (bare) rebranched(root, plan.id)
     rehomed(root, plan.id, tree.repo)
+    if (empty(root, plan.id, tree.repo)) return { language: null, failed: { outcome: 'needs_coo', spans: ['empty_repo'], note: `${tree.repo}: repo has no commits; held for the COO` } }
     const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from)
     const from = tree.from ?? 'main'
     if (recut !== null) logged(db, { plan: plan.id, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: `cut again from ${from}: the clone was cut from ${recut}`, pointer: from, run: null })

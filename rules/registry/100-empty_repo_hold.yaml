@@ -1,0 +1,6 @@
+- name: empty_repo_hold
+  table: events
+  column: at
+  where: "kind = 'cli_error' AND message LIKE '%rev-parse HEAD%'"
+  gap: 1d
+  expected: 0

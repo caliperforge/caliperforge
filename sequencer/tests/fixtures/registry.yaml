@@ -58,6 +58,12 @@
   column: at
   where: staffed = 'typescript_specialist' AND mode = 'review'
   gap: 7d
+- name: empty_repo_hold
+  table: events
+  column: at
+  where: "kind = 'cli_error' AND message LIKE '%rev-parse HEAD%'"
+  gap: 1d
+  expected: 0
 - name: split_measure_only
   table: plans
   column: queued_at

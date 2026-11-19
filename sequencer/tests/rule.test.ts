@@ -11,7 +11,7 @@ import { amend } from '../../store/lanes.ts'
 import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
-import { fenced, opened, owned } from '../rule.ts'
+import { accepted, excusing, fenced, opened, owned } from '../rule.ts'
 import { fenceFor } from '../route.ts'
 import { git, maybe, put, srcDir } from '../workspace.ts'
 
@@ -166,6 +166,18 @@ test('a step-4 stop on an old step-3 refusal is not fenced', () => {
   expect(fenced(home, planById(db, 7))).toBe(false)
   expect(owned(home, planById(db, 7), 'cli/extra.ts holds it')).toBe(false)
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+})
+
+test('a clone with no HEAD accepts and excuses nothing', () => {
+  const { db, home } = seeded(6)
+  rmSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  git(srcDir(home, 7), ['init', '-q'])
+  const plan = planById(db, 7)
+  put(home, 7, 'refusal.md', 'step 6 ready refused\n\nspans:\n  - greptile:3/5\n')
+  expect(accepted(home, plan, 'accept G1')).toBe(false)
+  put(home, 7, 'refusal.md', 'step 6 ready refused\n\nspans:\n  - ci.red CI\n')
+  expect(excusing(home, plan, 'ci.red CI overruled')).toBe(false)
+  expect(maybe(home, 7, 'rulings.md')).toBeNull()
 })
 
 test('D4 opened lists a stray row by clearing its flag', () => {

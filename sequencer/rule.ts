@@ -6,7 +6,7 @@ import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
-import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
+import { get, maybe, planDir, put, srcDir, tried } from './workspace.ts'
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
@@ -51,7 +51,8 @@ export function rule(db: Db, root: string, plan: PlanRow, who: string, text: str
 export function accepted(root: string, plan: PlanRow, answer: string): boolean {
   const text = maybe(root, plan.id, 'refusal.md') ?? ''
   if (!text.startsWith(`step ${String(plan.step)} ready `) || !/^ {2}- greptile:\d\/5$/m.test(text)) return false
-  const sha = headSha(srcDir(root, plan.id))
+  const sha = head(root, plan)
+  if (sha === null) return false
   const { open } = unruled(root, plan.id, sha)
   if (open.length === 0) return false
   put(root, plan.id, 'rulings.md', `${maybe(root, plan.id, 'rulings.md') ?? ''}\naccepted:\n  head: ${sha.slice(0, 12)}\n  ids: ${
@@ -65,9 +66,15 @@ export function excusing(root: string, plan: PlanRow, answer: string): boolean {
   const rows = (/^spans:\n((?: {2}.*(?:\n|$))*)/m.exec(text)?.[1] ?? '').split('\n').filter((l) => l.startsWith('  - ')).map((l) => l.slice(4))
   if (!text.startsWith(`step ${String(plan.step)} ready `) || rows.length === 0
     || !rows.every((r) => r.startsWith('ci.red ') && answer.includes(`${r} overruled`))) return false
-  put(root, plan.id, 'rulings.md', `${maybe(root, plan.id, 'rulings.md') ?? ''}\noverruled:\n  head: ${headSha(srcDir(root, plan.id)).slice(0, 12)}\n  spans: ${
+  const sha = head(root, plan)
+  if (sha === null) return false
+  put(root, plan.id, 'rulings.md', `${maybe(root, plan.id, 'rulings.md') ?? ''}\noverruled:\n  head: ${sha.slice(0, 12)}\n  spans: ${
     rows.join(', ')}\n  reason: ${answer.replace(/\s+/g, ' ').trim()}\n`)
   return true
+}
+
+function head(root: string, plan: PlanRow): string | null {
+  return tried(srcDir(root, plan.id), ['rev-parse', '--verify', '--quiet', 'HEAD'])?.trim() ?? null
 }
 
 /** Each path refused as outside the files that `answer` names gets a row under the brief's `## Outside the files`. */

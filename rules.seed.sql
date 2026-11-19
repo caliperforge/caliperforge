@@ -13,6 +13,7 @@ VALUES
   ('rules/registry/08-go_review.yaml', 'card', 'rules/registry/08-go_review.yaml', '46d96c66a335880191edae208a148ff61f1ca6939f0df68e1c6037684b903550', '2026-10-04'),
   ('rules/registry/09-php_review.yaml', 'card', 'rules/registry/09-php_review.yaml', 'd984817f32d08dcd998f4c95480ce441cfef4c81499e2ff879b443fcd6bddafa', '2026-10-04'),
   ('rules/registry/10-typescript_review.yaml', 'card', 'rules/registry/10-typescript_review.yaml', 'd6aa5ab5d7b711b64c580ce5bc8bc09debaaefad87b614e64ccf3944ee49ea51', '2026-10-04'),
+  ('rules/registry/100-empty_repo_hold.yaml', 'card', 'rules/registry/100-empty_repo_hold.yaml', 'e3ae558df87f9a93f7d08c61a0f4229c83fd532e419b61ead6165b6a5a51bfe3', '2026-11-19'),
   ('rules/registry/100-split_measure_only.yaml', 'card', 'rules/registry/100-split_measure_only.yaml', '343046e266f9ddfc532166772ab43f6aafe35b6a3a4f3b08628f949d0098b88b', '2026-11-16'),
   ('rules/registry/101-github_read_bare_repo.yaml', 'card', 'rules/registry/101-github_read_bare_repo.yaml', '44ebdaf847364abfa2c7f507096997410a09b39cbbff7bc73c6db68f44fe83b2', '2026-11-17'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),

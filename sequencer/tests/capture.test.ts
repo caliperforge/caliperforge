@@ -65,28 +65,26 @@ function rehearsing(): World {
   return w
 }
 
-const unlisted = (): unknown => { throw failed(`${LIMIT}\n\n`) }
-
 const rehearsal = (message: string): object => ({ plan: 2, kind: 'swallowed', actor: 'rehearsal', outcome: 'pass', message })
 
 test('failed rehearsal lookups log one cause per spell', () => {
   const w = rehearsing()
-  for (let i = 0; i < 3; i += 1) capture(w.db, view, w.root, unlisted)
+  for (let i = 0; i < 3; i += 1) capture(w.db, view, w.root, down)
   expect(ofKind(w.db, 'swallowed')).toEqual([rehearsal(LIMIT)])
 })
 
 test('a lookup with no pr ends the spell', () => {
   const w = rehearsing()
-  capture(w.db, view, w.root, unlisted)
+  capture(w.db, view, w.root, down)
   capture(w.db, view, w.root, () => [])
   expect(reached(w.db, 2)).toBe(0)
-  capture(w.db, view, w.root, unlisted)
+  capture(w.db, view, w.root, down)
   expect(ofKind(w.db, 'swallowed')).toEqual([rehearsal(LIMIT), rehearsal(LIMIT)])
 })
 
 test('a lookup with a pr leaves the count to the read', () => {
   const w = rehearsing()
-  for (let i = 0; i < 2; i += 1) capture(w.db, view, w.root, unlisted)
+  for (let i = 0; i < 2; i += 1) capture(w.db, view, w.root, down)
   capture(w.db, view, w.root, () => [{ number: 7 }])
   expect(ofKind(w.db, 'swallowed', 'back')).toEqual([rehearsal(LIMIT),
     { plan: 2, kind: 'back', actor: 'reachable', outcome: 'pass', message: 'back after 2 failed reads' }])

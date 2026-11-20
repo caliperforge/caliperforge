@@ -20,6 +20,11 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.281",
+    "@solana/attestation": "2.1.0",
+    "@solana/kit": "8.6.0",
+    "@solana/kit-plugin-rpc": "0.23.0",
+    "@solana/kit-plugin-signer": "0.23.0",
+    "@solana/sysvars": "8.6.0",
     "better-sqlite3": "13.0.3",
     "commander": "15.0.0",
     "yaml": "2.9.1",

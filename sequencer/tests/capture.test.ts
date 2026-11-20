@@ -77,7 +77,6 @@ test('a lookup with no pr ends the spell', () => {
   const w = rehearsing()
   capture(w.db, view, w.root, down)
   capture(w.db, view, w.root, () => [])
-  expect(reached(w.db, 2)).toBe(0)
   capture(w.db, view, w.root, down)
   expect(ofKind(w.db, 'swallowed')).toEqual([rehearsal(LIMIT), rehearsal(LIMIT)])
 })

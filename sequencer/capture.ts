@@ -271,9 +271,12 @@ function rehearsals(db: Db, root: string, list: Read): Pushed[] {
 function opened(db: Db, root: string, plan: number, fork: string, list: Read): Pushed[] {
   try {
     const no = rehearsal(fork, rehearsalBranch(root, plan), list)
+    if (no === null) reached(db, plan)
     return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: { root, list } }]
   } catch (error) {
-    logged(db, { plan, kind: 'swallowed', actor: 'rehearsal', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    if (missed(db, plan) === 1) {
+      logged(db, { plan, kind: 'swallowed', actor: 'rehearsal', outcome: 'pass', message: cause(error), pointer: null, run: null })
+    }
     return []
   }
 }

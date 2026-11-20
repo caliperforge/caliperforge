@@ -81,6 +81,10 @@ When the ask needs a file copied byte for byte from a public github.com reposito
 under `## Files` or `## Tests`, marked `(new)` when the checkout does not hold it. The machine writes the
 file before the build; the builder does not write it.
 
+When the ask pins a new npm package on our own repository, the brief carries `## Pinned` after `## Files`, one
+row `` - `<name>@<exact version>` `` per package. The machine installs them before the build; the builder installs
+nothing. Neither `package.json` nor `package-lock.json` goes under `## Files`.
+
 When the ask mirrors, ports or matches another implementation, list that implementation's input rules
 under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the
 errors it raises, each with its file:line.

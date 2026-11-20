@@ -33,11 +33,13 @@ const OWNED = /^\s*[-*]\s*`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s+(?:—|–|--?)
 /**
  * The paths a kernel build touched that its brief's file list does not hold. A test beside a listed
  * file is the builder's to write, and so is a path its handback or brief owns under `## Outside the files` with the
- * reason the ask cannot be met without it: the reviewers judge the reason. A plan with no list is not fenced.
+ * reason the ask cannot be met without it: the reviewers judge the reason. So are the package files a brief with
+ * `## Pinned` rows has the machine write. A plan with no list is not fenced.
  */
 export function strays(touched: string[], listed: string[], handback: string, brief = ''): string[] {
   if (listed.length === 0) return []
   const owned = new Set([handback, brief].flatMap((text) => section(text, '## Outside the files').split('\n').flatMap((l) => OWNED.exec(l)?.[1] ?? [])))
+  if (section(brief, '## Pinned').trim() !== '') owned.add('package.json').add('package-lock.json')
   return touched.filter((path) => !owned.has(path) && !admits(listed, path))
 }
 

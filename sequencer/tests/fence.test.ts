@@ -75,6 +75,13 @@ test('D6 a brief row owns a stray only with its reason', () => {
   expect(strays(['cli/extra.ts'], LISTED, '', '## Outside the files\n\n- `cli/extra.ts`\n')).toEqual(['cli/extra.ts'])
 })
 
+test('package files are admitted only under a Pinned row', () => {
+  const files = ['package.json', 'package-lock.json']
+  expect(strays(files, LISTED, '', '## Pinned\n\n- `a@1.0.0`\n')).toEqual([])
+  expect(strays(files, LISTED, '', '## Pinned\n\n')).toEqual(files)
+  expect(strays(files, LISTED, '')).toEqual(files)
+})
+
 test('an owned stray passes the rails and goes to review', async () => {
   const { w, rails } = await stray(OWNS)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })

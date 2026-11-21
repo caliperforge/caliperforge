@@ -1,8 +1,12 @@
+import { createClient, createKeyPairSignerFromBytes, type KeyPairSigner } from '@solana/kit'
+import { solanaRpc } from '@solana/kit-plugin-rpc'
+import { payer } from '@solana/kit-plugin-signer'
 import type { Command } from 'commander'
 import { lookup } from 'node:dns/promises'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { attested, chain, probe } from '../paydesk/attested.ts'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
 import { live, providers, recheck, tally, verdict } from '../paydesk/live.ts'
 import { note } from '../paydesk/note.ts'
@@ -13,7 +17,7 @@ import type { Cli } from './cf-lanes.ts'
 
 export function registerPaydesk(cf: Command, { root, out }: Cli): void {
   const net: Net = { fetch, resolve: (host) => lookup(host) }
-  const paydesk = registerPaid(cf.command('paydesk'), out)
+  const paydesk = registerAttest(registerPaid(cf.command('paydesk'), out), net, out)
   paydesk.command('scan').argument('<dir...>').requiredOption('--out <file>').option('--cards <dir>')
     .action(async (dirs: string[], options: { out: string; cards?: string }) => {
       const results = await scan(dirs, options.out, options.cards, net)
@@ -49,6 +53,24 @@ export function registerPaydesk(cf: Command, { root, out }: Cli): void {
     .action((scanFile: string, options: { out: string; from: string }) => {
       out(`${String(notes(scanFile, options.out, options.from))} notes -> ${options.out}\n`)
     })
+}
+
+function registerAttest(paydesk: Command, net: Net, out: Cli['out']): Command {
+  paydesk.command('attest').argument('<scan>').requiredOption('--rpc <url>').requiredOption('--issuer <keyfile>').requiredOption('--signer <keyfile>')
+    .requiredOption('--credential <name>').requiredOption('--out <dir>').option('--dry-run')
+    .action(async (scanFile: string, options: { rpc: string; issuer: string; signer: string; credential: string; out: string; dryRun?: boolean }) => {
+      const issuer = await keypair(options.issuer)
+      const signer = await keypair(options.signer)
+      const client = createClient().use(payer(issuer)).use(solanaRpc({ rpcUrl: options.rpc }))
+      const lines = await attested(scanned(scanFile), statSync(scanFile).mtime,
+        { issuer: issuer.address, credential: options.credential, out: options.out, dryRun: options.dryRun === true }, probe(net), chain(client, issuer, signer))
+      out(`${lines.join('\n')}\n`)
+    })
+  return paydesk
+}
+
+async function keypair(file: string): Promise<KeyPairSigner> {
+  return createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(file, 'utf8')) as number[]))
 }
 
 function registerPaid(paydesk: Command, out: Cli['out']): Command {

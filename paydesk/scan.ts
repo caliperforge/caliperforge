@@ -121,7 +121,7 @@ function outbound({ path, op }: Listed): boolean {
   return `${path} ${op.operationId ?? ''}`.split(WORDS).some((w) => OUTBOUND.includes(w.toLowerCase()))
 }
 
-function sender(net: Net): Send {
+export function sender(net: Net): Send {
   let sent = 0
   return async (url, method, body) => {
     if (sent++ > 0) await sleep(250)
@@ -138,7 +138,7 @@ async function tried(send: Send, url: string, method: string, bodies: unknown[])
   return rest.length === 0 || ('status' in probe && probe.status === 402) ? probe : tried(send, url, method, rest)
 }
 
-async function answer(sent: Promise<Response>): Promise<Probe> {
+export async function answer(sent: Promise<Response>): Promise<Probe> {
   return sent.then(async (res) => ({
     status: res.status,
     offers: offersOf({ status: res.status, headers: Object.fromEntries(res.headers), body: await res.text() }),

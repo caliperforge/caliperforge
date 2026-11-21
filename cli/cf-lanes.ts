@@ -6,7 +6,7 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { relabel } from '../sequencer/priority.ts'
-import { liveTree } from '../sequencer/workspace.ts'
+import { liveTree, SIGNOFF } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
@@ -20,13 +20,13 @@ import { tally } from '../store/record.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, caught, caughtSection, costs, costSection, day, fileWaits, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
-  rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
+  rulings, section, tickets, ticketSection, unkeptLines, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { directorSection, fixerLine, handUpLine } from './director.ts'
 import { decisionSection, driftSection } from './drift.ts'
 import { escapeSection } from './escapes.ts'
 import { flow } from './flow.ts'
-import { gh } from './gh.ts'
+import { desk, gh } from './gh.ts'
 import { greptileLine } from './greptile.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
@@ -227,7 +227,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(openingLines(openings(handle, null), new Date()))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
-    out(section('waiting on the CEO', heldBy(handle, 'ceo')))
+    out(section('waiting on the CEO', heldBy(handle, 'ceo')) + unkeptLines(handle, root, desk(SIGNOFF)))
     out(decisionSection(heldBy(handle, 'coo'), overdue(handle, new Date()), new Date()) + section('parked on another job', parked(handle)))
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)

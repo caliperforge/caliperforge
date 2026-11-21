@@ -7,7 +7,8 @@ import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
-  tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
+  tickets, unkeptLines, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
+import type { Answer, Desk } from '../gh.ts'
 import { greptileLine } from '../greptile.ts'
 import { openingLines } from '../openings.ts'
 import { outsideSection } from '../outside.ts'
@@ -583,6 +584,29 @@ test('heldBy lists each held plan under who it waits on, with why', () => {
   held(db, 7, 'ceo', 'over')
   expect(heldBy(db, 'ceo').map(line)).toEqual(['  plan 1\tstep 0\tqueued\tacme/widget#12\ttarget_approval'])
   expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 2\tstep 0\tblocked_on_ceo\t-'])
+})
+
+/** The sign-off desk holding one open card at `HASH`, labelled `answer`. */
+function desk(answer: Answer | null): Desk {
+  const no = (): never => { throw new Error('not used') }
+  return {
+    listed: () => [{ no: 70, url: 'https://github.com/caliperforge/signoff/issues/70', title: 'Sign-off: widget 12, plan 1',
+      body: `<sub>plan 1, head x, digest ${HASH.slice(0, 12)}</sub>\n` }],
+    seen: () => ({ answer, words: null, open: true }),
+    open: no, unlabel: no, close: no, rehearsal: no, lines: no, issue: no,
+  }
+}
+
+test('a label on a card other than the shut kept one is named', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-unkept-'))
+  plan(db, 1, 'queued', 25, 1)
+  waiting(db, [{ plan: 1, why: 'ceo_batch' }])
+  put(root, 1, 'signoff', `71 ${HASH} https://github.com/caliperforge/signoff/issues/71 shut\n`)
+  expect(unkeptLines(db, root, desk('go'))).toBe('  plan 1 answer on signoff#70, not the kept card #71\n')
+  expect(unkeptLines(db, root, desk(null))).toBe('')
+  put(root, 1, 'signoff', `71 ${HASH} https://github.com/caliperforge/signoff/issues/71\n`)
+  expect(unkeptLines(db, root, { ...desk('go'), listed: () => { throw new Error('the desk is read') } })).toBe('')
 })
 
 test('parked on another: listed with it, not as needing a decision', () => {

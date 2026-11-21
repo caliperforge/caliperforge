@@ -19,6 +19,7 @@ VALUES
   ('rules/registry/101-github_read_bare_repo.yaml', 'card', 'rules/registry/101-github_read_bare_repo.yaml', '44ebdaf847364abfa2c7f507096997410a09b39cbbff7bc73c6db68f44fe83b2', '2026-11-17'),
   ('rules/registry/102-greptile_cycle.yaml', 'card', 'rules/registry/102-greptile_cycle.yaml', 'ffa97b53a228019570a2e5ddf23369adb189b742feed93dc5b87dc2473943cdd', '2026-11-21'),
   ('rules/registry/102-maintainer_gated.yaml', 'card', 'rules/registry/102-maintainer_gated.yaml', '4e0a4069ae7d0a4917ebba8ca0df98ab4d5f9555d80c9922aa7818591c87db3e', '2026-11-21'),
+  ('rules/registry/102-signoff_one_card.yaml', 'card', 'rules/registry/102-signoff_one_card.yaml', '70bfe35c4c4cc890af7d707e9837ecfb4c63e81d2b483979bf888758b9583e36', '2026-11-21'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
   ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', '0874da2c14e5efbe2e938ab57552695b724b46618e7e452c4f2ba637f3217929', '2026-10-11'),

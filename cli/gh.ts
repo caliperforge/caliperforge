@@ -301,6 +301,7 @@ export interface Seen { answer: Answer | null; words: string | null; open: boole
 /** The tracker the sign-off cards live on, a seam so a test answers a card without the network. */
 export interface Desk {
   open: (title: string, body: string) => { no: number; url: string }
+  listed: () => { no: number; url: string; title: string; body: string }[]
   seen: (no: number) => Seen
   unlabel: (no: number, label: Answer) => void
   close: (no: number, comment: string) => void
@@ -316,6 +317,8 @@ const Card = z.object({
   labels: z.array(z.object({ name: z.string() })),
   comments: z.array(z.object({ author: z.object({ login: z.string() }), body: z.string() })),
 })
+
+const Cards = z.array(z.object({ number: z.int(), url: z.string(), title: z.string(), body: z.string() }))
 
 const Events = z.array(z.looseObject({
   event: z.string(),
@@ -363,6 +366,11 @@ export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
       }
       const url = exec(['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-'], body).trim()
       return { no: issueNo(url), url }
+    },
+    listed: () => {
+      const cards = Cards.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW), '--json', 'number,url,title,body']))
+      if (cards.length >= WINDOW) throw new Error(`${repo} lists ${String(WINDOW)} open cards, the limit; a card past it is unread`)
+      return cards.map((c) => ({ no: c.number, url: c.url, title: c.title, body: c.body }))
     },
     seen: (no) => {
       const card = Card.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'state,labels,comments']))

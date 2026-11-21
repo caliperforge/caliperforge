@@ -36,7 +36,7 @@ import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspa
  * waits for a person -- and `talk` hands it to a person and leaves the card open. The card is for one head: a new
  * round closes it and opens the next, so a label only ever signs the bytes its card showed.
  */
-export interface Signed { plan: number; card: number; did: 'opened' | Answer | 'superseded' | 'withdrawn' | 'shut' }
+export interface Signed { plan: number; card: number; did: 'opened' | 'adopted' | Answer | 'superseded' | 'withdrawn' | 'shut' }
 
 const FILE = 'signoff'
 
@@ -68,7 +68,12 @@ function one(db: Db, root: string, card: Card, desk: Desk, read: Read, now: Date
     return [{ plan: card.id, card: kept.no, did: 'superseded' }, opening(db, root, card, desk, read, now)]
   }
   if (kept === null) return [opening(db, root, card, desk, read, now)]
-  if (kept.shut) return []
+  if (kept.shut) {
+    const other = unkept(db, root, card.id, desk)
+    if (other === null) return []
+    save(root, card.id, other.kept)
+    return [answered(db, root, card, other.kept, other.seen, desk, now)]
+  }
   const seen = desk.seen(kept.no)
   if (seen.answer !== null) return [answered(db, root, card, kept, { ...seen, answer: seen.answer }, desk, now)]
   if (seen.open) return []
@@ -119,6 +124,13 @@ function rehearsalOf(db: Db, root: string, plan: number, desk: Desk): { fork: st
 }
 
 function opening(db: Db, root: string, card: Card, desk: Desk, read: Read, now: Date): Signed {
+  const found = same(db, root, card.id, card.digest, desk)
+  if (found !== undefined) {
+    save(root, card.id, { no: found.no, digest: card.digest, url: found.url, shut: false })
+    logged(db, { plan: card.id, kind: 'card_adopted', actor: 'signoff', outcome: 'refuse',
+      message: `#${String(found.no)} already open at ${card.digest.slice(0, 12)}`, pointer: found.url, run: null })
+    return { plan: card.id, card: found.no, did: 'adopted' }
+  }
   const body = bodyFor(db, root, card, desk, read)
   const made = desk.open(titleFor(db, root, card.id), body)
   const sheeted = body.startsWith('**Fact sheet**')
@@ -404,6 +416,22 @@ function tell(root: string, card: Card, kind: Kind, note: string, now: Date): vo
 
 function carded(db: Db, root: string): number[] {
   return allPlans(db).filter((p) => p.origin === null && p.target_id !== null && maybe(root, p.id, FILE) !== null).map((p) => p.id)
+}
+
+/** The open card filed for `plan` at `digest`, read off its title and the footer `bodyFor` writes. */
+function same(db: Db, root: string, plan: number, digest: string, desk: Desk): ReturnType<Desk['listed']>[number] | undefined {
+  const title = titleFor(db, root, plan)
+  return desk.listed().find((c) => c.title === title && c.body.includes(`digest ${digest.slice(0, 12)}</sub>`))
+}
+
+/** With the kept card shut, the answered open card at its digest: a label on a card the kept file lost. */
+export function unkept(db: Db, root: string, plan: number, desk: Desk): { kept: Kept; seen: Seen & { answer: Answer }; shut: number } | null {
+  const kept = keptOf(root, plan)
+  if (kept?.shut !== true) return null
+  const other = same(db, root, plan, kept.digest, desk)
+  if (other === undefined) return null
+  const seen = desk.seen(other.no)
+  return seen.answer === null ? null : { kept: { no: other.no, digest: kept.digest, url: other.url, shut: false }, seen: { ...seen, answer: seen.answer }, shut: kept.no }
 }
 
 function keptOf(root: string, plan: number): Kept | null {

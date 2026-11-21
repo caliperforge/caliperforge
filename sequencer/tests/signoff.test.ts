@@ -71,6 +71,8 @@ function fake(pr: number | null = null, lines: string[] = [], assignees = [OPERA
       log.push(`open ${String(no)}`)
       return { no, url: `https://github.com/${SIGNOFF}/issues/${String(no)}` }
     },
+    listed: () => [...cards].filter(([, c]) => c.open)
+      .map(([no, c]) => ({ no, url: `https://github.com/${SIGNOFF}/issues/${String(no)}`, title: c.title, body: c.body })),
     seen: (no): Seen => ({ answer: card(no).answer, words: card(no).words, open: card(no).open }),
     unlabel: (no, label) => { log.push(`unlabel ${String(no)} ${label}`); card(no).answer = null },
     close: (no, comment) => { log.push(`close ${String(no)}`); card(no).open = false; card(no).closing = comment },
@@ -308,6 +310,66 @@ test('a new head swaps the card; a job sent back closes its card', async () => {
   rewind(w.db, 1, 4)
   expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 101, did: 'withdrawn' }])
   expect(desk.cards.get(101)?.closing).toMatch(/^Withdrawn/)
+})
+
+/** A card on the desk at `digest` that the kept file does not name. */
+function stray(desk: ReturnType<typeof fake>, no: number, digest: string, answer: Answer | null = null): void {
+  desk.cards.set(no, { title: 'Sign-off: widget 12, hello', body: `go\n\n<sub>plan 1, head x, digest ${digest.slice(0, 12)}</sub>\n`,
+    open: true, answer, words: null, closing: null })
+}
+
+const signoffFile = (w: World): string => readFileSync(join(w.root, '.cf/work/1/signoff'), 'utf8')
+
+test('an open card at this digest is adopted, not filed again', async () => {
+  const w = await AT_BATCH()
+  drop(w.root, 1, 'signoff')
+  const digest = plan(w.db, 1).head_digest ?? ''
+  const desk = fake()
+  stray(desk, 70, digest)
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 70, did: 'adopted' }])
+  expect(desk.log).toEqual([])
+  expect(signoffFile(w)).toBe(`70 ${digest} https://github.com/${SIGNOFF}/issues/70\n`)
+  expect(eventsOf(w.db, 1, 'card_adopted')).toEqual([{ actor: 'signoff', outcome: 'refuse', message: `#70 already open at ${digest.slice(0, 12)}` }])
+})
+
+test('an open card at another digest is superseded, not adopted', async () => {
+  const w = await AT_BATCH()
+  const old = 'f'.repeat(64)
+  const desk = fake()
+  stray(desk, 70, old)
+  stray(desk, 71, old)
+  put(w.root, 1, 'signoff', `71 ${old} https://github.com/${SIGNOFF}/issues/71\n`)
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 71, did: 'superseded' }, { plan: 1, card: 102, did: 'opened' }])
+  expect(desk.log).toEqual(['close 71', 'open 102'])
+  expect(eventsOf(w.db, 1, 'card_adopted')).toEqual([])
+})
+
+/** The kept card shut at this digest, another open beside it with `answer`. */
+async function shutKept(answer: Answer | null): Promise<{ w: World; desk: ReturnType<typeof fake> }> {
+  const w = await AT_BATCH()
+  const digest = plan(w.db, 1).head_digest ?? ''
+  put(w.root, 1, 'signoff', `71 ${digest} https://github.com/${SIGNOFF}/issues/71 shut\n`)
+  const desk = fake()
+  stray(desk, 70, digest, answer)
+  return { w, desk }
+}
+
+test('go on an open card beside a shut kept card signs it', async () => {
+  const { w, desk } = await shutKept('go')
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 70, did: 'go' }])
+  expect(signersOf(w.db, 'plan')[0]).toEqual({ who: 'ceo', decision: 'approved', subject_digest: plan(w.db, 1).head_digest })
+  expect(desk.log).toEqual(['close 70'])
+  const talk = await shutKept('talk')
+  expect(signoffs(talk.w.db, talk.w.root, talk.desk, none)).toEqual([{ plan: 1, card: 70, did: 'talk' }])
+  expect(signoffFile(talk.w).split(' ')[0]).toBe('70')
+})
+
+test('an unlabelled card beside a shut kept card is left alone', async () => {
+  const { w, desk } = await shutKept(null)
+  const before = signoffFile(w)
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([])
+  expect(signoffFile(w)).toBe(before)
+  expect(desk.log).toEqual([])
 })
 
 test('a card signed at the terminal closes as signed', async () => {

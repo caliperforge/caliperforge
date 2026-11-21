@@ -3,14 +3,15 @@ import { z } from 'zod'
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { languageFor } from '../sequencer/route.ts'
+import { unkept } from '../sequencer/signoff.ts'
 import { FORK, maybe, planDir, ruled } from '../sequencer/workspace.ts'
-import { ERA, openIds, type ActorRow, type ByType, type Cost, type Model, type PlanLine, type Ticket } from '../store/brief.ts'
+import { ERA, heldBy, openIds, type ActorRow, type ByType, type Cost, type Model, type PlanLine, type Ticket } from '../store/brief.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { planById, type Overlap, type Wait } from '../store/plans.ts'
 import { heads, scored } from '../store/signals.ts'
 import { verdictRows } from '../store/verdict.ts'
-import { gh, type Read, WINDOW } from './gh.ts'
+import { type Desk, gh, type Read, WINDOW } from './gh.ts'
 import { LANE, LANES } from './plan.ts'
 
 export { actors, costs, day, halted, heldBy, open, runsOf, tickets, unpriced, verdictsOf, waits, type ByType, type Ticket } from '../store/brief.ts'
@@ -73,6 +74,13 @@ export function line(p: PlanLine): string {
 export function section(title: string, rows: PlanLine[]): string {
   const body = rows.length === 0 ? '  none\n' : `${rows.map(line).join('\n')}\n`
   return `${title} (${String(rows.length)})\n${body}`
+}
+
+export function unkeptLines(db: Db, root: string, desk: Desk): string {
+  return heldBy(db, 'ceo').flatMap((p) => {
+    const other = unkept(db, root, p.id, desk)
+    return other === null ? [] : [`  plan ${String(p.id)} answer on signoff#${String(other.kept.no)}, not the kept card #${String(other.shut)}\n`]
+  }).join('')
 }
 
 export function rulings(db: Db, root: string): string {

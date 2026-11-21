@@ -94,6 +94,12 @@
   where: "kind = 'ci_red' AND external_id LIKE '%-fork-live-gate'"
   gap: 7d
   expected: 0
+- name: signoff_one_card
+  table: events
+  column: at
+  where: "kind = 'card_adopted' AND actor = 'signoff'"
+  gap: 7d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

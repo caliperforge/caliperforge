@@ -1,0 +1,6 @@
+- name: signoff_one_card
+  table: events
+  column: at
+  where: "kind = 'card_adopted' AND actor = 'signoff'"
+  gap: 7d
+  expected: 0

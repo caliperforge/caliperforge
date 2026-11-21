@@ -22,7 +22,7 @@ import { freed, took, waitsFor } from '../store/slot.ts'
 import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Row } from './card.ts'
 import { npm } from './checks.ts'
-import { bind, prMessage, signedAt } from './folded.ts'
+import { bind, prMessage, roundMessage, signedAt } from './folded.ts'
 import { forkBranch, forkedAs, onFork } from './forked.ts'
 import { red } from './failures.ts'
 import { rehearsal } from './greptile.ts'
@@ -208,7 +208,7 @@ export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wi
   took(db, plan)
 }
 
-export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; over: string; rejected: string | null } {
+export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; over: string; rejected: string | null; message: string } {
   const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
@@ -217,8 +217,8 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const rules = profile(root, repo, plan.id)
   const name = outside ? forkBranch(db, root, plan.id, dir, branch) : branch
   const followed = outside && opened(db, plan.id) !== null && onFork(dir, name)
-  const base = !outside ? null : followed ? follow(root, plan.id, messageOf(root, plan.id, rules), name) : squash(root, plan.id, rules)
-  const over = followed ? `${fork}:${name}'s head` : 'base.sha'
+  const message = followed ? roundMessage(db, root, plan.id, rules) : messageOf(root, plan.id, rules)
+  const base = !outside ? null : followed ? follow(root, plan.id, message, name) : squash(root, plan.id, rules, message)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(db, root, plan.id, head, ci, repo, wire) : head.sha
   if (outside) based(root, plan.id, fork, wire)
@@ -226,7 +226,7 @@ export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wi
   const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
   const rejected = at === tip ? null : `${fork} rejected refs/heads/${ci}: it is at ${at === '' ? 'no commit' : at.slice(0, 12)}, not the pushed ${tip.slice(0, 12)}`
   if (outside && rejected === null) moved(root, plan.id, fork, ci, wire)
-  return { fork, head, ci, tip, base, over, rejected }
+  return { fork, head, ci, tip, base, over: followed ? `${fork}:${name}'s head` : 'base.sha', rejected, message }
 }
 
 /** A head re-cut from main after its branch was pushed takes the pushed head as a second parent and keeps its own tree. */

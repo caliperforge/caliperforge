@@ -3,12 +3,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { eventsOf } from '../../store/events.ts'
 import { flag } from '../../store/precedent-findings.ts'
 import { profile } from '../../store/profile.ts'
 import { setEvidence } from '../../store/targets.ts'
 import { tick } from '../index.ts'
 import { owed } from '../owed.ts'
 import { forkCi, messageOf, sent, type Wire } from '../push.ts'
+import { resent } from '../resent.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { GREPTILED, RULED, THEIR_RULE } from './bases.ts'
 import { approve, CARRIED, plan, stub, tip, watched, world } from './world.ts'
@@ -143,4 +145,45 @@ test('an open pull request folds over the fork head, not base.sha', { timeout: 9
   const pushed = sends.slice(before).filter((l) => l.startsWith('send '))
   expect(pushed.length).toBeGreaterThan(0)
   expect(pushed.filter((l) => !l.endsWith(`:refs/heads/${branch}-next`))).toEqual([])
+})
+
+async function round(handback: string): Promise<{ w: ReturnType<typeof world>; git: (args: string[]) => string; fork: string; wire: Wire }> {
+  const w = world()
+  approve(w.db, w.target)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: srcDir(w.root, 1), encoding: 'utf8' }).trim()
+  const log = watched([], w.root, 1)
+  const wire: Wire = { ...log, send: (dir, ref) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
+  for (let at = 0; at < 20 && plan(w.db, 1).step !== 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--allow-empty', '-qm', 'opened'])
+  const fork = git(['rev-parse', 'HEAD'])
+  git(['push', '-q', 'origin', `HEAD:refs/heads/${git(['rev-parse', '--abbrev-ref', 'HEAD'])}`])
+  setEvidence(w.db, w.target, 'https://github.com/acme/widget/pull/9')
+  put(w.root, 1, 'issue.md', `# test(rust): ledger busy-race binding\n${get(w.root, 1, 'issue.md')}`)
+  put(w.root, 1, `findings-${fork}.md`, '- G11 rust/src/ledger/mod.rs:1063 <img alt="P2" src="x"> ledger busy-race test asserts the binding is released. More.\n')
+  put(w.root, 1, 'step-2.handback.md', handback)
+  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "round"\n')
+  return { w, git, fork, wire }
+}
+
+test('a round commit is titled from its fixed Greptile finding', { timeout: 90_000 }, async () => {
+  const { w, git, fork, wire } = await round(CARRIED.replace('done:\n', 'done:\n  - id: G11\n    status: done\n    pointer: rust/src/ledger/mod.rs:1063\n'))
+  sent(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  const line = 'ledger busy-race test asserts the binding is released'
+  expect([git(['rev-parse', 'HEAD^']), git(['log', '-1', '--format=%B'])]).toEqual([fork, `test(rust): ${line}\n\nGreptile G11: ${line}`])
+  expect(git(['log', '-1', '--format=%B', fork])).toBe('opened')
+  const head = git(['rev-parse', 'HEAD'])
+  expect(resent(w.db, w.root, plan(w.db, 1), 'acme/widget', wire).folded).toBeNull()
+  expect(git(['rev-parse', 'HEAD'])).toBe(head)
+})
+
+test('a round with no done G row commits messageOf, logged once', { timeout: 90_000 }, async () => {
+  const { w, git, wire } = await round(CARRIED)
+  sent(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  sent(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  expect(git(['log', '-1', '--format=%B'])).toBe(messageOf(w.root, 1, profile(w.root, 'acme/widget')))
+  expect(eventsOf(w.db, 1, 'push.message_fallback')).toEqual([{ actor: 'push', outcome: 'pass', message: 'no done G row in step-2.handback.md' }])
 })

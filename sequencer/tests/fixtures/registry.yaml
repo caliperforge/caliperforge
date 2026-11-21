@@ -94,6 +94,10 @@
   where: "kind = 'ci_red' AND external_id LIKE '%-fork-live-gate'"
   gap: 7d
   expected: 0
+- name: round_commit_message
+  table: events
+  column: at
+  where: kind = 'push.message_fallback'
 - name: signoff_one_card
   table: events
   column: at

@@ -1,9 +1,11 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Pr } from '../../cli/gh.ts'
 import { load } from '../../runner/rules.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { ofKind } from '../../store/events.ts'
+import { ofKind, pointers } from '../../store/events.ts'
 import { putPlan } from '../../store/plans.ts'
 import { reached } from '../../store/unreached.ts'
 import { capture } from '../capture.ts'
@@ -54,6 +56,39 @@ test('D5 a gone pr leaves no unreached row', () => {
   capture(w.db, () => { throw new Error('GraphQL: Could not resolve to a PullRequest with the number of 7.') })
   expect(ofKind(w.db, 'gone', 'swallowed').map((e) => e.kind)).toEqual(['gone'])
   expect(reached(w.db, 1)).toBe(0)
+})
+
+const reds = (head: string, ...names: string[]) => (): Pr => ({ ...view(), headRefOid: head,
+  statusCheckRollup: names.map((name) => ({ name, conclusion: 'FAILURE' })) })
+
+function gating(): World {
+  const w = pushed()
+  mkdirSync(join(w.root, 'profiles/acme'), { recursive: true })
+  writeFileSync(join(w.root, 'profiles/acme/widget.yml'), 'maintainer_gated: [fork-live-gate]\n')
+  return w
+}
+
+test('a gated red check logs once per head and gives no ci_red', () => {
+  const w = gating()
+  expect(capture(w.db, reds('a', 'fork-live-gate'), w.root)).toEqual([])
+  expect(capture(w.db, reds('a', 'fork-live-gate'), w.root)).toEqual([])
+  capture(w.db, reds('b', 'fork-live-gate'), w.root)
+  expect(pointers(w.db, 'maintainer_gated')).toEqual(['acme/widget#7@a', 'acme/widget#7@b'])
+  expect(ofKind(w.db, 'maintainer_gated', 'ci_red').map((e) => e.message)).toEqual(['fork-live-gate waits on a maintainer run',
+    'fork-live-gate waits on a maintainer run'])
+})
+
+test('another red check beside a gated one gives ci_red', () => {
+  const w = gating()
+  expect(capture(w.db, reds('a', 'fork-live-gate', 'test'), w.root).map((s) => s.external_id)).toEqual(['7-test'])
+})
+
+test('an ungated repo or no root still gives ci_red', () => {
+  const plain = pushed()
+  expect(capture(plain.db, reds('a', 'fork-live-gate'), plain.root).map((s) => s.external_id)).toEqual(['7-fork-live-gate'])
+  const w = gating()
+  expect(capture(w.db, reds('a', 'fork-live-gate')).map((s) => s.external_id)).toEqual(['7-fork-live-gate'])
+  expect(pointers(w.db, 'maintainer_gated')).toEqual([])
 })
 
 function rehearsing(): World {

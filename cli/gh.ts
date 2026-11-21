@@ -108,13 +108,13 @@ const Pr = z.object({
   comments: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), createdAt: z.string() })),
   reviews: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), submittedAt: z.string(),
     state: z.string().optional() })),
-  author: z.object({ login: z.string() }).optional(),
+  author: z.object({ login: z.string() }).optional(), headRefOid: z.string().optional(),
   statusCheckRollup: z.array(z.looseObject({ name: z.string().optional(), conclusion: z.string().nullish() })).nullable(),
 })
 
 export type Pr = z.infer<typeof Pr>
 
-const PR_FIELDS = 'number,url,state,mergedAt,mergedBy,reviewDecision,comments,reviews,statusCheckRollup,author'
+const PR_FIELDS = 'number,url,state,mergedAt,mergedBy,reviewDecision,comments,reviews,statusCheckRollup,author,headRefOid'
 
 export function pr(repo: string, no: number): Pr {
   return Pr.parse(gh(['pr', 'view', String(no), '--repo', repo, '--json', PR_FIELDS]))

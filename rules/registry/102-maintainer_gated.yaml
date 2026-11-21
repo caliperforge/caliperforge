@@ -1,0 +1,6 @@
+- name: maintainer_gated
+  table: signals
+  column: at
+  where: "kind = 'ci_red' AND external_id LIKE '%-fork-live-gate'"
+  gap: 7d
+  expected: 0

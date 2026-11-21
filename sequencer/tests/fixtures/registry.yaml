@@ -88,6 +88,12 @@
   where: "kind = 'greptile.skipped'"
   gap: 1d
   expected: 0
+- name: maintainer_gated
+  table: signals
+  column: at
+  where: "kind = 'ci_red' AND external_id LIKE '%-fork-live-gate'"
+  gap: 7d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

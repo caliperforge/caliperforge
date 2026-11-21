@@ -46,6 +46,7 @@ export const Profile = z.strictObject({
   finish: z.record(z.string(), z.array(z.string()).min(1)).optional(),
   finish_minutes: z.int().positive().optional(),
   greptile_files: z.array(z.string()).optional(),
+  maintainer_gated: z.array(z.string()).optional(),
 })
 
 export type Profile = z.infer<typeof Profile>

@@ -190,10 +190,16 @@ test('keychain parses Fixes and a checked AI disclosure', () => {
   const keychain = profile(REPO, 'solana-foundation/solana-keychain')
   expect(keychain?.issue_ref).toBe('Fixes')
   expect(keychain?.disclosure).toMatch(/^## AI disclosure\n- \[x\] AI tooling was used\. Tool and extent: \S/)
+  expect(keychain?.maintainer_gated).toEqual(['fork-live-gate'])
 })
 
 test('914 D4 greptile_files not a string list is refused', () => {
   const dir = root({ 'widget.yml': 'greptile_files: 3\n' })
+  expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+})
+
+test('maintainer_gated not a string list is refused', () => {
+  const dir = root({ 'widget.yml': 'maintainer_gated: 3\n' })
   expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
 })
 

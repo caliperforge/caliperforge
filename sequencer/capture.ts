@@ -3,10 +3,11 @@ import { pr as readPr, prNumber, rehearsal, WINDOW, type Pr, type Read } from '.
 import { add, homes, LANE, LANES, laneOf, seen, unfiled } from '../cli/plan.ts'
 import { pipesOn, pulls, pushedLive, rehearsing, unpushed } from '../store/capture.ts'
 import { attribute } from '../store/dispositions.ts'
-import { logged, loggedSince } from '../store/events.ts'
+import { logged, loggedSince, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { allPlans, end, originRef } from '../store/plans.ts'
+import { profile } from '../store/profile.ts'
 import { latest } from '../store/rulings.ts'
 import { known, record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
@@ -159,17 +160,26 @@ function landed(db: Db, repo: string, open: Set<string>): void {
 }
 
 function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string, list?: Read): SignalRow[] {
+  const gated = root === undefined ? [] : profile(root, row.repo)?.maintainer_gated ?? []
   const view = read(row.repo, prNumber(row.evidence))
   if (row.rehearsal !== null) {
-    for (const s of rehearsed(row.rehearsal, row.plan, row.repo, view.number, signals(view, row))) stored(db, row, s)
+    for (const s of rehearsed(row.rehearsal, row.plan, row.repo, view.number, signals(view, row, gated))) stored(db, row, s)
     return []
   }
-  const fresh = signals(view, row).filter((s) => s.kind !== 'bot_review' || !known(db, s)).map((s) => stored(db, row, s)).filter((s) => s !== null)
+  waited(db, row, view, gated)
+  const fresh = signals(view, row, gated).filter((s) => s.kind !== 'bot_review' || !known(db, s)).map((s) => stored(db, row, s)).filter((s) => s !== null)
   const bots = fresh.filter((s) => s.kind === 'bot_review')
   if (root !== undefined && list !== undefined && bots.length > 0) inlined(db, row, view.number, { root, list }, bots)
   attribute(db, row.plan, row.repo, view)
   closed(db, row.plan, row.evidence, view.state)
   return acted(db, view, fresh)
+}
+
+function waited(db: Db, row: Pushed, view: Pr, gated: string[]): void {
+  const name = (view.statusCheckRollup ?? []).find((c) => c.conclusion === 'FAILURE' && gated.includes(c.name ?? ''))?.name
+  const pointer = `${row.repo}#${String(view.number)}@${view.headRefOid ?? ''}`
+  if (name === undefined || pointers(db, 'maintainer_gated').includes(pointer)) return
+  logged(db, { plan: row.plan, kind: 'maintainer_gated', actor: 'capture', outcome: 'pass', message: `${name} waits on a maintainer run`, pointer, run: null })
 }
 
 /** Only a bot review recorded this tick is read for, so a pull request polled every tick is asked once per review. */
@@ -199,14 +209,14 @@ function acted(db: Db, view: Pr, fresh: SignalRow[]): SignalRow[] {
 }
 
 /** Everything on our open pull request but what we said ourselves: our own comment asks nothing of us. */
-export function signals(view: Pr, row: Pushed): Signal[] {
+export function signals(view: Pr, row: Pushed, gated: string[]): Signal[] {
   const base: Base = { repo: row.repo, pr: view.number, plan: row.plan }
   const theirs = (login: string): boolean => login !== view.author?.login
   return [
     ...view.comments.filter((c) => theirs(c.author.login)).map((c) => comment(base, c)),
     ...view.reviews.filter((r) => theirs(r.author.login)).map((r) => review(base, r)),
     ...merged(base, view),
-    ...red(base, view),
+    ...red(base, view, gated),
   ].filter((s) => s.kind !== 'bot_review' || typeof s.head === 'string')
     .map((s) => (s.kind === 'bot_review' ? { ...s, external_id: `${s.external_id}@${String(s.head)}` } : s))
 }
@@ -245,9 +255,9 @@ function merged(base: Base, view: Pr): Signal[] {
     external_id: `merge-${String(view.number)}`, score: null }]
 }
 
-function red(base: Base, view: Pr): Signal[] {
+function red(base: Base, view: Pr, gated: string[]): Signal[] {
   return (view.statusCheckRollup ?? [])
-    .filter((c) => c.conclusion === 'FAILURE')
+    .filter((c) => c.conclusion === 'FAILURE' && !gated.includes(c.name ?? ''))
     .map((c) => ({ ...base, kind: 'ci_red' as const, author: 'ci', at: new Date().toISOString(),
       external_id: `${String(view.number)}-${c.name ?? 'check'}`, score: null,
       body: `their CI check ${c.name ?? 'check'} is red on the pull request` }))

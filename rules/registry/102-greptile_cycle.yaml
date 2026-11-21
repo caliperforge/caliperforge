@@ -1,0 +1,6 @@
+- name: greptile_cycle
+  table: events
+  column: at
+  where: "kind = 'greptile.skipped'"
+  gap: 1d
+  expected: 0

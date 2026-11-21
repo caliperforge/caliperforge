@@ -6,8 +6,9 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
-import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
+import { actors, actorSection, costs, costSection, fileWaits, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
+import { greptileLine } from '../greptile.ts'
 import { openingLines } from '../openings.ts'
 import { outsideSection } from '../outside.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
@@ -16,7 +17,7 @@ import { directorSection, fixerLine, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
 import { escapeSection } from '../escapes.ts'
 import { hold } from '../../sequencer/hold.ts'
-import { monthly, reviewed } from '../../sequencer/ready.ts'
+import { monthly } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
 import type { Listed } from '../../precedents/openings.ts'
 import { record as addScore, underpowered } from '../../store/bench.ts'
@@ -326,36 +327,22 @@ test('stale reason on a blocked plan or none on a live plan adds 0', () => {
   expect(waitLine(waits(db))).toBe('waits\tleased 1\n')
 })
 
-test('Greptile counts dated requests of this UTC month, all plans', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cf-month-'))
-  const now = new Date('2026-09-26T12:00:00.000Z')
+test('Greptile counts dated asks of this billing cycle, all plans', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-cycle-'))
+  const now = new Date('2026-11-21T12:00:00.000Z')
   expect(monthly(root, now)).toBe(0)
   const at = (sha: string, when: string): string => `${sha.repeat(40)} ${when}\n`
-  put(root, 1, 'greptile.asked', at('a', now.toISOString()).repeat(7) + at('b', '2026-08-31T23:59:59.000Z'))
-  put(root, 2, 'greptile.asked', `${'c'.repeat(40)}\n` + at('d', '2026-09-01T00:00:00.000Z').repeat(5))
-  expect(monthly(root, now)).toBe(12)
-  expect(greptileLine(12)).toBe('greptile 12/50 this month\n')
+  put(root, 1, 'greptile.asked', at('a', '2026-11-21T00:00:00.000Z') + at('b', '2026-11-20T23:59:59.000Z'))
+  put(root, 2, 'greptile.asked', `${'c'.repeat(40)}\n` + at('d', '2026-11-21T09:00:00.000Z').repeat(5))
+  expect(monthly(root, now)).toBe(6)
+  expect(monthly(root, new Date('2026-12-20T23:59:00.000Z'))).toBe(6)
+  expect(monthly(root, new Date('2026-12-21T00:00:00.000Z'))).toBe(0)
+  expect(greptileLine(root, now)).toBe('greptile 6/50 asked this cycle, 44 left, resets 2026-12-21\n')
 })
 
 function review(db: Db, id: number, repo: string, author: string, at: string, plan: number, score = 4, head: string | null = null): void {
   record(db, { repo, pr: 3, kind: 'bot_review', author, at, external_id: `g${String(id)}`, score, plan, head })
 }
-
-test('D1 D2 Greptile rehearsal reviews of this UTC month count', () => {
-  const db = world()
-  const now = new Date('2026-10-02T12:00:00.000Z')
-  plan(db, 1, 'running', null, 1)
-  plan(db, 2, 'running', 25)
-  review(db, 1, 'acme/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1)
-  review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 2)
-  review(db, 3, 'caliperforge/widget', 'coderabbitai', '2026-10-02T09:00:00Z', 1)
-  review(db, 4, 'caliperforge/widget', 'greptile-apps', '2026-08-31T23:59:59Z', 1)
-  expect(reviewed(db, now)).toBe(0)
-  review(db, 5, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 1)
-  expect(reviewed(db, now)).toBe(1)
-  review(db, 6, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1)
-  expect(reviewed(db, now)).toBe(2)
-})
 
 const HEAD = 'a'.repeat(40)
 

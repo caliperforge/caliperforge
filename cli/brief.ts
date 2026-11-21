@@ -2,7 +2,6 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
-import { CREDITS } from '../sequencer/ready.ts'
 import { languageFor } from '../sequencer/route.ts'
 import { FORK, maybe, planDir, ruled } from '../sequencer/workspace.ts'
 import { ERA, openIds, type ActorRow, type ByType, type Cost, type Model, type PlanLine, type Ticket } from '../store/brief.ts'
@@ -94,10 +93,6 @@ export function waitLine(rows: { reason: Wait; plans: number }[]): string {
 export function fileWaits(rows: Overlap[]): string {
   const body = rows.length === 0 ? '  none\n' : rows.map((w) => `  plan ${String(w.plan)}\ton plan ${String(w.on)}\t${w.path ?? '-'}\n`).join('')
   return `waiting on files (${String(rows.length)})\n${body}`
-}
-
-export function greptileLine(n: number): string {
-  return `greptile ${String(n)}/${String(CREDITS)} this month\n`
 }
 
 interface Miss { language: string; passed: number; down: number; findings: number }

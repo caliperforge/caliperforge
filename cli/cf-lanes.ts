@@ -6,7 +6,6 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { relabel } from '../sequencer/priority.ts'
-import { reviewed } from '../sequencer/ready.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, record, Reading, width, windows } from '../store/lanes.ts'
@@ -20,7 +19,7 @@ import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/pla
 import { tally } from '../store/record.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
-import { actors, actorSection, byType, type ByType, caught, caughtSection, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
+import { actors, actorSection, byType, type ByType, caught, caughtSection, costs, costSection, day, fileWaits, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
   rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { directorSection, fixerLine, handUpLine } from './director.ts'
@@ -28,6 +27,7 @@ import { decisionSection, driftSection } from './drift.ts'
 import { escapeSection } from './escapes.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
+import { greptileLine } from './greptile.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
 import { openingLines } from './openings.ts'
@@ -218,7 +218,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(staffingSection(unstaffed(root)))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))
-    out(greptileLine(reviewed(handle, new Date())))
+    out(greptileLine(root, new Date()))
     out(missSection(misses(handle, root, new Date())))
     out(caughtSection(caught(handle, root, new Date())))
     out(benchSection(underpowered(handle)))

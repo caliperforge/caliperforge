@@ -82,6 +82,12 @@
   where: "kind = 'github_read' AND outcome = 'refuse' AND message LIKE '%is not github.com/<owner>/<repo>%' AND message NOT LIKE '%.%/%@%'"
   gap: 7d
   expected: 0
+- name: greptile_cycle
+  table: events
+  column: at
+  where: "kind = 'greptile.skipped'"
+  gap: 1d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

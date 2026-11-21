@@ -9,6 +9,7 @@ import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import { headOf, type Wire } from '../push.ts'
+import { cycle } from '../cycle.ts'
 import { ASKED, CREDITS, proved, readyGate, SKIPPED } from '../ready.ts'
 import { mapOf } from '../steps.ts'
 import { SILENT, waive, WAIVED } from '../waived.ts'
@@ -86,15 +87,24 @@ test('D2 D3 bytes changed after senior are proved again', async () => {
   expect(readyVerdicts(w)).toBe(1)
 })
 
-test('a spent month holds ready for the COO, Greptile unasked', async () => {
+test('a cycle runs from the 21st to the next 21st', () => {
+  const iso = (c: { start: Date; reset: Date }): string[] => [c.start.toISOString(), c.reset.toISOString()]
+  expect(iso(cycle(new Date('2026-11-21T12:00:00.000Z')))).toEqual(['2026-11-21T00:00:00.000Z', '2026-12-21T00:00:00.000Z'])
+  expect(iso(cycle(new Date('2026-12-31T00:00:00.000Z')))).toEqual(['2026-12-21T00:00:00.000Z', '2027-01-21T00:00:00.000Z'])
+})
+
+const SPENT = (): string => `Greptile out of credits until ${cycle(new Date()).reset.toISOString().slice(0, 10)}`
+
+test('a spent cycle passes with the reset date, Greptile unasked', async () => {
   const log: string[] = []
   const [w, lap] = await atReady(log, { rehearse: () => undefined })
   put(w.root, 2, ASKED, `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(CREDITS))
-  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_coo', state: 'blocked_on_ceo', spans: ['greptile.quota'],
-    note: expect.stringMatching(/not asked: monthly quota spent \(50\/50\); held for the COO$/) as unknown })
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass',
+    note: expect.stringContaining(`; no Greptile score: ${SPENT()}`) as unknown })
   expect(log.filter((l) => l.startsWith('review '))).toEqual([])
-  expect(plan(w.db, 1)).toMatchObject({ step: 6, state: 'blocked_on_ceo' })
-  expect(get(w.root, 1, SKIPPED)).toBe(`${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(get(w.root, 1, SKIPPED)).toBe(`${headSha(srcDir(w.root, 1))} ${SPENT()}\n`)
+  expect(eventsOf(w.db, 1, SKIPPED)).toEqual([{ actor: 'ready', outcome: 'pass', message: 'caliperforge/widget' }])
 })
 
 const fixes = (w: World): void => {
@@ -150,6 +160,16 @@ test('a second head at ready gets its own ask', async () => {
   const second = headSha(srcDir(w.root, 1))
   expect(second).not.toBe(first)
   expect(get(w.root, 1, ASKED).trim().split('\n').map((l) => l.split(' ')[0])).toEqual([first, second])
+})
+
+test('one unscored head at ready is asked once', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(log, UNSCORED)
+  await lap()
+  await lap()
+  expect(plan(w.db, 1).step).toBe(6)
+  expect(reviews(log)).toHaveLength(1)
+  expect(get(w.root, 1, ASKED).trim().split('\n')).toHaveLength(1)
 })
 
 test('D2 a P2-only head stays at step 6', async () => {
@@ -272,13 +292,13 @@ test('a silent fork whose selection cannot be listed names the 403', async () =>
   expect((await lap())?.note).toContain('; Greptile\'s installation on caliperforge selects repositories this gh credential cannot list (HTTP 403)')
 })
 
-test('a spent month on a silent fork holds for the COO', async () => {
+test('a spent cycle on a silent fork passes, Greptile unasked', async () => {
   const log: string[] = []
   const [w, lap] = await atReady(log, { ...UNSCORED, heard: () => ago(SILENT + 1) })
   put(w.root, 2, ASKED, `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(CREDITS))
-  expect(await lap()).toMatchObject({ step: 6, outcome: 'needs_coo', spans: ['greptile.quota'] })
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', note: expect.stringContaining(`; no Greptile score: ${SPENT()}`) as unknown })
   expect(reviews(log)).toEqual([])
-  expect(plan(w.db, 1)).toMatchObject({ step: 6, state: 'blocked_on_ceo' })
+  expect(plan(w.db, 1).step).toBe(7)
 })
 
 test('a fork heard within 14 days is asked and holds', async () => {

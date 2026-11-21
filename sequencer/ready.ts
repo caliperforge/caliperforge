@@ -13,9 +13,10 @@ import { template } from '../store/facts.ts'
 import { profile } from '../store/profile.ts'
 import { evidenceOf, lastCi, passed, pushTarget, railedParts, target, targetRepo, unanswered } from '../store/ready.ts'
 import { diffAt } from '../store/refusals.ts'
-import { graded, greptiled } from '../store/signals.ts'
+import { graded } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
+import { cycle } from './cycle.ts'
 import type { Outcome } from './kind.ts'
 import { prBody, refOf } from './pr.ts'
 import { forkCi, GRADES, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
@@ -37,16 +38,12 @@ export const ASKED = 'greptile.asked'
 export const SKIPPED = 'greptile.skipped'
 
 export function monthly(root: string, now: Date): number {
-  const month = now.toISOString().slice(0, 7)
+  const start = cycle(now).start.getTime()
   const work = join(root, '.cf/work')
   if (!existsSync(work)) return 0
   return readdirSync(work)
     .flatMap((plan) => (maybe(root, Number(plan), ASKED) ?? '').split('\n'))
-    .filter((l) => l.split(' ')[1]?.startsWith(month) === true).length
-}
-
-export function reviewed(db: Db, now: Date): number {
-  return greptiled(db, `${FORK}/*`, now.toISOString().slice(0, 7))
+    .filter((l) => Date.parse(l.split(' ')[1] ?? '') >= start).length
 }
 
 export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
@@ -103,7 +100,7 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
     if (unread !== null) return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: unread }
     const waiver = waived(root, plan.id, sha)
     const asks = (maybe(root, plan.id, ASKED) ?? '').split('\n')
-    return waiver !== null ? `; Greptile ${waiver}` : (asks.some((l) => l.startsWith(`${sha} `)) ? null : asked(root, plan.id, sha, fork, wire)) ?? silent(db, plan.id, fork, at, wire.heard?.(fork), install)
+    return waiver !== null ? `; Greptile ${waiver}` : (asks.some((l) => l.startsWith(`${sha} `)) ? null : asked(db, root, plan.id, sha, fork, wire)) ?? silent(db, plan.id, fork, at, wire.heard?.(fork), install)
       ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, GRADES)
       ?? { outcome: 'needs_coo', spans: ['greptile.missing'], note: `${at} has no Greptile score after ${String(GRADING)} ticks; held for the COO` }
   }
@@ -123,12 +120,13 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ruled.join(', ')}`
 }
 
-function asked(root: string, plan: number, sha: string, fork: string, wire: Wire): Outcome | null {
-  const month = monthly(root, new Date())
-  if (month >= CREDITS) {
-    const why = `monthly quota spent (${String(month)}/${String(CREDITS)})`
+function asked(db: Db, root: string, plan: number, sha: string, fork: string, wire: Wire): string | null {
+  const now = new Date()
+  if (monthly(root, now) >= CREDITS) {
+    const why = `Greptile out of credits until ${cycle(now).reset.toISOString().slice(0, 10)}`
     put(root, plan, SKIPPED, `${sha} ${why}\n`)
-    return { outcome: 'needs_coo', spans: ['greptile.quota'], note: `${fork}@${sha.slice(0, 12)} not asked: ${why}; held for the COO` }
+    logged(db, { plan, kind: SKIPPED, actor: 'ready', outcome: 'pass', message: fork, pointer: `${fork}@${sha.slice(0, 12)}`, run: null })
+    return `; no Greptile score: ${why}`
   }
   wire.review(fork, rehearsalBranch(root, plan))
   put(root, plan, ASKED, `${maybe(root, plan, ASKED) ?? ''}${sha} ${new Date().toISOString()}\n`)

@@ -1,7 +1,8 @@
+import type { Installation } from '../cli/gh.ts'
 import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import type { Holder } from '../store/plans.ts'
-import { headSha, maybe, put, srcDir } from './workspace.ts'
+import { FORK, headSha, maybe, put, srcDir } from './workspace.ts'
 
 export const WAIVED = 'greptile.waived'
 
@@ -12,16 +13,17 @@ export function waived(root: string, plan: number, sha: string): string | null {
   return `waived at ${sha.slice(0, 12)} by ${by ?? ''}: ${why.join(' ')}`
 }
 
-/** Days without a Greptile post on the fork after which a head is neither asked nor waited on. */
+/** Days without a Greptile post on the fork after which a head is asked but not waited on. */
 export const SILENT = 14
 
 /** `last` is the fork's newest Greptile post, null when none is in reach, undefined when nothing read it. */
-export function silent(db: Db, plan: number, fork: string, at: string, last: string | null | undefined): string | null {
+export function silent(db: Db, plan: number, fork: string, at: string, last: string | null | undefined, install?: Installation): string | null {
   if (last === undefined || (last !== null && !(Date.now() - Date.parse(last) > SILENT * 86_400_000))) return null
   if (!pointers(db, 'greptile.silent').includes(at)) {
     logged(db, { plan, kind: 'greptile.silent', actor: 'ready', outcome: 'pass', message: fork, pointer: at, run: null })
   }
-  return `; no Greptile score: Greptile silent on ${fork} since ${last?.slice(0, 10) ?? 'before its newest 100 comments'}`
+  const why = install === 'unlisted' ? `; Greptile's installation on ${FORK} selects repositories this gh credential cannot list (HTTP 403)` : ''
+  return `; no Greptile score: Greptile silent on ${fork} since ${last?.slice(0, 10) ?? 'before its newest 100 comments'}${why}`
 }
 
 export function waive(db: Db, root: string, plan: number, by: Holder, why: string): string {

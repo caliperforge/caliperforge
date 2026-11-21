@@ -1309,9 +1309,9 @@ test('no Greptile score holds to tick 45; 46 holds for the COO', async () => {
 
 test('a fork without Greptile refuses ready and asks nothing', async () => {
   const log: string[] = []
-  const [w, lap] = await unscored(log, { greptile: () => false })
+  const [w, lap] = await unscored(log, { greptile: () => 'missing' })
   expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile.installed'],
-    note: 'Greptile is not installed on caliperforge/widget' })
+    note: 'Greptile is not installed on caliperforge' })
   expect(log.filter((l) => l.startsWith('review '))).toEqual([])
   expect(maybe(w.root, 1, 'greptile.asked')).toBeNull()
   expect(plan(w.db, 1).step).toBe(6)

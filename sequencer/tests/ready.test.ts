@@ -244,7 +244,7 @@ test('a waiver at the head passes to step 7, Greptile unasked', async () => {
 
 const ago = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString()
 
-test('a fork silent past 14 days passes to step 7 unasked', async () => {
+test('a fork silent past 14 days is asked and passes to step 7', async () => {
   const log: string[] = []
   const last = ago(SILENT + 1)
   const silent = { ...UNSCORED, heard: (): string => last }
@@ -252,10 +252,33 @@ test('a fork silent past 14 days passes to step 7 unasked', async () => {
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: [],
     note: expect.stringContaining(`; no Greptile score: Greptile silent on caliperforge/widget since ${last.slice(0, 10)}`) as unknown })
   expect(plan(w.db, 1).step).toBe(7)
-  expect(reviews(log)).toEqual([])
-  expect(maybe(w.root, 1, ASKED)).toBeNull()
+  expect(reviews(log)).toHaveLength(1)
+  expect(maybe(w.root, 1, ASKED)).toMatch(new RegExp(`^${headSha(srcDir(w.root, 1))} `))
   expect(readyGate(w.db, w.root, plan(w.db, 1), { ...watched([], w.root, 1), ...silent })).toMatchObject({ outcome: 'pass' })
   expect(eventsOf(w.db, 1, 'greptile.silent')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'caliperforge/widget' }])
+})
+
+test('an unselected fork refuses ready and asks nothing', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(log, { ...UNSCORED, greptile: () => 'unselected' })
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile.installed'],
+    note: 'caliperforge/widget is not selected in Greptile\'s installation on caliperforge' })
+  expect(reviews(log)).toEqual([])
+  expect(maybe(w.root, 1, ASKED)).toBeNull()
+})
+
+test('a silent fork whose selection cannot be listed names the 403', async () => {
+  const [, lap] = await atReady([], { ...UNSCORED, heard: () => ago(SILENT + 1), greptile: () => 'unlisted' })
+  expect((await lap())?.note).toContain('; Greptile\'s installation on caliperforge selects repositories this gh credential cannot list (HTTP 403)')
+})
+
+test('a spent month on a silent fork holds for the COO', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(log, { ...UNSCORED, heard: () => ago(SILENT + 1) })
+  put(w.root, 2, ASKED, `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(CREDITS))
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'needs_coo', spans: ['greptile.quota'] })
+  expect(reviews(log)).toEqual([])
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, state: 'blocked_on_ceo' })
 })
 
 test('a fork heard within 14 days is asked and holds', async () => {

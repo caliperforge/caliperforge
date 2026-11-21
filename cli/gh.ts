@@ -229,18 +229,19 @@ const Installations = z.object({
 
 const Repositories = z.object({ repositories: z.array(z.object({ full_name: z.string() })) })
 
-export function installed(fork: string, read: Read = gh): boolean {
+export type Installation = 'missing' | 'unselected' | 'unlisted' | 'installed'
+export function installed(fork: string, read: Read = gh): Installation {
   const app = Installations.parse(read(['api', `orgs/${fork.slice(0, fork.indexOf('/'))}/installations?per_page=${String(WINDOW)}`]))
     .installations.find((i) => i.app_slug === 'greptile-apps')
-  if (app === undefined) return false
-  if (app.repository_selection === 'all') return true
-  // Listing a selected installation's repositories needs the read:user scope; without it, assume installed and let the window run.
+  if (app === undefined) return 'missing'
+  if (app.repository_selection === 'all') return 'installed'
+  // Listing a selected installation's repositories needs the read:user scope; without it, the selection is unlisted.
   let listed: unknown
   try { listed = read(['api', `user/installations/${String(app.id)}/repositories?per_page=${String(WINDOW)}`]) } catch (e) {
-    if (String(e).includes('HTTP 403')) return true
+    if (String(e).includes('HTTP 403')) return 'unlisted'
     throw e
   }
-  return Repositories.parse(listed).repositories.some((r) => r.full_name === fork)
+  return Repositories.parse(listed).repositories.some((r) => r.full_name === fork) ? 'installed' : 'unselected'
 }
 
 export function rehearsal(fork: string, branch: string, read: Read = gh): number | null {

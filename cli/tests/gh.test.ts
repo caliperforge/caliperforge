@@ -175,31 +175,31 @@ function apps(selection: string, repos: string[], calls: string[][]): Read {
 }
 
 test('D4 no greptile-apps installation is not installed', () => {
-  expect(installed(FORK, () => ({ installations: [{ id: 3, app_slug: 'renovate', repository_selection: 'all' }] }))).toBe(false)
+  expect(installed(FORK, () => ({ installations: [{ id: 3, app_slug: 'renovate', repository_selection: 'all' }] }))).toBe('missing')
 })
 
 test('D4 all is installed after one read', () => {
   const calls: string[][] = []
-  expect(installed(FORK, apps('all', [], calls))).toBe(true)
+  expect(installed(FORK, apps('all', [], calls))).toBe('installed')
   expect(calls).toEqual([['api', 'orgs/caliperforge/installations?per_page=100']])
 })
 
 test('D4 selected without the fork is not installed', () => {
-  expect(installed(FORK, apps('selected', ['caliperforge/other'], []))).toBe(false)
+  expect(installed(FORK, apps('selected', ['caliperforge/other'], []))).toBe('unselected')
 })
 
 test('D4 selected with the fork is installed', () => {
   const calls: string[][] = []
-  expect(installed(FORK, apps('selected', ['caliperforge/other', FORK], calls))).toBe(true)
+  expect(installed(FORK, apps('selected', ['caliperforge/other', FORK], calls))).toBe('installed')
   expect(calls[1]).toEqual(['api', 'user/installations/7/repositories?per_page=100'])
 })
 
-test('D4 selected but unreadable is assumed installed', () => {
+test('D4 selected but unreadable is unlisted', () => {
   const read: Read = (args) => {
     if (String(args[1]).startsWith('user/')) throw new Error('HTTP 403')
     return { installations: [{ id: 7, app_slug: 'greptile-apps', repository_selection: 'selected' }] }
   }
-  expect(installed(FORK, read)).toBe(true)
+  expect(installed(FORK, read)).toBe('unlisted')
 })
 
 test('D4 selected listing failing for another reason throws', () => {

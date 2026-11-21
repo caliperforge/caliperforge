@@ -98,12 +98,12 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   const at = `${fork}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
   if (row === null) {
-    if (wire.greptile?.(fork) === false) {
-      return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: `Greptile is not installed on ${fork}` }
-    }
+    const install = wire.greptile?.(fork)
+    const unread = install === 'missing' ? `Greptile is not installed on ${FORK}` : install === 'unselected' ? `${fork} is not selected in Greptile's installation on ${FORK}` : null
+    if (unread !== null) return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: unread }
     const waiver = waived(root, plan.id, sha)
     const asks = (maybe(root, plan.id, ASKED) ?? '').split('\n')
-    return waiver !== null ? `; Greptile ${waiver}` : (asks.some((l) => l.startsWith(`${sha} `)) ? null : silent(db, plan.id, fork, at, wire.heard?.(fork)) ?? asked(root, plan.id, sha, fork, wire))
+    return waiver !== null ? `; Greptile ${waiver}` : (asks.some((l) => l.startsWith(`${sha} `)) ? null : asked(root, plan.id, sha, fork, wire)) ?? silent(db, plan.id, fork, at, wire.heard?.(fork), install)
       ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, GRADES)
       ?? { outcome: 'needs_coo', spans: ['greptile.missing'], note: `${at} has no Greptile score after ${String(GRADING)} ticks; held for the COO` }
   }

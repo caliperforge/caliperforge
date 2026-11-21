@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
 import { amendIssue } from '../cli/amend.ts'
-import { actions, closeIssue, commentIssue, describePr, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, prNumber, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { actions, closeIssue, commentIssue, describePr, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, prNumber, rehearse, review, unrehearse, type Installation, type IssueComment, type Read } from '../cli/gh.ts'
 import { heard } from '../cli/heard.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
@@ -58,7 +58,7 @@ export interface Wire {
   unrehearse?: (fork: string, branch: string) => void
   at?: (dir: string, ref: string) => string
   review: (fork: string, branch: string) => void
-  greptile?: (fork: string) => boolean
+  greptile?: (fork: string) => Installation
   heard?: (fork: string) => string | null
   actions?: (fork: string) => boolean
   dispatch?: (fork: string, file: string, branch: string) => void

@@ -25,6 +25,7 @@ import { ASKED, GRADING, SKIPPED } from './ready.ts'
 import { checked } from './seat.ts'
 import { work, type Hit } from './theirs.ts'
 import { UNRUN } from './triggers.ts'
+import { tried } from './unread.ts'
 import { listed, settled, unruled } from './unruled.ts'
 import { waived } from './waived.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
@@ -52,7 +53,7 @@ export function signoffs(db: Db, root: string, desk: Desk, read: Read, now: Date
   const cards = batch(db, root).filter((c) => c.kind === 'plan' && waiting(db, c))
   const live = new Set(cards.map((c) => c.id))
   const gone = carded(db, root).filter((id) => !live.has(id)).map((id) => withdraw(db, root, id, desk))
-  return [...gone.filter((s) => s !== null), ...cards.flatMap((c) => one(db, root, c, desk, read, now))]
+  return [...gone.filter((s) => s !== null), ...cards.flatMap((c) => tried(db, root, c.id, () => keptOf(root, c.id)?.no ?? null, () => one(db, root, c, desk, read, now)))]
 }
 
 /** An outside plan whose checkout still holds the head the ready gate proved: the only head a label can sign. */

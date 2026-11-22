@@ -12,6 +12,7 @@ import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { halted, upgraded } from '../sequencer/upgrade.ts'
 import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
+import { reread, unread } from '../sequencer/unread.ts'
 import { byHand } from '../sequencer/director.ts'
 import { headSha, SIGNOFF } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
@@ -159,10 +160,11 @@ function cards(handle: Db, now: Date): void {
   try {
     for (const s of signoffs(handle, root, desk(SIGNOFF), gh, now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
     late(handle, root, desk(SIGNOFF), now)
+    reread(root, null)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     process.stderr.write(`cf: sign-off cards: ${message}\n`)
-    logged(handle, { plan: null, kind: 'signoff_unread', actor: 'cf', outcome: 'refuse', message, pointer: null, run: null })
+    if (unread(root, null)) logged(handle, { plan: null, kind: 'signoff_unread', actor: 'cf', outcome: 'refuse', message, pointer: null, run: null })
   }
 }
 

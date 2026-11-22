@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -6,10 +6,10 @@ import { approve as approveBatch } from '../../cli/batch.ts'
 import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { approvalsOf, signersOf } from '../../store/approvals.ts'
-import { eventsOf, logged, type Event } from '../../store/events.ts'
+import { eventsOf, logged, pointers, type Event } from '../../store/events.ts'
 import { keepEscapes } from '../../store/escapes.ts'
 import { amend, width } from '../../store/lanes.ts'
-import { putPlan, rewind } from '../../store/plans.ts'
+import { putPlan, rewind, stampHead } from '../../store/plans.ts'
 import { flag } from '../../store/precedent-findings.ts'
 import { dropSignals, record as signal, type SignalRow } from '../../store/signals.ts'
 import { addReview } from '../../store/verdict.ts'
@@ -18,6 +18,7 @@ import { fold } from '../handled.ts'
 import { tick } from '../index.ts'
 import { headOf, sent } from '../push.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
+import { reread, unread as unreadCards } from '../unread.ts'
 import { UNRUN } from '../triggers.ts'
 import { WAIVED } from '../waived.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
@@ -722,4 +723,55 @@ test('a card opened over an open finding logs open_findings', async () => {
 test('the cards live on the private sign-off repo, not ours', () => {
   expect(SIGNOFF).toBe('caliperforge/signoff')
   expect(SIGNOFF).not.toBe(SELF)
+})
+
+/** `seen` throws a gh failure for `no` while `failing()` holds. */
+function blipping(desk: ReturnType<typeof fake>, no: number, failing: () => boolean): void {
+  const seen = desk.seen
+  desk.seen = (n) => {
+    if (n === no && failing()) throw Object.assign(new Error('Command failed: gh issue view'), { stderr: 'HTTP 502\n' })
+    return seen(n)
+  }
+}
+
+test('a card that cannot be read leaves the next card read', async () => {
+  const w = await AT_BATCH()
+  const digest = plan(w.db, 1).head_digest ?? ''
+  cpSync(join(w.root, '.cf/work/1'), join(w.root, '.cf/work/2'), { recursive: true })
+  putPlan(w.db, { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '2000-01-01T00:00:00.000Z', step: 7, retries: 0 })
+  stampHead(w.db, 2, digest)
+  put(w.root, 2, 'signoff', `100 ${digest} https://github.com/${SIGNOFF}/issues/100\n`)
+  put(w.root, 1, 'signoff', `101 ${digest} https://github.com/${SIGNOFF}/issues/101\n`)
+  const desk = fake()
+  stray(desk, 100, digest)
+  stray(desk, 101, digest, 'go')
+  blipping(desk, 100, () => true)
+  const before = readFileSync(join(w.root, '.cf/work/2/signoff'), 'utf8')
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 101, did: 'go' }])
+  expect(signersOf(w.db, 'plan')[0]).toEqual({ who: 'ceo', decision: 'approved', subject_digest: digest })
+  expect(readFileSync(join(w.root, '.cf/work/2/signoff'), 'utf8')).toBe(before)
+  expect(desk.log).toEqual(['close 101'])
+})
+
+test('a spell of unread ticks logs once; a good read ends it', async () => {
+  const w = await AT_BATCH()
+  const desk = fake()
+  signoffs(w.db, w.root, desk, none)
+  let failing = true
+  blipping(desk, 100, () => failing)
+  for (let at = 0; at < 3; at += 1) expect(signoffs(w.db, w.root, desk, none)).toEqual([])
+  expect(eventsOf(w.db, 1, 'signoff_unread')).toEqual([{ actor: 'signoff', outcome: 'refuse', message: 'HTTP 502' }])
+  expect(pointers(w.db, 'signoff_unread')).toEqual(['100'])
+  failing = false
+  signoffs(w.db, w.root, desk, none)
+  failing = true
+  signoffs(w.db, w.root, desk, none)
+  expect(pointers(w.db, 'signoff_unread')).toEqual(['100', '100'])
+})
+
+test('only the first outer failure of a spell is new', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-unread-'))
+  expect([unreadCards(root, null), unreadCards(root, null), unreadCards(root, null)]).toEqual([true, false, false])
+  reread(root, null)
+  expect(unreadCards(root, null)).toBe(true)
 })

@@ -214,7 +214,7 @@ const ISSUE: Issue = { number: 12, title: 't', body: '', state: 'OPEN', assignee
 const signedOff = (subject: string): string => `${subject}\n\nSigned-off-by: t <t@t>`
 
 function git(dir: string, args: string[]): void {
-  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: dir, stdio: 'ignore' })
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'maintenance.auto=false', ...args], { cwd: dir, stdio: 'ignore' })
 }
 
 function rooted(profile: string | null, files: Record<string, string> = {}, ours = signedOff('add hello')): string {

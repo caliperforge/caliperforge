@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { logged } from '../store/events.ts'
+import { logged, type Event } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { cause } from './unpolled.ts'
 import { planDir } from './workspace.ts'
@@ -9,30 +9,27 @@ import { planDir } from './workspace.ts'
 const markOf = (root: string, plan: number | null): string =>
   plan === null ? join(root, '.cf/signoff.unread') : join(planDir(root, plan), 'signoff.unread')
 
-/** True for the first failed read of a spell. */
-export function unread(root: string, plan: number | null): boolean {
+/** A read that throws logs `signoff_unread` on the first failure of a spell and returns nothing; a good read ends the spell. */
+export function unread<T>(db: Db, root: string, plan: number | null, read: () => T[], event: (error: unknown) => Pick<Event, 'actor' | 'message' | 'pointer'>): T[] {
   const mark = markOf(root, plan)
-  if (existsSync(mark)) return false
-  mkdirSync(dirname(mark), { recursive: true })
-  writeFileSync(mark, '')
-  return true
-}
-
-export function reread(root: string, plan: number | null): void {
-  rmSync(markOf(root, plan), { force: true })
+  try {
+    const done = read()
+    rmSync(mark, { force: true })
+    return done
+  } catch (error) {
+    const e = event(error)
+    if (existsSync(mark)) return []
+    mkdirSync(dirname(mark), { recursive: true })
+    writeFileSync(mark, '')
+    logged(db, { ...e, plan, kind: 'signoff_unread', outcome: 'refuse', run: null })
+    return []
+  }
 }
 
 /** A card that cannot be read stays where it stands; the next tick reads it again. */
 export function tried<T>(db: Db, root: string, plan: number, card: () => number | null, read: () => T[]): T[] {
-  try {
-    const done = read()
-    reread(root, plan)
-    return done
-  } catch (error) {
+  return unread(db, root, plan, read, (error) => {
     const no = card()
-    if (unread(root, plan)) {
-      logged(db, { plan, kind: 'signoff_unread', actor: 'signoff', outcome: 'refuse', message: cause(error), pointer: no === null ? null : String(no), run: null })
-    }
-    return []
-  }
+    return { actor: 'signoff', message: cause(error), pointer: no === null ? null : String(no) }
+  })
 }

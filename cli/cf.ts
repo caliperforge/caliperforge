@@ -12,7 +12,7 @@ import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { halted, upgraded } from '../sequencer/upgrade.ts'
 import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
-import { reread, unread } from '../sequencer/unread.ts'
+import { unread } from '../sequencer/unread.ts'
 import { byHand } from '../sequencer/director.ts'
 import { headSha, SIGNOFF } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
@@ -157,15 +157,15 @@ cf.command('coo-lite').description('fire one coo_lite run on the oldest stopped 
 
 /** A tracker that cannot be read this time leaves every card where it stands; the next tick reads it again. */
 function cards(handle: Db, now: Date): void {
-  try {
+  unread(handle, root, null, () => {
     for (const s of signoffs(handle, root, desk(SIGNOFF), gh, now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
     late(handle, root, desk(SIGNOFF), now)
-    reread(root, null)
-  } catch (error) {
+    return []
+  }, (error) => {
     const message = error instanceof Error ? error.message : String(error)
     process.stderr.write(`cf: sign-off cards: ${message}\n`)
-    if (unread(root, null)) logged(handle, { plan: null, kind: 'signoff_unread', actor: 'cf', outcome: 'refuse', message, pointer: null, run: null })
-  }
+    return { actor: 'cf', message, pointer: null }
+  })
 }
 
 /** Until the tree holds what it merged it would fire a lap of a version it has already replaced. */

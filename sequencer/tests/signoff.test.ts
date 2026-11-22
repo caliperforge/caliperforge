@@ -6,7 +6,7 @@ import { approve as approveBatch } from '../../cli/batch.ts'
 import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { approvalsOf, signersOf } from '../../store/approvals.ts'
-import { eventsOf, logged, pointers, type Event } from '../../store/events.ts'
+import { eventsOf, logged, ofKind, pointers, type Event } from '../../store/events.ts'
 import { keepEscapes } from '../../store/escapes.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { putPlan, rewind, stampHead } from '../../store/plans.ts'
@@ -18,7 +18,7 @@ import { fold } from '../handled.ts'
 import { tick } from '../index.ts'
 import { headOf, sent } from '../push.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
-import { reread, unread as unreadCards } from '../unread.ts'
+import { unread as unreadCards } from '../unread.ts'
 import { UNRUN } from '../triggers.ts'
 import { WAIVED } from '../waived.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
@@ -768,9 +768,16 @@ test('a spell of unread ticks logs once; a good read ends it', async () => {
   expect(pointers(w.db, 'signoff_unread')).toEqual(['100', '100'])
 })
 
-test('only the first outer failure of a spell is new', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cf-unread-'))
-  expect([unreadCards(root, null), unreadCards(root, null), unreadCards(root, null)]).toEqual([true, false, false])
-  reread(root, null)
-  expect(unreadCards(root, null)).toBe(true)
+test('a spell of outer failures logs one plan-null event', async () => {
+  const w = await AT_BATCH()
+  const outer = (fails: boolean): unknown[] => unreadCards(w.db, w.root, null, () => {
+    if (fails) throw new Error('HTTP 502')
+    return []
+  }, (error) => ({ actor: 'cf', message: String(error), pointer: null }))
+  const logs = (): unknown[] => ofKind(w.db, 'signoff_unread').filter((e) => e.plan === null)
+  expect([outer(true), outer(true)]).toEqual([[], []])
+  expect(logs()).toEqual([{ plan: null, kind: 'signoff_unread', actor: 'cf', outcome: 'refuse', message: 'Error: HTTP 502' }])
+  outer(false)
+  outer(true)
+  expect(logs()).toHaveLength(2)
 })

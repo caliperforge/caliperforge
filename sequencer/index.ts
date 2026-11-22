@@ -86,7 +86,7 @@ async function watched(db: Db, root: string, registry: Entry[], now: Date, read:
   due(db, registry, now, read, labels)
   stuck(db, root, registry, now)
   sunday(db, root, now)
-  if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)
+  if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now, registry.some((e) => e.name === 'paydesk_attest'))
   if (registry.some((e) => e.name === 'site_data')) sitedata(db, root, now)
 }
 

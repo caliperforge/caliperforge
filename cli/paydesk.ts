@@ -1,6 +1,7 @@
-import { createClient, createKeyPairSignerFromBytes, type KeyPairSigner } from '@solana/kit'
+import { address, createClient, createKeyPairSignerFromBytes, createSolanaRpc, type KeyPairSigner } from '@solana/kit'
 import { solanaRpc } from '@solana/kit-plugin-rpc'
 import { payer } from '@solana/kit-plugin-signer'
+import { fetchSysvarClock } from '@solana/sysvars'
 import type { Command } from 'commander'
 import { lookup } from 'node:dns/promises'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -12,6 +13,7 @@ import { live, providers, recheck, tally, verdict } from '../paydesk/live.ts'
 import { note } from '../paydesk/note.ts'
 import { prs, type Row } from '../paydesk/prs.ts'
 import { scan, type Net } from '../paydesk/scan.ts'
+import { line, reads, verified } from '../paydesk/verify.ts'
 import { paid } from '../store/paydesk-paid.ts'
 import type { Cli } from './cf-lanes.ts'
 
@@ -65,6 +67,14 @@ function registerAttest(paydesk: Command, net: Net, out: Cli['out']): Command {
       const lines = await attested(scanned(scanFile), statSync(scanFile).mtime,
         { issuer: issuer.address, credential: options.credential, out: options.out, dryRun: options.dryRun === true }, probe(net), chain(client, issuer, signer))
       out(`${lines.join('\n')}\n`)
+    })
+  paydesk.command('verify').argument('<url>').requiredOption('--rpc <url>').requiredOption('--issuer <address>').requiredOption('--credential <name>')
+    .option('--method <method>', 'HTTP method', 'GET')
+    .action(async (url: string, options: { rpc: string; issuer: string; credential: string; method: string }) => {
+      const rpc = createSolanaRpc(options.rpc)
+      const result = await verified(url, options.method, { issuer: address(options.issuer), credential: options.credential }, probe(net), reads(rpc),
+        async () => (await fetchSysvarClock(rpc)).unixTimestamp)
+      out(`${line(result)}\n`)
     })
   return paydesk
 }

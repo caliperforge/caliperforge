@@ -141,6 +141,7 @@ export async function paydesk(db: Db, root: string, now: Date, attest: boolean,
   const day = local.toISOString().slice(0, 10)
   if (local.getUTCDay() !== 1 || hhmm(db, now) < '05:00' || pointers(db, 'paydesk_live').includes(day)) return
   const event = { plan: null, kind: 'paydesk_live', actor: 'paydesk', pointer: day, run: null }
+  logged(db, { ...event, outcome: 'start', message: 'started' })
   try {
     const { failing, passing, gone } = await run(root, day)
     logged(db, { ...event, outcome: 'pass',

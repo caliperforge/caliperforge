@@ -56,7 +56,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
 
 function piped(enabled = 1): Db {
   const db = fresh(schema)
-  dropPipes(db, ['bench', 'site', 'rubin', 'bio'])
+  dropPipes(db, ['bench', 'site', 'rubin', 'bio', 'scrolls'])
   addPipe(db, { name: 'internal', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
@@ -125,7 +125,7 @@ test('D4: an issue a part of a split names is not adopted', () => {
 
 test('D4: a lane with its pipe off or missing is left unlisted', () => {
   const bare = fresh(schema)
-  dropPipes(bare, ['bench', 'site', 'rubin', 'bio'])
+  dropPipes(bare, ['bench', 'site', 'rubin', 'bio', 'scrolls'])
   for (const db of [piped(0), bare]) {
     laneOff(db, Number(pipeNamed(db, 'research')?.id))
     const log: string[] = []
@@ -135,10 +135,10 @@ test('D4: a lane with its pipe off or missing is left unlisted', () => {
   }
 })
 
-test('1437 D5: a fresh schema lists the rubin and bio homes', () => {
+test('1437 D5: a fresh schema lists rubin, bio and scrolls homes', () => {
   const log: string[] = []
   intake(fresh(schema), root, canned([], log))
-  for (const repo of ['caliperforge/vo-conformance', 'caliperforge/vcf-conformance']) {
+  for (const repo of ['caliperforge/vo-conformance', 'caliperforge/vcf-conformance', 'caliperforge/vesuvius-lab']) {
     expect(log.some((l) => l.startsWith(`issue list --repo ${repo} `))).toBe(true)
   }
 })

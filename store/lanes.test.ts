@@ -14,7 +14,7 @@ import { allPlans, pipeNamed, planById } from './plans.ts'
 
 const schema = join(import.meta.dirname, '../schema')
 
-const SCIENCE = [['rubin', 'vo-conformance'], ['bio', 'vcf-conformance']] as const
+const SCIENCE = [['rubin', 'vo-conformance'], ['bio', 'vcf-conformance'], ['scrolls', 'vesuvius-lab']] as const
 
 const issue = (repo: string): string => `https://github.com/${FORK}/${repo}/issues/1`
 
@@ -68,28 +68,28 @@ it('1247c D1 atelier is no longer a lane', () => {
   expect(LANES).not.toContain('atelier')
 })
 
-it('1437 D1 rubin and bio build their homes on their own pipes', () => {
+it('1437 D1 rubin, bio and scrolls build homes on own pipes', () => {
   for (const [lane, repo] of SCIENCE) {
     expect(LANE[lane]).toEqual({ template: 'pr_path', seat: 'python_specialist', home: `${FORK}/${repo}`, pipe: lane })
     expect(laneOf([{ name: `lane:${lane}` }])).toBe(lane)
   }
 })
 
-it('1437 D2 the rubin and bio pipes ship on, all day, two wide', () => {
+it('1437 D2 rubin, bio, scrolls pipes ship on, all day, 2 wide', () => {
   const db = fresh(schema)
   for (const [lane] of SCIENCE) {
     expect(pipeNamed(db, lane)).toMatchObject({ enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 2 })
   }
 })
 
-it('1437 D3 plans take rubin and bio and no unlisted lane', () => {
+it('1437 D3 plans take rubin, bio, scrolls and no unlisted lane', () => {
   const db = fresh(schema)
   for (const [lane, repo] of SCIENCE) expect(rejects(db, row(lane, repo))).toBe(false)
-  expect([1, 2].map((id) => planById(db, id).lane)).toEqual(['rubin', 'bio'])
+  expect([1, 2, 3].map((id) => planById(db, id).lane)).toEqual(['rubin', 'bio', 'scrolls'])
   expect(rejects(fresh(schema), row('solana', 'vo-conformance'))).toBe(true)
 })
 
-it('1437 D4 a rubin or bio issue queues on its pipe', () => {
+it('1437 D4 a rubin, bio or scrolls issue queues on its pipe', () => {
   for (const [lane, repo] of SCIENCE) {
     const db = fresh(schema)
     const filed = add(db, mkdtempSync(join(tmpdir(), 'cf-science-')), `${FORK}/${repo}#1`, 'ceo', undefined, canned(lane, repo))

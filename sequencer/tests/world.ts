@@ -235,13 +235,13 @@ export const once = (make: () => World | Promise<World>): (() => Promise<World>)
 }
 
 /**
- * The store ships eight lanes on, over a window with a wall clock in it. A sequencer test is one
+ * The store ships nine lanes on, over a window with a wall clock in it. A sequencer test is one
  * lane wide and runs at whatever hour the suite runs at, so the world opens the pr-path pipe all
- * day and drops the seven lanes it does not drive; a test that wants a second names it itself.
+ * day and drops the eight lanes it does not drive; a test that wants a second names it itself.
  */
 function onePipe(db: Db): void {
   hours(db, 1, '00:00', '23:59')
-  dropPipes(db, ['comms', 'research', 'bench', 'site', 'rubin', 'bio', 'scrolls'])
+  dropPipes(db, ['comms', 'research', 'bench', 'site', 'rubin', 'bio', 'scrolls', 'fuzzrig'])
 }
 
 /** Reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */

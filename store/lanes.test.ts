@@ -98,6 +98,39 @@ it('1437 D4 a rubin, bio or scrolls issue queues on its pipe', () => {
   }
 })
 
+it('the fuzzrig lane builds fuzz-rig on its own pipe', () => {
+  expect(LANE.fuzzrig).toEqual({ template: 'pr_path', seat: 'typescript_specialist', home: `${FORK}/fuzz-rig`, pipe: 'fuzzrig' })
+  expect(laneOf([{ name: 'lane:fuzzrig' }])).toBe('fuzzrig')
+})
+
+it('the fuzzrig pipe ships on, all day, two wide', () => {
+  expect(pipeNamed(fresh(schema), 'fuzzrig')).toMatchObject({ enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 2 })
+})
+
+it('plans take fuzzrig and no unlisted lane', () => {
+  const db = fresh(schema)
+  expect(rejects(db, row('fuzzrig', 'fuzz-rig'))).toBe(false)
+  expect(planById(db, 1).lane).toBe('fuzzrig')
+  expect(rejects(fresh(schema), row('solana', 'fuzz-rig'))).toBe(true)
+})
+
+it('intake lists fuzz-rig and its issue queues on fuzzrig', () => {
+  const log: string[] = []
+  intake(fresh(schema), mkdtempSync(join(tmpdir(), 'cf-fuzzrig-')), listing(log))
+  expect(log).toContain(`${FORK}/fuzz-rig`)
+  const db = fresh(schema)
+  const filed = add(db, mkdtempSync(join(tmpdir(), 'cf-fuzzrig-')), `${FORK}/fuzz-rig#1`, 'ceo', undefined, canned('fuzzrig', 'fuzz-rig'))
+  expect(filed).toMatchObject({ state: 'queued', lane: 'fuzzrig', seat: 'typescript_specialist' })
+  expect(planById(db, Number(filed.plan)).pipe_id).toBe(pipeNamed(db, 'fuzzrig')?.id)
+})
+
+it('a lane:fuzzrig issue elsewhere names fuzz-rig', () => {
+  const filed = add(fresh(schema), mkdtempSync(join(tmpdir(), 'cf-fuzzrig-')), `${FORK}/fuzz-bench#1`, 'ceo', undefined,
+    canned('fuzzrig', 'fuzz-bench'))
+  expect(filed).toMatchObject({ state: 'refused', origin: { origin_ref: 'plan.lane_home' } })
+  expect(filed.why).toContain(`the fuzzrig lane builds in ${FORK}/fuzz-rig`)
+})
+
 it('1486 D1 rubin has six homes, machine two, others one', () => {
   expect(homes('rubin')).toEqual(RUBIN.map((r) => `${FORK}/${r}`))
   expect(homes('machine')).toEqual([LANE.machine.home, `${FORK}/ledger-rig`])

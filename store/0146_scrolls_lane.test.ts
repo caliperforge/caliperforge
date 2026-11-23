@@ -18,7 +18,7 @@ it('0146 keeps plans rows, views, triggers and indexes', () => {
     VALUES (1, 'pr_path', 'blocked_on_ceo', '2026-11-23', 3, 'bio', 'python_specialist',
       'https://github.com/caliperforge/vcf-conformance/issues/1', 't', 'ceo', 'why', '2026-11-30')`).run()
   const before = db.prepare('SELECT * FROM plans').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0146_scrolls_lane.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0146_scrolls_lane.sql', '0147_fuzzrig_lane.sql'])
   expect(db.prepare('SELECT * FROM plans').all()).toEqual(before)
   expect(() => db.prepare('SELECT * FROM outcomes').all()).not.toThrow()
   expect(() => db.prepare('SELECT * FROM queue_order').all()).not.toThrow()

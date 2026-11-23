@@ -2,6 +2,7 @@ import { lookup } from 'node:dns/promises'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { git } from '../sequencer/workspace.ts'
 import { overall } from './card.ts'
 import { fqnOf, scan, type Net, type Scanned } from './scan.ts'
@@ -37,11 +38,14 @@ export function diffed(last: Scanned[], now: Scanned[]): Diffed {
   return { failing: turned(false), passing: turned(true), gone: last.filter((s) => !kept.has(s.fqn)).map((s) => s.fqn) }
 }
 
-export async function live(dir: string, date: string, dirs: string[], net: Net): Promise<Diffed> {
+export async function live(dir: string, date: string, dirs: string[], net: Net, pause = () => sleep(30_000)): Promise<Diffed> {
   mkdirSync(dir, { recursive: true })
   const prev = readdirSync(dir).flatMap((f) => PASS.exec(f)?.[1] ?? []).filter((d) => d < date).sort().at(-1)
   const last = prev === undefined ? [] : readFileSync(join(dir, `live-${prev}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as Scanned)
-  const now = await scan(dirs, undefined, join(dir, `live-${date}`), net)
+  const scanned = await scan(dirs, undefined, join(dir, `live-${date}`), net)
+  const suspect = diffed(last, scanned).failing
+  const recovered = suspect.length === 0 ? [] : await pause().then(() => recheck(dirs, suspect, undefined, net)).then((rows) => rows.filter(passes))
+  const now = scanned.map((s) => recovered.find((r) => r.fqn === s.fqn) ?? s)
   writeFileSync(join(dir, `live-${date}.jsonl`), now.map((row) => `${JSON.stringify(row)}\n`).join(''))
   const diff = diffed(last, now)
   const failing = now.filter((s) => diff.failing.includes(s.fqn)).map((s) => `${s.fqn}: ${verdict(s)}`)
@@ -50,6 +54,7 @@ export async function live(dir: string, date: string, dirs: string[], net: Net):
     `# pay-skills live ${date} against ${prev ?? 'no earlier pass'}`,
     '',
     '## Newly failing', ...list(failing),
+    '## Recovered on recheck', ...list(recovered.map((s) => s.fqn)),
     '## Newly passing', ...list(diff.passing),
     '## Gone', ...list(diff.gone),
     '',
@@ -57,7 +62,7 @@ export async function live(dir: string, date: string, dirs: string[], net: Net):
   return diff
 }
 
-export async function recheck(dirs: string[], fqns: string[], out: string, net: Net): Promise<Scanned[]> {
+export async function recheck(dirs: string[], fqns: string[], out: string | undefined, net: Net): Promise<Scanned[]> {
   const kept = dirs.filter((d) => fqns.includes(fqnOf(d)))
   for (const f of fqns) if (!kept.some((d) => fqnOf(d) === f)) process.stderr.write(`not in the catalog: ${f}\n`)
   return scan(kept, out, undefined, net)

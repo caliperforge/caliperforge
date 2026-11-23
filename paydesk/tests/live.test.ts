@@ -61,7 +61,7 @@ test('D4 live writes jsonl, cards and md against the last pass', async () => {
   expect(readdirSync(join(dir, 'live-2026-10-12'))).toEqual(['fixtures__listing.md'])
   expect(readFileSync(join(dir, 'live-2026-10-12.md'), 'utf8')).toBe([
     '# pay-skills live 2026-10-12 against 2026-10-05', '',
-    '## Newly failing', '- none', '## Newly passing', '- fixtures/listing', '## Gone', '- org/old', '',
+    '## Newly failing', '- none', '## Recovered on recheck', '- none', '## Newly passing', '- fixtures/listing', '## Gone', '- org/old', '',
   ].join('\n'))
 })
 
@@ -70,8 +70,43 @@ test('D6 with no earlier pass the md says so and nothing is gone', async () => {
   await live(dir, '2026-10-12', [listing], net)
   expect(readFileSync(join(dir, 'live-2026-10-12.md'), 'utf8')).toBe([
     '# pay-skills live 2026-10-12 against no earlier pass', '',
-    '## Newly failing', '- none', '## Newly passing', '- fixtures/listing', '## Gone', '- none', '',
+    '## Newly failing', '- none', '## Recovered on recheck', '- none', '## Newly passing', '- fixtures/listing', '## Gone', '- none', '',
   ].join('\n'))
+})
+
+const flaky = (fails: number): Net & { resolve: ReturnType<typeof vi.fn> } => {
+  let calls = 0
+  return { ...net, resolve: vi.fn(() => (++calls <= fails ? Promise.reject(new Error('ENOTFOUND')) : Promise.resolve())) }
+}
+const jsonl = (dir: string, date: string): Scanned[] =>
+  readFileSync(join(dir, `live-${date}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as Scanned)
+
+test('a listing that fails then passes the recheck is recovered', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'paydesk-live-'))
+  seed(dir, '2026-10-05', [scanned('fixtures/listing', 'pass')])
+  const pause = vi.fn(() => Promise.resolve())
+  expect((await live(dir, '2026-10-12', [listing], flaky(1), pause)).failing).toEqual([])
+  expect(jsonl(dir, '2026-10-12')).toMatchObject([{ fqn: 'fixtures/listing', dns: true }])
+  expect(readFileSync(join(dir, 'live-2026-10-12.md'), 'utf8')).toContain('## Recovered on recheck\n- fixtures/listing')
+})
+
+test('a listing that fails both times is failing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'paydesk-live-'))
+  seed(dir, '2026-10-05', [scanned('fixtures/listing', 'pass')])
+  const pause = vi.fn(() => Promise.resolve())
+  expect((await live(dir, '2026-10-12', [listing], flaky(Infinity), pause)).failing).toEqual(['fixtures/listing'])
+  expect(jsonl(dir, '2026-10-12')).toMatchObject([{ fqn: 'fixtures/listing', dns: false }])
+  expect(pause).toHaveBeenCalledOnce()
+})
+
+test('a listing failing last week is not rechecked', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'paydesk-live-'))
+  seed(dir, '2026-10-05', [scanned('fixtures/listing', 'reject')])
+  const pause = vi.fn(() => Promise.resolve())
+  const stub = flaky(Infinity)
+  await live(dir, '2026-10-12', [listing], stub, pause)
+  expect(pause).not.toHaveBeenCalled()
+  expect(stub.resolve).toHaveBeenCalledOnce()
 })
 
 test('D1 recheck scans only the named listings in catalog order', async () => {

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Diffed } from '../../paydesk/live.ts'
 import type { Renewed } from '../../paydesk/renew.ts'
-import { ofKind, pointers } from '../../store/events.ts'
+import { logged, ofKind, pointers } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { set } from '../../store/lanes.ts'
 import { paydesk } from '../signals.ts'
@@ -38,9 +38,45 @@ test('D1 two Monday calls on one date run the pass once', async () => {
   await paydesk(db, '/root', new Date('2026-10-12T11:01:00Z'), false, run)
   await paydesk(db, '/root', new Date('2026-10-12T11:30:00Z'), false, run)
   expect(dates).toEqual(['/root 2026-10-12'])
-  expect(ofKind(db, 'paydesk_live')).toEqual([{ plan: null, kind: 'paydesk_live', actor: 'paydesk', outcome: 'pass',
-    message: '1 newly failing, 0 newly passing, 2 gone' }])
-  expect(pointers(db, 'paydesk_live')).toEqual(['2026-10-12'])
+  expect(ofKind(db, 'paydesk_live')).toEqual([
+    { plan: null, kind: 'paydesk_live', actor: 'paydesk', outcome: 'start', message: 'started' },
+    { plan: null, kind: 'paydesk_live', actor: 'paydesk', outcome: 'pass', message: '1 newly failing, 0 newly passing, 2 gone' }])
+  expect(pointers(db, 'paydesk_live')).toEqual(['2026-10-12', '2026-10-12'])
+})
+
+test('a call during a running pass neither runs nor renews', async () => {
+  const db = world()
+  let finish = (): void => undefined
+  let runs = 0
+  const run = (): Promise<Diffed> => {
+    runs += 1
+    return new Promise((resolve) => { finish = () => { resolve({ failing: [], passing: [], gone: [] }) } })
+  }
+  const { dates, renew } = renewal()
+  const first = paydesk(db, '/root', new Date('2026-10-12T11:01:00Z'), true, run, renew)
+  await paydesk(db, '/root', new Date('2026-10-12T11:02:00Z'), true, run, renew)
+  finish()
+  await first
+  expect([runs, dates]).toEqual([1, ['/root 2026-10-12']])
+  expect(ofKind(db, 'paydesk_live').map((e) => e.outcome)).toEqual(['start', 'pass'])
+})
+
+test('a date with only a start row is not run again', async () => {
+  const db = world()
+  logged(db, { plan: null, kind: 'paydesk_live', actor: 'paydesk', outcome: 'start', message: 'started', pointer: '2026-10-12', run: null })
+  const { dates, run } = stub()
+  await paydesk(db, '/root', new Date('2026-10-12T11:30:00Z'), false, run)
+  expect(dates).toEqual([])
+  expect(ofKind(db, 'paydesk_live').map((e) => e.outcome)).toEqual(['start'])
+})
+
+test('the next Monday runs again', async () => {
+  const db = world()
+  const { dates, run } = stub()
+  await paydesk(db, '/root', new Date('2026-10-12T11:01:00Z'), false, run)
+  await paydesk(db, '/root', new Date('2026-10-19T11:01:00Z'), false, run)
+  expect(dates).toEqual(['/root 2026-10-12', '/root 2026-10-19'])
+  expect(pointers(db, 'paydesk_live')).toEqual(['2026-10-12', '2026-10-12', '2026-10-19', '2026-10-19'])
 })
 
 test('D2 before 05:00 Monday, Sunday and Tuesday never run', async () => {
@@ -59,7 +95,7 @@ test('D3 a crash is logged once and not retried that date', async () => {
   await paydesk(db, '/root', new Date('2026-10-12T11:01:00Z'), false, run)
   await paydesk(db, '/root', new Date('2026-10-12T11:30:00Z'), false, run)
   expect(dates).toEqual(['/root 2026-10-12'])
-  expect(ofKind(db, 'paydesk_live').map((e) => [e.outcome, e.message])).toEqual([['refuse', 'clone failed']])
+  expect(ofKind(db, 'paydesk_live').map((e) => [e.outcome, e.message])).toEqual([['start', 'started'], ['refuse', 'clone failed']])
 })
 
 test('a passing live pass renews once per date with its counts', async () => {
@@ -85,7 +121,7 @@ test('a renewal that throws is refused with its message', async () => {
   const db = world()
   await paydesk(db, '/root', new Date('2026-10-12T11:01:00Z'), true, stub().run, renewal(new Error('no attest config at x')).renew)
   expect(ofKind(db, 'paydesk_attest').map((e) => [e.outcome, e.message])).toEqual([['refuse', 'no attest config at x']])
-  expect(ofKind(db, 'paydesk_live').map((e) => e.outcome)).toEqual(['pass'])
+  expect(ofKind(db, 'paydesk_live').map((e) => e.outcome)).toEqual(['start', 'pass'])
 })
 
 test('a refused live pass never renews', async () => {

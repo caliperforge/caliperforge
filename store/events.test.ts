@@ -225,13 +225,14 @@ test('D4 ofKind with two kinds returns both in id order', () => {
   expect(ofKind(db, 'filed').map((e) => e.kind)).toEqual(['filed'])
 })
 
-test('D1 D2 events take escalate and needs_coo, refuse others', () => {
+test('events take escalate, needs_coo and start, refuse others', () => {
   const db = fresh(join(root, 'schema'))
   const log = (outcome: Event['outcome']): number =>
     logged(db, { plan: null, kind: 'director', actor: 'director', outcome, message: outcome, pointer: null, run: null })
   log('escalate')
   log('needs_coo')
-  expect(ofKind(db, 'director').map((e) => e.outcome)).toEqual(['escalate', 'needs_coo'])
+  log('start')
+  expect(ofKind(db, 'director').map((e) => e.outcome)).toEqual(['escalate', 'needs_coo', 'start'])
   expect(() => log('maybe' as Event['outcome'])).toThrow(/CHECK constraint failed/)
 })
 

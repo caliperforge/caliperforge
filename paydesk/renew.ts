@@ -13,10 +13,10 @@ import type { Net } from './scan.ts'
 const NET: Net = { fetch, resolve: (host) => lookup(host) }
 
 export interface Renewed { attested: number; renewed: number; closed: number; skipped: number }
-interface Config { rpc: string; credential: string; issuer: string; signer: string }
+export interface Config { rpc: string; credential: string; issuer: string; signer: string }
 interface Evidence { path: string; listing: string; host: string; payee: string }
 
-const keypair = async (file: string): Promise<KeyPairSigner> =>
+export const keypair = async (file: string): Promise<KeyPairSigner> =>
   createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(file, 'utf8')) as number[]))
 
 async function connected(config: Config): Promise<{ issuer: Address; chain: Chain }> {
@@ -26,7 +26,7 @@ async function connected(config: Config): Promise<{ issuer: Address; chain: Chai
   return { issuer: issuer.address, chain: built(client, issuer, signer) }
 }
 
-function configOf(root: string): Config {
+export function configOf(root: string): Config {
   const path = join(root, '.cf/attest/config.json')
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as Config

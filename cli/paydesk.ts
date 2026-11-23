@@ -11,6 +11,7 @@ import { attested, chain, probe } from '../paydesk/attested.ts'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
 import { live, providers, recheck, tally, verdict } from '../paydesk/live.ts'
 import { note } from '../paydesk/note.ts'
+import { serve } from '../paydesk/mcp.ts'
 import { prs, type Row } from '../paydesk/prs.ts'
 import { scan, type Net } from '../paydesk/scan.ts'
 import { line, reads, verified } from '../paydesk/verify.ts'
@@ -19,7 +20,7 @@ import type { Cli } from './cf-lanes.ts'
 
 export function registerPaydesk(cf: Command, { root, out }: Cli): void {
   const net: Net = { fetch, resolve: (host) => lookup(host) }
-  const paydesk = registerAttest(registerPaid(cf.command('paydesk'), out), net, out)
+  const paydesk = registerAttest(registerPaid(cf.command('paydesk'), out), root, net, out)
   paydesk.command('scan').argument('<dir...>').requiredOption('--out <file>').option('--cards <dir>')
     .action(async (dirs: string[], options: { out: string; cards?: string }) => {
       const results = await scan(dirs, options.out, options.cards, net)
@@ -57,7 +58,7 @@ export function registerPaydesk(cf: Command, { root, out }: Cli): void {
     })
 }
 
-function registerAttest(paydesk: Command, net: Net, out: Cli['out']): Command {
+function registerAttest(paydesk: Command, root: string, net: Net, out: Cli['out']): Command {
   paydesk.command('attest').argument('<scan>').requiredOption('--rpc <url>').requiredOption('--issuer <keyfile>').requiredOption('--signer <keyfile>')
     .requiredOption('--credential <name>').requiredOption('--out <dir>').option('--dry-run')
     .action(async (scanFile: string, options: { rpc: string; issuer: string; signer: string; credential: string; out: string; dryRun?: boolean }) => {
@@ -76,6 +77,7 @@ function registerAttest(paydesk: Command, net: Net, out: Cli['out']): Command {
         async () => (await fetchSysvarClock(rpc)).unixTimestamp)
       out(`${line(result)}\n`)
     })
+  paydesk.command('mcp').action(() => serve(root))
   return paydesk
 }
 

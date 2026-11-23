@@ -7,7 +7,7 @@ import { SCHEMA, verdict, verdictNonce, type Fields } from './attest.ts'
 import type { Probe } from './attested.ts'
 
 export interface Reads { attestation(at: Address): Promise<Attestation | null>; credential(at: Address): Promise<Credential>; schema(at: Address): Promise<Schema> }
-type Verified = { host: string } & ({ verified: true; data: Fields; payee: string; attestation: Address }
+export type Verified ={ host: string } & ({ verified: true; data: Fields; payee: string; attestation: Address }
   | { verified: false; reason: string; payee: string | null; attestation: Address | null })
 
 export const reads = (rpc: Rpc<GetAccountInfoApi>): Reads => ({

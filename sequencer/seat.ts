@@ -68,7 +68,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   if (step.step === 2 && maybe(root, plan.id, 'issue.md') === null) {
     return { outcome: 'pass', spans: [], note: `${step.runs}: no issue.md to build from; back to the brief`, rewind: 1 }
   }
-  if (step.step === 2) { const held = vendored(db, root, plan.id) ?? (kernelPlan(plan) ? added(db, root, plan.id) : null); if (held !== null) return held }
+  if (step.step === 2) { const held = vendored(db, root, plan.id) ?? added(db, root, plan.id); if (held !== null) return held }
   if (kernelPlan(plan)) install(srcDir(root, plan.id))
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)

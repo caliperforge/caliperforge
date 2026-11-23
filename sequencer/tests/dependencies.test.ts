@@ -1,11 +1,16 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { eventsOf } from '../../store/events.ts'
+import { record } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
+import { planById, putPlan } from '../../store/plans.ts'
 import { planEvents } from '../../store/trail.ts'
 import type { Ran } from '../checks.ts'
 import { added } from '../dependencies.ts'
+import { BRIEF_FILES, fenceFor } from '../fence.ts'
+import { kernelPlan } from '../home.ts'
 import { put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -17,10 +22,10 @@ function seeded() {
   return db
 }
 
-function briefed(pinned: string, dependencies: Record<string, string> = {}): string {
+function briefed(pinned: string, dependencies: Record<string, string> = {}, plan = 7): string {
   const root = mkdtempSync(join(tmpdir(), 'cf-pinned-'))
-  put(root, 7, 'issue.md', `# Ask\n\n## Files\n\n- \`a.ts\`\n\n${pinned}## Tests\n\n- \`b.ts\`\n`)
-  writeFileSync(join(srcDir(root, 7), 'package.json'), JSON.stringify({ name: 'x', dependencies }))
+  put(root, plan, 'issue.md', `# Ask\n\n## Files\n\n- \`a.ts\`\n\n${pinned}## Tests\n\n- \`b.ts\`\n`)
+  writeFileSync(join(srcDir(root, plan), 'package.json'), JSON.stringify({ name: 'x', dependencies }))
   return root
 }
 
@@ -87,4 +92,29 @@ test('a brief with no Pinned section runs nothing', () => {
   expect(added(db, briefed(''), 7, run)).toBeNull()
   expect(asked).toEqual([])
   expect(rows(db)).toEqual([])
+})
+
+test('a checkout with no root package.json runs nothing', () => {
+  const db = seeded()
+  const root = briefed(PINS)
+  rmSync(join(srcDir(root, 7), 'package.json'))
+  const { asked, run } = npm()
+  expect(added(db, root, 7, run)).toBeNull()
+  expect(asked).toEqual([])
+  expect(rows(db)).toEqual([])
+})
+
+test('an outside plan fences in the package files once pins pass', () => {
+  const db = seeded()
+  putPlan(db, { id: 8, pipe_id: 99, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-24', step: 2,
+    retries: 0, lane: 'uniswap', seat: 'python_specialist', origin: 'https://github.com/caliperforge/v4-hook-index/issues/1' })
+  expect(kernelPlan(planById(db, 8))).toBe(false)
+  record(db, 8, [{ path: 'a.ts', is_new: false }])
+  expect(fenceFor(db, 8, [BRIEF_FILES])).toEqual(['a.ts'])
+  const { run } = npm()
+  expect(added(db, briefed('## Pinned\n\n- `a@latest`\n\n', {}, 8), 8, run)).toMatchObject({ outcome: 'needs_ceo' })
+  expect(fenceFor(db, 8, [BRIEF_FILES])).toEqual(['a.ts'])
+  expect(added(db, briefed(PINS, {}, 8), 8, run)).toBeNull()
+  expect(eventsOf(db, 8, 'pinned').map((e) => e.outcome)).toEqual(['needs_ceo', 'pass'])
+  expect(fenceFor(db, 8, [BRIEF_FILES])).toEqual(['a.ts', 'package.json', 'package-lock.json'])
 })

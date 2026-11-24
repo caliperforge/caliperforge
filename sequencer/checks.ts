@@ -164,11 +164,11 @@ function settled(gate: Gate, ran: Ran, excused: string[]): Ran {
 
 export const BUILT = [`${DERIVED}/`, '__pycache__/', '.gradle/', 'build/', 'target/', 'uv.lock', 'foundry.lock', '.venv/', 'node_modules/']
 
-/** The derived data is build output: never staged, never in the diff the reviewers read. */
-export function excluded(src: string, extra: string[] = []): void {
+/** The derived data is build output: never staged, never in the diff the reviewers read; a `listed` lockfile is negated after it, as the last matching line decides. */
+export function excluded(src: string, extra: string[] = [], listed: string[] = []): void {
   const path = join(src, '.git', 'info', 'exclude')
   if (!existsSync(join(src, '.git'))) return
-  for (const line of [...BUILT, ...extra]) {
+  for (const line of [...BUILT, ...extra, ...listed.filter((file) => BUILT.includes(basename(file))).map((file) => `!/${file}`)]) {
     const held = existsSync(path) ? readFileSync(path, 'utf8') : ''
     if (!held.split('\n').includes(line)) appendFileSync(path, `${held.endsWith('\n') || held === '' ? '' : '\n'}${line}\n`)
   }

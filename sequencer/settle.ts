@@ -2,6 +2,7 @@ import type { Read } from '../cli/gh.ts'
 import { vetted } from '../cli/queue.ts'
 import { API_ERROR, type Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
+import { filesOf } from '../store/files.ts'
 import { hold } from '../store/holds.ts'
 import { eventsOf, kindsOf, logged, newestRun, runSince } from '../store/events.ts'
 import { type Db, LOCKED } from '../store/index.ts'
@@ -141,7 +142,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     if (bare) rebranched(root, plan.id)
     rehomed(root, plan.id, tree.repo)
     if (empty(root, plan.id, tree.repo)) return { language: null, failed: { outcome: 'needs_coo', spans: ['empty_repo'], note: `${tree.repo}: repo has no commits; held for the COO` } }
-    const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from)
+    const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from, undefined, filesOf(db, plan.id).map((f) => f.path))
     const from = tree.from ?? 'main'
     if (recut !== null) logged(db, { plan: plan.id, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: `cut again from ${from}: the clone was cut from ${recut}`, pointer: from, run: null })
     if (recut !== null && plan.step > BUILD) return { language: null, failed: { outcome: 'pass', spans: ['base:recut'], note: `cut again from ${from}; back to the build to re-apply its diff`, rewind: BUILD } }

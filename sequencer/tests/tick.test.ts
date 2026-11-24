@@ -213,6 +213,26 @@ test('build output HEAD tracks stays in the index and the diff', async () => {
   expect(diff).toContain('+module.exports = 2')
 })
 
+test('a listed lockfile reaches the diff, an unlisted one not', () => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1', 'main', undefined, ['uv.lock'])
+  writeFileSync(join(dir, 'uv.lock'), 'version = 1\n')
+  writeFileSync(join(dir, 'foundry.lock'), '{}\n')
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('+version = 1')
+  expect(diff).not.toContain('foundry.lock')
+})
+
+test('a reused checkout un-ignores a lockfile the brief lists', () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1', 'main', undefined, ['uv.lock'])
+  const lines = readFileSync(join(dir, '.git/info/exclude'), 'utf8').split('\n')
+  expect(lines.indexOf('!/uv.lock')).toBeGreaterThan(lines.indexOf('uv.lock'))
+  writeFileSync(join(dir, 'uv.lock'), 'version = 1\n')
+  expect(gitDiff(dir, base)).toContain('+version = 1')
+})
+
 test('a submodule is in the diff only when its commit moved', async () => {
   const w = await CHECKED()
   const dir = srcDir(w.root, 1)

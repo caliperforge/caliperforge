@@ -227,12 +227,12 @@ export function liveTree(root: string, cwd: string): boolean {
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
  * The build-output exclude is written here too: a builder runs xcodebuild at step 2, before the rails do.
  */
-export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main', exec: Run = run): Checkout {
+export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main', exec: Run = run, listed: string[] = []): Checkout {
   const recut = rebased(root, plan, from)
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
   if (done === null && readdirSync(dir).length > 0) renameSync(dir, `${dir}.stale-${String(Date.now())}`)
-  if (done !== null && cloned(dir)) { fetchMain(dir); standOn(dir, branch, done.trim()); excluded(dir); unstage(dir); return { dir, branch, base: done.trim(), recut } }
+  if (done !== null && cloned(dir)) { fetchMain(dir); standOn(dir, branch, done.trim()); excluded(dir, [], listed); unstage(dir); return { dir, branch, base: done.trim(), recut } }
   const base = gitBase(root)
   const fork = remote(base, `${FORK}/${repoName(repo)}`)
   if (!found(planDir(root, plan), fork)) exec(['repo', 'fork', repo, '--org', FORK, '--clone=false'])
@@ -242,7 +242,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
     fork, dir])
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
   if (from !== 'main') git(dir, ['config', 'cf.base', from])
-  excluded(dir)
+  excluded(dir, [], listed)
   const head = fetchMain(dir)
   const restored = prBranch(root, plan, dir) ?? maybe(root, plan, PR_BRANCH)?.trim() ?? (done !== null && pushed(dir, branch) ? branch : null)
   if (restored !== null) {

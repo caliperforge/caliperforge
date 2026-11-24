@@ -707,6 +707,22 @@ test('D1 excluded keeps each line once across a missing newline', () => {
   expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toBe('# local\n.cf-derived/\n__pycache__/\n.gradle/\nbuild/\ntarget/\nuv.lock\nfoundry.lock\n.venv/\nnode_modules/\n')
 })
 
+test('excluded un-ignores each listed lockfile once, after BUILT', () => {
+  const src = tree({})
+  mkdirSync(join(src, '.git', 'info'), { recursive: true })
+  excluded(src, [], ['python/uv.lock', 'foundry.lock'])
+  excluded(src, [], ['python/uv.lock', 'foundry.lock'])
+  expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toBe('.cf-derived/\n__pycache__/\n.gradle/\nbuild/\ntarget/\nuv.lock\nfoundry.lock\n.venv/\nnode_modules/\n!/python/uv.lock\n!/foundry.lock\n')
+})
+
+test('excluded writes no line for a listed non-lockfile', () => {
+  const src = tree({})
+  mkdirSync(join(src, '.git', 'info'), { recursive: true })
+  excluded(src)
+  excluded(src, [], ['src/a.py', 'node_modules/x/index.js'])
+  expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).not.toContain('!')
+})
+
 test('a workflow checkout path is excluded once before gates run', () => {
   const src = tree({ 'pyproject.toml': '' })
   mkdirSync(join(src, '.git', 'info'), { recursive: true })

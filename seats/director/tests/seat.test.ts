@@ -64,9 +64,10 @@ test('D5: a build cap stop names its four moves', () => {
 test('D5: the fence carries the rule and waive block', () => {
   const prompt = seat(root, 'director').prompt
   for (const line of ['applies to: <plan, step, for rule and waive>', 'instruction: <one imperative sentence, for rule and waive>',
-    "files: <paths in this job's tree, or none>", 'resume at: <the step, for rule and waive>',
+    "files: <paths in this job's tree, or none>", 'resume at: <the step, for rule, waive and file>',
     'verify: <the test or command that shows it is done>']) expect(prompt).toContain(`\n${line}\n`)
   expect(prompt.replace(/\n/g, ' ')).toContain('`applies to`, `instruction`, `files`, `resume at` and `verify` go with `rule` and `waive`')
+  expect(prompt.replace(/\n/g, ' ')).toContain('`resume at` may also go with `file`: the step the job goes back to when the filed fix lands.')
 })
 
 test('D4: a brief writer question the ticket answers is rule', () => {

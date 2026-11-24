@@ -1073,6 +1073,14 @@ async function filedParks() {
   expect(pointers(db, 'director')).toEqual([FILED])
 }
 
+async function filedResumes() {
+  const { db, home } = seeded('1')
+  await cooLite(db, home, row(db), stub((REPLY.file ?? '').replace(/---\n$/, 'resume at: step 2\n---\n')), now, () => undefined, filing([]))
+  expect(maybe(home, 7, 'resume.txt')).toBe('2\n')
+  expect(ofKind(db, 'resume_at').map(({ actor, message }) => ({ actor, message }))).toEqual([{ actor: 'ticketed', message: 'step 2' }])
+  expect(pointers(db, 'resume_at')).toEqual([FILED])
+}
+
 async function replayed() {
   const { db, home } = seeded('1')
   fixLive(db)
@@ -1186,6 +1194,7 @@ async function throwsOnce() {
 
 describe('file', () => {
   test('a file parks the job on the filed plan', filedParks)
+  test('a file with resume at keeps the step for the landing', filedResumes)
   test('a file whose ticketing throws is told once, not re-woken', LONG, throwsOnce)
   test('a filed job asked again an hour later stays parked', replayed)
   test('the same stop on three plans in a day files one ticket', LONG, repeats)
@@ -1510,6 +1519,12 @@ function readsLong() {
     .toMatchObject({ move: 'rule', why: '"Desk alarm" means the sign-off card', answer: 'use the card' })
 }
 
+function readsFiledResume() {
+  const file = '---\nmove: file\nwhy: a bug\nticket: a bug\n'
+  expect(read(`${file}resume at: step 2\n---\n`)).toEqual({ move: 'file', why: 'a bug', ticket: 'a bug', 'resume at': 'step 2' })
+  expect(read(`${file}---\n`)).toEqual({ move: 'file', why: 'a bug', ticket: 'a bug' })
+}
+
 function seatTools() {
   const card = (tools: string[]) => ({ seat: 'director', model: 'm', effort: 'low', tools, write_paths: [] })
   expect(Seat.parse(card(['Read', 'Bash(cf look:*)'])).tools).toEqual(['Read', 'Bash(cf look:*)'])
@@ -1520,6 +1535,7 @@ function seatTools() {
 
 describe('reading a reply', () => {
   test('a long or quoted why and a long ticket title still read', readsLong)
+  test('a file reads with or without resume at', readsFiledResume)
   test('a seat with no write_paths may hold only Bash(cf look:*)', seatTools)
 })
 

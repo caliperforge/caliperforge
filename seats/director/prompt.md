@@ -93,7 +93,8 @@ with exactly one of `rule` (name the root fix under `answer`), `waive` (accept t
 
 Close with this fence and nothing after it, not inside a code block. Each line is one line, with no quotes around values. `answer` goes only with `rule` or `research`, `ticket`
 only with `file`, `until` only with `park`. `applies to`, `instruction`, `files`, `resume at` and `verify` go with
-`rule` and `waive`; one missing `instruction` or `resume at` comes back under `# Fence`.
+`rule` and `waive`; one missing `instruction` or `resume at` comes back under `# Fence`. `resume at` may also go
+with `file`: the step the job goes back to when the filed fix lands.
 
 For `ask_ceo`, write this block above the fence, with two or three options:
 
@@ -112,7 +113,7 @@ answer: <the ruling, for rule>
 applies to: <plan, step, for rule and waive>
 instruction: <one imperative sentence, for rule and waive>
 files: <paths in this job's tree, or none>
-resume at: <the step, for rule and waive>
+resume at: <the step, for rule, waive and file>
 verify: <the test or command that shows it is done>
 ticket: <the ticket's title, for file>
 class: <1-4, for ask_ceo>

@@ -20,6 +20,9 @@
   "events.ts": {
     "lines": 183
   },
+  "files.test.ts": {
+    "citing-comment": 1
+  },
   "files.ts": {
     "lines": 92
   },

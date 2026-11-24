@@ -201,7 +201,7 @@ export function released(db: Db, root: string, now: Date, post: Post, read: Read
     const at = now.toISOString()
     const ended = r.theirs === 'done' && !landed(db, r.on_) ? stuck(db, r.on_)[0] : { id: r.on_, state: r.theirs }
     if (ended === undefined) continue
-    const resume = maybe(root, r.id, RESUME)
+    const resume = maybe(root, r.id, 'parked.md')?.split('\n')[2] === r.origin ? maybe(root, r.id, RESUME) : null
     drop(root, r.id, RESUME)
     if (ended.state === 'done') {
       unhold(db, root, r.id, 'fixer', resume === null ? undefined : Number(resume))

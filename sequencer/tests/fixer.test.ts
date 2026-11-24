@@ -170,6 +170,18 @@ test.each([
   expect(drift(db, RESUMED, new Date())).toEqual([])
 })
 
+test('a step filed for a replaced hold is not resumed', async () => {
+  const { db, home } = seeded('live')
+  await woke(db, home, filing('resume at: 2'), now, () => undefined, wire([]))
+  const on = ticketed(db)?.id ?? 0
+  hold(db, home, 7, `waits on plan ${String(on)}'s files`, now, on)
+  end(db, on, 'done')
+  pushed(db, on)
+  await woke(db, home, filing('no resume at'), now, () => undefined, wire([]))
+  expect(state(db).step).toBe(4)
+  expect(maybe(home, 7, 'resume.txt')).toBeNull()
+})
+
 test('filed_resume_step sees a return off the filed step', async () => {
   const { db, home } = seeded('live')
   await woke(db, home, filing('resume at: 2'), now, () => undefined, wire([]))

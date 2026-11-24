@@ -129,7 +129,25 @@ test('two plans sharing only the seed file do not wait', () => {
   expect(sharing(db, 2)).toEqual({ plan: 1, path: 'src/a.ts' })
 })
 
-// #712: a built plan parked on the CEO sign-off must not hold later plans on its files
+function pair(repo: string): Db {
+  const db = bench()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, 1, 'pr_path', 'queued', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist', ?)`)
+    .run(`https://github.com/caliperforge/${repo}/issues/62`)
+  db.prepare('UPDATE plans SET step = 2').run()
+  for (const id of [1, 2]) record(db, id, [{ path: 'pyproject.toml', is_new: false }])
+  return db
+}
+
+test('plans on different repos of ours share no file', () => {
+  expect(sharing(pair('fuzz-rig'), 2)).toBeNull()
+})
+
+test('plans on one repo of ours wait on the older', () => {
+  expect(sharing(pair('caliperforge'), 2)).toEqual({ plan: 1, path: 'pyproject.toml' })
+})
+
+// A built plan parked on sign-off must not hold later plans on its files
 test('a plan waiting only on sign-off frees its files', () => {
   const { db } = world()
   const hash = '0'.repeat(64)

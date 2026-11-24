@@ -22,6 +22,7 @@ VALUES
   ('rules/registry/102-round_commit_message.yaml', 'card', 'rules/registry/102-round_commit_message.yaml', '0836dfb1762d6c8482620f297f75e986cc89a57e45adbb0ea0a859b59f76073a', '2026-11-21'),
   ('rules/registry/102-signoff_one_card.yaml', 'card', 'rules/registry/102-signoff_one_card.yaml', '70bfe35c4c4cc890af7d707e9837ecfb4c63e81d2b483979bf888758b9583e36', '2026-11-21'),
   ('rules/registry/103-paydesk_attest.yaml', 'card', 'rules/registry/103-paydesk_attest.yaml', '423283f43dc072ca1d83f73fb894f0f23f7663f287f89fce6732f709450341c5', '2026-11-22'),
+  ('rules/registry/104-file_overlap_cross_repo.yaml', 'card', 'rules/registry/104-file_overlap_cross_repo.yaml', '5f96828d28e85370ffc3590d661c839a00aa8b265eda217ae43855691742b4fe', '2026-11-24'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
   ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', '0874da2c14e5efbe2e938ab57552695b724b46618e7e452c4f2ba637f3217929', '2026-10-11'),

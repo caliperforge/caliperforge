@@ -1,4 +1,5 @@
 import { file, LANE, laneOf } from '../cli/plan.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import type { Lane } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -7,17 +8,24 @@ import { built } from './built.ts'
 import { compared, type Cover, covered } from './covered.ts'
 import { hold } from './hold.ts'
 import type { Wire } from './push.ts'
-import { maybe, put } from './workspace.ts'
+import { drop, maybe, put } from './workspace.ts'
 
 const ALIKE = 3
 
+export const RESUME = 'resume.txt'
+
 /** Files a ticket in the lane its title's `lane:` token names, else machine, for a stopped job, queues it at P0 and holds the job on it; a `covered()` ticket stands in. */
 export function ticketed(db: Db, root: string, plan: PlanRow, title: string, body: string, why: string, wire: Wire,
-  now: Date): string | false {
+  now: Date, resume?: number): string | false {
   const lane = laneOf(title.split(/[\s,()]+/).map((name) => ({ name }))) ?? 'machine'
   const cover = covered(db, root, plan, LANE[lane].home, title, body, now, wire.merged)
   const url = acted(db, root, plan, cover, lane, title, body, why, wire, now)
   compared(db, plan.id, 'ticketed', title, cover, url === false ? null : url)
+  if (url !== false && (cover.verdict === 'open' || cover.verdict === 'filed') && resume !== undefined
+    && Number.isInteger(resume) && resume >= 0 && resume <= plan.step) {
+    put(root, plan.id, RESUME, `${String(resume)}\n`)
+    logged(db, { plan: plan.id, kind: 'resume_at', actor: 'ticketed', outcome: 'pass', message: `step ${String(resume)}`, pointer: url, run: null })
+  } else drop(root, plan.id, RESUME)
   return url
 }
 

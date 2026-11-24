@@ -345,7 +345,8 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       end(db, plan.id, 'done')
       return true
     case 'file':
-      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
+      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now,
+        /^(?:step )?(\d+)$/.exec(m['resume at'] ?? '')?.slice(1).map(Number)[0])
     case 'return': returned(root, plan.id)
       opened(db, root, plan.id)
       afresh(root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))

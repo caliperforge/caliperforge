@@ -17,9 +17,11 @@ import type { Wire } from '../push.ts'
 import { allPlans, end, planById, planRows, putPlan, terminal, type PlanRow } from '../../store/plans.ts'
 import { lapsed } from '../../store/until.ts'
 import { cooLite, woke } from '../director.ts'
+import { drift } from '../drift.ts'
 import { stop } from '../fixed.ts'
 import { hold } from '../hold.ts'
 import { CARRY, checkout, drop, get, git, maybe, put, SELF, srcDir } from '../workspace.ts'
+import { REGISTRY } from './drifting.ts'
 import { issues } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -46,13 +48,13 @@ function seeded(mode: string) {
   return { db, home }
 }
 
-function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'completed'): Provider {
+function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'completed', director = FIX): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (packet) => {
       packets.push(packet)
       const name = basename(packet.transcript)
-      const text = name.startsWith('fixer') ? fix : FIX
+      const text = name.startsWith('fixer') ? fix : director
       return Promise.resolve({ text, transcript_path: packet.transcript, usage: { input: 10, cache: 0, output: 5 },
         seconds: 0, ended: name.startsWith('fix-') ? seated : 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
@@ -144,6 +146,48 @@ test('ticket: the job is back at its step when the ticket lands', async () => {
   expect(waitsOn(db)).toEqual({ waits_on: null })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(posted).toEqual([])
+})
+
+const filing = (said: string) => stub('', [], 'completed',
+  `---\nmove: file\nwhy: the tick judges an old diff\nticket: the tick judges an old diff\n${said.startsWith('resume') ? `${said}\n` : ''}---\n`)
+const RESUMED = REGISTRY.filter((e) => e.name === 'filed_resume_step')
+
+test.each([
+  { said: 'resume at: 2', step: 2, back: 'step 4 → 2' },
+  { said: 'no resume at', step: 4, back: 'step 4' },
+  { said: 'resume at: step 9', step: 4, back: 'step 4' },
+])('a filing with $said lands the job at step $step', async ({ said, step, back }) => {
+  const { db, home } = seeded('live')
+  await woke(db, home, filing(said), now, () => undefined, wire([]))
+  expect(maybe(home, 7, 'resume.txt')).toBe(step === 2 ? '2\n' : null)
+  expect(ofKind(db, 'resume_at').map(({ message }) => message)).toEqual(step === 2 ? ['step 2'] : [])
+  end(db, ticketed(db)?.id ?? 0, 'done')
+  pushed(db, ticketed(db)?.id ?? 0)
+  await woke(db, home, filing(said), now, () => undefined, wire([]))
+  expect(state(db).step).toBe(step)
+  expect(ofKind(db, 'return').map(({ actor, message }) => ({ actor, message }))).toEqual([{ actor: 'fixer', message: back }])
+  expect(maybe(home, 7, 'resume.txt')).toBeNull()
+  expect(drift(db, RESUMED, new Date())).toEqual([])
+})
+
+test('a step filed for a replaced hold is not resumed', async () => {
+  const { db, home } = seeded('live')
+  await woke(db, home, filing('resume at: 2'), now, () => undefined, wire([]))
+  const on = ticketed(db)?.id ?? 0
+  hold(db, home, 7, `waits on plan ${String(on)}'s files`, now, on)
+  end(db, on, 'done')
+  pushed(db, on)
+  await woke(db, home, filing('no resume at'), now, () => undefined, wire([]))
+  expect(state(db).step).toBe(4)
+  expect(maybe(home, 7, 'resume.txt')).toBeNull()
+})
+
+test('filed_resume_step sees a return off the filed step', async () => {
+  const { db, home } = seeded('live')
+  await woke(db, home, filing('resume at: 2'), now, () => undefined, wire([]))
+  end(db, ticketed(db)?.id ?? 0, 'done')
+  logged(db, { plan: 7, kind: 'return', actor: 'fixer', outcome: 'pass', message: 'step 4', pointer: null, run: null })
+  expect(drift(db, RESUMED, new Date())).toMatchObject([{ name: 'filed_resume_step', state: 'seen' }])
 })
 
 test.each([

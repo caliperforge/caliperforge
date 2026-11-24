@@ -33,7 +33,7 @@ import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { landed } from './landed.ts'
 import { stuck } from './stuck.ts'
-import { ticketed } from './ticket.ts'
+import { RESUME, ticketed } from './ticket.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, titleOf } from './workspace.ts'
 
 /**
@@ -201,8 +201,10 @@ export function released(db: Db, root: string, now: Date, post: Post, read: Read
     const at = now.toISOString()
     const ended = r.theirs === 'done' && !landed(db, r.on_) ? stuck(db, r.on_)[0] : { id: r.on_, state: r.theirs }
     if (ended === undefined) continue
+    const resume = maybe(root, r.id, 'parked.md')?.split('\n')[2] === r.origin ? maybe(root, r.id, RESUME) : null
+    drop(root, r.id, RESUME)
     if (ended.state === 'done') {
-      unhold(db, root, r.id, 'fixer')
+      unhold(db, root, r.id, 'fixer', resume === null ? undefined : Number(resume))
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }

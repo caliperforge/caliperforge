@@ -6,8 +6,9 @@ import { fresh } from '../checks/sqlite.ts'
 import type { Fired } from '../providers/kind.ts'
 import { planRow } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { logged, lookedSince, ofKind, repriced, runAt, runLogged, type Event, type Run } from './events.ts'
+import { logged, lookedSince, ofKind, repriced, runAt, runLogged, sentRound, type Event, type Run } from './events.ts'
 import type { Db } from './index.ts'
+import { refused } from './refusals.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -246,6 +247,16 @@ test('lookedSince: a director event on the plan after at', () => {
   expect(lookedSince(db, plan, '2026-09-24T13:59:00.000Z')).toBe(true)
   expect(lookedSince(db, plan, '2026-09-24T14:00:00.000Z')).toBe(false)
   expect(lookedSince(db, plan + 1, '2026-09-24T13:59:00.000Z')).toBe(false)
+})
+
+test('sentRound: true with no refusal, false once one follows', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  logged(db, { plan, kind: 'director', actor: 'director', outcome: 'pass', message: 'rule', pointer: null, run: null }, '2026-01-01 00:00:00')
+  expect(sentRound(db, plan)).toBe(true)
+  refused(db, { plan, step: 3, fingerprint: 'f'.repeat(64), diff: null })
+  expect(sentRound(db, plan)).toBe(false)
 })
 
 test('D2 D3 cache_write_tokens: NULL if absent, negative refused', () => {

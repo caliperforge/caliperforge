@@ -8,6 +8,7 @@ import { newestMode, runRows } from '../../store/events.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { back } from '../../store/plans.ts'
 import { refusedOf } from '../../store/record.ts'
+import { refusalsOf } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
@@ -322,6 +323,19 @@ test('F1 a stop the director sends round fires the builder', async () => {
   put(w.root, 1, 'rulings.md', 'use bye()\n')
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(UNPOINTED))
   expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(handedBack(get(w.root, 1, 'refusal.md'))).toBe(true)
+  retried(w.db, 1, 'director')
+  const seen: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => seen.push(p)))
+  expect(seen.some((p) => p.tools.includes('Write'))).toBe(true)
+  expect(newestMode(w.db)).not.toBe('handback')
+})
+
+test('a Not done stop the director sends round fires the builder', async () => {
+  const w = await atBuild()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(`${NOT_DONE}\n\n${CARRIED}`))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(refusalsOf(w.db, 1)).toBe(0)
   expect(handedBack(get(w.root, 1, 'refusal.md'))).toBe(true)
   retried(w.db, 1, 'director')
   const seen: Packet[] = []

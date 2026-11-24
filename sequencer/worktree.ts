@@ -1,11 +1,13 @@
 import { lstatSync } from 'node:fs'
 import { join } from 'node:path'
 
-const ROW = /^- `([^`]+)` — ([^@\s]+)@(\S+) (\S+)$/
+const ROW = /^- `([^`]+)` — (?:([^@\s]+)@(\S+) (\S+)|(\S+))$/
 
-export function rowOf(src: string, row: string, planned: string[]): { path: string; repo: string; sha: string; from: string } {
-  const [, path = '', repo = '', sha = '', from = ''] = ROW.exec(row) ?? []
-  if (from === '') throw new Error('not - `<checkout path>` — github.com/<owner>/<repo>@<sha> <path>')
+type Row = { path: string } & ({ source: string } | { repo: string; sha: string; from: string })
+
+export function rowOf(src: string, row: string, planned: string[]): Row {
+  const [, path = '', repo = '', sha = '', from = '', source = ''] = ROW.exec(row) ?? []
+  if (from === '' && source === '') throw new Error('not - `<checkout path>` — github.com/<owner>/<repo>@<sha> <path> or ~/cf_work/<path>')
   const parts = path.split('/')
   if (parts.some((p) => ['', '.', '..'].includes(p) || p.toLowerCase() === '.git')) {
     throw new Error(`${path} is not a path in the checkout's working tree`)
@@ -17,5 +19,5 @@ export function rowOf(src: string, row: string, planned: string[]): { path: stri
     const last = i === parts.length
     if (stat !== undefined && !(last ? stat.isFile() : stat.isDirectory())) throw new Error(`${at} is not a regular ${last ? 'file' : 'folder'}`)
   }
-  return { path, repo, sha, from }
+  return source === '' ? { path, repo, sha, from } : { path, source }
 }

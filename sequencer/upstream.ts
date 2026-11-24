@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { gh, type Read } from '../cli/gh.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { work } from '../templates/research.ts'
 import { section } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { get, srcDir } from './workspace.ts'
@@ -47,8 +48,9 @@ export function vendored(db: Db, root: string, plan: number, read: Read = gh): O
   const files: [string, string, Buffer][] = []
   for (const row of section(get(root, plan, 'issue.md'), '## Vendored').split('\n').map((l) => l.trim()).filter(Boolean)) {
     try {
-      const { path, repo, sha, from } = rowOf(srcDir(root, plan), row, files.map(([p]) => p))
-      files.push([path, join(srcDir(root, plan), path), fetched(db, plan, { repo, sha, path: from }, read, 'machine', false)])
+      const got = rowOf(srcDir(root, plan), row, files.map(([p]) => p))
+      files.push([got.path, join(srcDir(root, plan), got.path),
+        'source' in got ? copied(got.source) : fetched(db, plan, { repo: got.repo, sha: got.sha, path: got.from }, read, 'machine', false)])
     } catch (e) {
       const note = `vendor: ${row}: ${(e as Error).message}`
       logged(db, { plan, kind: 'vendor', actor: 'machine', outcome: 'needs_ceo', message: note, pointer: null, run: null })
@@ -79,6 +81,13 @@ function fetched(db: Db, plan: number, args: Pin, read: Read, actor: string, lis
     message: `${slug}@${args.sha} ${args.path}${part} ${String(got.length)} bytes sha256 ${sha256}`,
     pointer: `https://github.com/${slug}/blob/${args.sha}/${args.path}` })
   return got
+}
+
+function copied(source: string): Buffer {
+  const at = work(source)
+  if (at === null) throw new Error(`${source} is not a file under ~/cf_work/`)
+  if (lstatSync(at, { throwIfNoEntry: false })?.isFile() !== true) throw new Error(`${at} is not a regular file`)
+  return readFileSync(at)
 }
 
 function spanOf(lines: string): [number, number] {

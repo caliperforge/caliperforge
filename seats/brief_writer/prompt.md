@@ -75,9 +75,10 @@ carries no `## Reproduced`. The command runs on a clean base checkout without th
 `fails` row must fail there; when only a test the brief adds can show the bug, write `- expect: shows` with
 a command whose output shows it and cite the evidence under `## Settled facts`.
 
-When the ask needs a file copied byte for byte from a public github.com repository, the brief carries
-`## Vendored` after `## Files`, one row per file:
-`` - `<checkout path>` — github.com/<owner>/<repo>@<40-hex sha> <path in that repo> ``. Name the same path
+When the ask needs a file copied byte for byte from a public github.com repository or from a folder under
+`~/cf_work/`, the brief carries `## Vendored` after `## Files`, one row per file:
+`` - `<checkout path>` — github.com/<owner>/<repo>@<40-hex sha> <path in that repo> `` or
+`` - `<checkout path>` — ~/cf_work/<path to the file> ``. Name the same path
 under `## Files` or `## Tests`, marked `(new)` when the checkout does not hold it. The machine writes the
 file before the build; the builder does not write it.
 

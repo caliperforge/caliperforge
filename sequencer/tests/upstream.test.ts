@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import type { Read } from '../../cli/gh.ts'
 import { migrate, open } from '../../store/index.ts'
 import { planEvents } from '../../store/trail.ts'
@@ -177,6 +177,31 @@ test('a vendored row lands its exact bytes in a new folder', () => {
     pointer: `https://github.com/caliperforge/sky-schema/blob/${PIN}/schema/object.json` }])
 })
 
+afterEach(() => { vi.unstubAllEnvs() })
+
+const LOG = Buffer.from('\x1b[32mok\x1b[0m\n')
+
+function worked(): string {
+  const home = mkdtempSync(join(tmpdir(), 'cf-home-'))
+  vi.stubEnv('HOME', home)
+  mkdirSync(join(home, 'cf_work/2519/dir'), { recursive: true })
+  writeFileSync(join(home, 'cf_work/2519/medusa.log'), LOG)
+  symlinkSync(join(home, 'cf_work/2519/medusa.log'), join(home, 'cf_work/2519/link.log'))
+  return home
+}
+
+const local = (source: string, path = 'test/fixture/mini/medusa.log'): string => `- \`${path}\` — ${source}`
+
+test.each(['~', 'HOME'])('a cf_work row spelled from %s lands its exact bytes', (spelled) => {
+  const db = seeded()
+  const home = worked()
+  const root = briefed(`## Vendored\n\n${local(`${spelled === '~' ? '~' : home}/cf_work/2519/medusa.log`)}\n\n`)
+  const { asked, read } = upstream()
+  expect(vendored(db, root, 7, read)).toBeNull()
+  expect(readFileSync(join(srcDir(root, 7), 'test/fixture/mini/medusa.log'))).toEqual(LOG)
+  expect(asked).toEqual([])
+})
+
 test('a brief with no Vendored section reads and writes nothing', () => {
   const db = seeded()
   const root = briefed('')
@@ -199,9 +224,20 @@ test.each([
   `- \`lib\` — github.com/caliperforge/sky-schema@${PIN} schema/object.json`,
   `- \`a.ts/x.json\` — github.com/caliperforge/sky-schema@${PIN} schema/object.json`,
   GOOD,
+  local('~/cf_work', 'x.log'),
+  local('~/cf_work/../x', 'x.log'),
+  local('/tmp/x', 'x.log'),
+  local('~/cf_work/2519/dir', 'x.log'),
+  local('~/cf_work/2519/gone.log', 'x.log'),
+  local('~/cf_work/2519/link.log', 'x.log'),
+  local('~/cf_work/2519/medusa.log', '../x'),
+  local('~/cf_work/2519/medusa.log', '/etc/x'),
+  local('~/cf_work/2519/medusa.log', '.git/config'),
+  local('~/cf_work/2519/medusa.log', 'test/fixture'),
 ])('%s is held for the CEO with no file written', (row) => {
   const db = seeded()
-  const root = briefed(`## Vendored\n\n${GOOD}\n${row}\n\n`)
+  worked()
+  const root = briefed(`## Vendored\n\n${GOOD}\n${local('~/cf_work/2519/medusa.log')}\n${row}\n\n`)
   mkdirSync(join(srcDir(root, 7), 'lib'))
   writeFileSync(join(srcDir(root, 7), 'a.ts'), '')
   const { read } = upstream()

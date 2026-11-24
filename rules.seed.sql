@@ -136,7 +136,7 @@ VALUES
   ('ci-green', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('ready', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('account_lead', 'card', 'rules/roster/account_lead.yaml', '11c673ed88e2d18c6c88f19d271782ba7845a74f20a214de2caf10b4080a6e0d', '2026-10-14'),
-  ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', '46ab9df80c417f419f54dad92dbe813775913b77623860c26268badbe14a28ce', '2026-09-17'),
+  ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', '8f0d440e9e6ab628c6e299527efb6dd7c3658acb937c621db91d3328fbe67c72', '2026-09-17'),
   ('claims_checker', 'card', 'rules/roster/claims_checker.yaml', 'b9abab1c779495ee547d4096962a7d8c36b628e08339c6fb2ebb7a41b21fbc88', '2026-10-20'),
   ('design_lead', 'card', 'rules/roster/design_lead.yaml', 'cd6c8c262f9a50f3bc0c15ebaa4fc33a0cab0809d13d51c9680cb79257ea3c46', '2026-10-11'),
   ('director', 'card', 'rules/roster/director.yaml', '2460c4ba529c38b01b7ed8cf7640cb751cc3d7940bb87bf1b0f9a4b89d442645', '2026-10-04'),

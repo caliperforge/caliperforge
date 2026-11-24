@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { shape, split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
+import { inputs } from '../output.ts'
 import { misrouted, moved, rerouted } from '../reroute.ts'
 import { holdOf } from '../../store/holds.ts'
 import { upsertRule } from '../../store/index.ts'
@@ -151,6 +153,7 @@ test('an internal split files parts, first queued, parent unbuilt', async () => 
   expect(maybe(w.root, first, 'ask.md')).toMatch(/^# 34a: file the parts\n\n\*\*What:\*\* the machine files each part/)
   expect(allParts(w.db).find((p) => p.n === 1)).toMatchObject({ body: expect.stringContaining('After: #901') as unknown })
   expect(parts[0]?.body).not.toContain('**Question:**')
+  expect(maybe(w.root, first, 'ask.md')).not.toContain('## Output of part')
 })
 
 test('parentCarried', async () => {
@@ -530,10 +533,13 @@ test('D1, D2: a closed After: waits for its plan to land', async () => {
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
   expect(partPlan(w, 1)).toBeNull()
   expect(ofKind(w.db, 'unblocked')).toEqual([])
+  const a = partPlan(w, 0) ?? 0
+  put(w.root, a, 'ask.md', `${maybe(w.root, a, 'ask.md') ?? ''}\n**Output:** ~/cf_work/2519/\n`)
   landedWithout(w, 0)
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
   const b = partPlan(w, 1)
   expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
+  expect(maybe(w.root, b ?? 0, 'ask.md')).not.toContain('## Output of part')
 })
 
 test('a part After a research part queues once it ends done', async () => {
@@ -545,11 +551,13 @@ test('a part After a research part queues once it ends done', async () => {
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
   expect(plan(w.db, a)).toMatchObject({ state: 'queued' })
   expect(partPlan(w, 1)).toBeNull()
+  put(w.root, a, 'ask.md', `${maybe(w.root, a, 'ask.md') ?? ''}\n**Output:** ~/cf_work/2519/\n`)
   end(w.db, a, 'done')
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
   const b = partPlan(w, 1) ?? 0
   expect(plan(w.db, b)).toMatchObject({ state: 'queued' })
   expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
+  expect(inputs(w.root, b)).toContain(join(homedir(), 'cf_work/2519'))
 })
 
 test('a part After an unpushed done pr_path part stays unqueued', async () => {

@@ -19,7 +19,7 @@ import { approved } from './approve.ts'
 import { words } from './signals.ts'
 import { landed } from './landed.ts'
 import { firstLine } from './unpolled.ts'
-import { relayed } from './relayed.ts'
+import { handed, relayed } from './relayed.ts'
 import { MEASURE, moved, own } from './reroute.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
@@ -235,7 +235,7 @@ function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: stri
   const id = inheritedBy(db, root, parent.id, n, queuePart(db, parent, n, row.url, parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat))
   if (measured) moved(db, root, id)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
-  put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)
+  put(root, id, 'ask.md', `# ${row.title}\n\n${handed(db, root, parent.id, n, row.body)}`)
   return id
 }
 

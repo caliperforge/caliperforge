@@ -2,10 +2,11 @@ import { join } from 'node:path'
 import type { Board, Gh } from '../rails/ci-green/index.ts'
 import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { allParts } from '../store/parts.ts'
-import { terminal } from '../store/plans.ts'
+import { allParts, partAt } from '../store/parts.ts'
+import { planById, terminal } from '../store/plans.ts'
 import { landed } from './landed.ts'
 import { LETTERS } from './ordered.ts'
+import { output } from './output.ts'
 import { owed } from './owed.ts'
 import { BOARD } from './push.ts'
 import { firstLine } from './unpolled.ts'
@@ -56,6 +57,14 @@ export function unrelayed(db: Db, root: string, gh: Gh): string[] {
     if (waiters[0] === undefined || !landed(db, plan) || eventsOf(db, plan, 'landed.run').length > 0) return []
     return relayed(db, root, plan, LETTERS[n] ?? String(n), waiters, gh, join(planDir(root, waiters[0]), 'src'))
   })
+}
+
+/** Part `n`'s body, followed by the Output folder of the research part it waits on when that part names one. */
+export function handed(db: Db, root: string, parent: number, n: number, body: string): string {
+  const after = partAt(db, parent, n)?.after ?? null
+  const plan = after === null ? null : partAt(db, parent, after)?.plan ?? null
+  const folder = plan === null ? null : output(root, planById(db, plan))
+  return after === null || folder === null ? body : `${body.trimEnd()}\n\n## Output of part ${LETTERS[after] ?? String(after)}\n\n- ${folder}\n`
 }
 
 function download(root: string, plan: number, run: Ran, gh: Gh): string {

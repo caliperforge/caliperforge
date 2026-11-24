@@ -4,6 +4,7 @@ import { join, relative, resolve } from 'node:path'
 import { run, type Run } from '../cli/gh.ts'
 import type { Narrowing } from '../runner/packet.ts'
 import { BUILT, excluded } from './checks.ts'
+import { cut } from './parent.ts'
 
 /** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
 export function planDir(root: string, plan: number): string {
@@ -251,8 +252,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
     put(root, plan, 'base.sha', `${forked}\n`)
     return { dir, branch: restored, base: forked, recut }
   }
-  git(dir, ['checkout', '-B', branch, head])
-  put(root, plan, 'base.sha', `${head}\n`)
+  cut(root, plan, dir, branch, head)
   return { dir, branch, base: head, recut }
 }
 

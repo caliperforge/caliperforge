@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { shape, split, STANDING, unclear, wide } from '../brief.ts'
@@ -7,6 +7,7 @@ import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { misrouted, moved, rerouted } from '../reroute.ts'
 import { holdOf } from '../../store/holds.ts'
+import { upsertRule } from '../../store/index.ts'
 import { take } from '../../store/leases.ts'
 import { openRefusals, refused } from '../../store/refusals.ts'
 import { refilled } from '../refill.ts'
@@ -14,7 +15,8 @@ import { unrelayed } from '../relayed.ts'
 import { unran } from '../reproduced.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
-import { maybe, planDir, put, srcDir } from '../workspace.ts'
+import { checkout, maybe, planDir, put, SELF, srcDir } from '../workspace.ts'
+import { PARENT } from '../parent.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { record } from '../../store/files.ts'
@@ -660,6 +662,47 @@ test('a measure part goes to the measurer; the rest build', () => {
   expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research', seat: LANE.research.seat, state: 'queued' })
   expect(maybe(w.root, b, 'ask.md')).toContain('**Measure:** runs a day, by cf measure')
   expect(question(w.root, plan(w.db, b))).toMatchObject({ outcome: 'pass' })
+})
+
+const FUZZ = 'export const fuzz = 1\n'
+
+/** The parent's checkout with `src/fuzz.ts` written by a builder run, split into `parts`; returns the parts' plans. */
+function builtSplit(w: World, parts: string): [number, number] {
+  checkout(w.root, ID, SELF, 'p2-parent')
+  writeFileSync(join(srcDir(w.root, ID), 'src/fuzz.ts'), FUZZ)
+  upsertRule(w.db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: 'a'.repeat(64), loaded_at: '2026-11-23' })
+  runLogged(w.db, { plan: ID, step: 2, seat: 'typescript_specialist', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'low',
+    exit: 0, fired: { usage: { input: 0, cache: 0, output: 0 }, seconds: 0, transcript_path: 't.transcript.jsonl' } })
+  parted(w.db, w.root, plan(w.db, ID), split(parts) ?? [], watched([], w.root, ID))
+  return [partPlan(w, 0) ?? 0, partPlan(w, 1) ?? 0]
+}
+
+test('the first part is cut holding the parent builder\'s diff', () => {
+  const w = mine()
+  const [a, b] = builtSplit(w, FENCE(BUILD, BUILD))
+  for (let cut = 0; cut < 2; cut++) {
+    checkout(w.root, a, SELF, 'p3-part')
+    expect(readFileSync(join(srcDir(w.root, a), 'src/fuzz.ts'), 'utf8')).toBe(FUZZ)
+  }
+  expect(maybe(w.root, b, PARENT)).toBeNull()
+  const bare = mine()
+  parted(bare.db, bare.root, plan(bare.db, ID), split(FENCE(BUILD, BUILD)) ?? [], watched([], bare.root, ID))
+  expect(maybe(bare.root, ID, PARENT)).toBeNull()
+})
+
+test('a measure part leaves the parent diff to the next part', () => {
+  const w = mine()
+  const [a, b] = builtSplit(w, FENCE(COUNT, BUILD))
+  expect(maybe(w.root, a, PARENT)).toBeNull()
+  expect(maybe(w.root, b, PARENT)).toContain('+export const fuzz = 1')
+})
+
+test('a parent diff that does not apply refuses the checkout', () => {
+  const w = mine()
+  put(w.root, ID, PARENT, 'diff --git a/src/gone.ts b/src/gone.ts\n--- a/src/gone.ts\n+++ b/src/gone.ts\n@@ -1 +1 @@\n-a\n+b\n')
+  expect(() => checkout(w.root, ID, SELF, 'p2-part')).toThrow(/^parent\.diff does not apply: [\s\S]*src\/gone\.ts/)
+  expect(existsSync(join(planDir(w.root, ID), 'src'))).toBe(false)
+  expect(maybe(w.root, ID, 'base.sha')).toBeNull()
 })
 
 function forced(send = (w: World, a: number): void => { moved(w.db, w.root, a) }): { w: World; a: number; b: number } {

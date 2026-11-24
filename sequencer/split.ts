@@ -13,6 +13,7 @@ import type { Outcome } from './kind.ts'
 import { languageOfPath, TEST } from './route.ts'
 import { WIRE, type Wire } from './push.ts'
 import { doneIds, drop, get, maybe, put, srcDir } from './workspace.ts'
+import { bequeathed } from './bequeathed.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 import { words } from './signals.ts'
@@ -54,6 +55,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     const on = (n: number): string => ref(urls.get(n) ?? '')
     const started = kept.filter((n) => waited(parts, n) === null)
     for (const n of started) queue(db, root, plan, n)
+    bequeathed(db, root, plan.id)
     const waits = kept.flatMap((n) => { const at = waited(parts, n); return at === null ? [] : [`${on(n)} waits on ${on(at)}`] })
     const gates = gated.map((p) => `COO gate: ${p.title}: ${p.measure}; ends: ${p.ends}`)
     const fresh = gates.filter((g) => !(ask ?? '').split('\n').includes(g))

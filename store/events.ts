@@ -62,6 +62,11 @@ export function lastSince(db: Db, kind: string, at: string): Pick<Event, 'outcom
     .get(kind, at) as Pick<Event, 'outcome' | 'message'> | undefined
 }
 
+export function heldOffline(db: Db, before: string): { plan: number; at: string }[] {
+  return db.prepare(`SELECT plan, at FROM events e WHERE message LIKE ? AND julianday(at) < julianday(?)
+    AND id = (SELECT max(id) FROM events n WHERE n.plan = e.plan) ORDER BY id`).all('%: the network is down; the next tick tries again', before) as { plan: number; at: string }[]
+}
+
 export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }

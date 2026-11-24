@@ -34,6 +34,7 @@ import { evict, noting } from './evict.ts'
 import { landless } from './landless.ts'
 import { longJobs } from './long-job.ts'
 import { unrelayed } from './relayed.ts'
+import { offline } from './offline.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -61,9 +62,9 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   const out: Fired[] = []
   unleased(db, held(db, now).map((l) => l.plan))
   const lanes = opened(db, now).map(({ pipe, plans }) => ({ pipe, routed: plans.map((plan) => ({ plan, route: route(db, plan, now) })) }))
-  waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
-    'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
+  waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) => 'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
   park(db, root, lanes.flatMap((l) => l.routed), now)
+  offline(db, now, new Map(lanes.flatMap((l) => l.routed.map(({ plan, route: r }) => [plan.id, r]))))
   if (Number.isFinite(each)) {
     const laps = lanes.map(({ pipe, routed }) => lane(routed.filter((r) => stepping(r.route)), now, each,
       (m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain, labels) : away(db, m, apart), db))

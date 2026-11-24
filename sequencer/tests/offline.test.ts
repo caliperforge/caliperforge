@@ -5,14 +5,17 @@ import { join } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
-import { eventsOf } from '../../store/events.ts'
-import { rewind } from '../../store/plans.ts'
+import { eventsAfter, eventsOf, logged } from '../../store/events.ts'
+import { enable } from '../../store/lanes.ts'
+import { end, rewind } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { HELD, thrown } from '../settle.ts'
 import { checkout, planDir } from '../workspace.ts'
 import { cut } from './bases.ts'
+import { REGISTRY } from './drifting.ts'
+import { drift } from '../drift.ts'
 import { guard, reached, swept } from './sockets.ts'
 import { approve, CARRIED, plan, stub, watched, world } from './world.ts'
 
@@ -148,6 +151,58 @@ test.each([
 
 test('1532 D2 a 404 throw still refuses', () => {
   expect(thrown(at(2), 'gh: Not Found (HTTP 404)')).toMatchObject({ outcome: 'refuse', spans: ['threw: gh: Not Found (HTTP 404)'] })
+})
+
+const DOWN = `step 0 brief: the network is down; ${HELD}`
+
+function heldFor(minutes: number, message = DOWN, on = false): { w: ReturnType<typeof world>; hold: number } {
+  const w = world()
+  approve(w.db, w.target)
+  enable(w.db, 1, on)
+  const at = new Date(Date.now() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19)
+  return { w, hold: logged(w.db, { plan: 1, kind: 'brief', actor: 'tick', outcome: 'pass', message, pointer: null, run: null }, at) }
+}
+
+const offlineHold = (w: ReturnType<typeof world>): unknown[] => drift(w.db, REGISTRY.filter((e) => e.name === 'offline_hold'), new Date())
+
+test('a stale offline hold in a closed lane gets one event', async () => {
+  const { w } = heldFor(180)
+  expect(offlineHold(w)).toMatchObject([{ state: 'seen' }])
+  await tick(w.db, w.root, stub(CARRIED))
+  const [event] = eventsOf(w.db, 1, 'offline')
+  expect(event?.message).toMatch(/^step 0 \w+: held offline at .+; not stepped since: its lane is not open$/)
+  expect(offlineHold(w)).toEqual([])
+})
+
+test('a second tick adds no second offline event', async () => {
+  const { w } = heldFor(180)
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(eventsOf(w.db, 1, 'offline')).toHaveLength(1)
+})
+
+test.each([
+  [30, DOWN],
+  [180, `step 0 brief: the store is locked; ${HELD}`],
+  [180, `step 6 ready threw: Command failed: gh pr list; ${HELD}`],
+])('a hold %i min old saying %s gets no offline event', async (minutes, message) => {
+  const { w } = heldFor(minutes, message)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(eventsOf(w.db, 1, 'offline')).toEqual([])
+})
+
+test('a plan that ended after its hold is named by its state', async () => {
+  const { w } = heldFor(180)
+  end(w.db, 1, 'refused')
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(eventsOf(w.db, 1, 'offline').map((e) => e.message)).toEqual([expect.stringMatching(/; not stepped since: it is refused$/)])
+})
+
+test('a held plan whose route fires is stepped, not noted', async () => {
+  const { w, hold } = heldFor(180, DOWN, true)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(eventsOf(w.db, 1, 'offline')).toEqual([])
+  expect(eventsAfter(w.db, hold).map((e) => e.kind)).toContain(at(0).name)
 })
 
 test('2062 D1 cut points the proxies at a dead port', () => {

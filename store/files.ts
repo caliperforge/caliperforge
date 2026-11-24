@@ -58,8 +58,9 @@ export function record(db: Db, plan: number, list: PlanFile[]): void {
   })()
 }
 
-/** The repo a plan's paths are relative to: its target's, or ours. */
-const REPO = "COALESCE((SELECT t.repo FROM targets t WHERE t.id = %s.target_id), '')"
+/** The repo a plan's paths are relative to: its target's, or its origin issue's. */
+const repo = (alias: string) => `COALESCE((SELECT t.repo FROM targets t WHERE t.id = ${alias}.target_id),
+  substr(${alias}.origin, 20, instr(${alias}.origin, '/issues/') - 20), '')`
 
 /** Another job `o` in the same repo, not settled and past its brief, listing a path of plan `me` other than the seed and `.cf/`. */
 const SHARED = `FROM plans me
@@ -67,7 +68,7 @@ const SHARED = `FROM plans me
     JOIN plan_files f ON f.path = mine.path AND f.plan <> me.id
     JOIN plans o ON o.id = f.plan
     WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2 AND mine.path NOT LIKE '.cf/%' AND mine.path <> ?
-      AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}`
+      AND ${repo('o')} = ${repo('me')}`
 
 /**
  * The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
@@ -111,7 +112,7 @@ export function building(db: Db, plan: number, paths: string[]): { plan: number;
     WHERE me.id = ? AND f.path IN (SELECT value FROM json_each(?))
       AND o.state IN ('queued', 'running') AND o.step >= 2
       AND COALESCE(o.wait_reason, '') <> 'ceo_batch'
-      AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
+      AND ${repo('o')} = ${repo('me')}
       AND EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT})
     ORDER BY o.id LIMIT 1`).get(plan, JSON.stringify(paths)) ?? null) as { plan: number; path: string } | null
 }

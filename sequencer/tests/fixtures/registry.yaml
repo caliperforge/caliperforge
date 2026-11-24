@@ -109,6 +109,12 @@
   column: at
   where: kind = 'paydesk_attest' AND outcome = 'pass'
   gap: 8d
+- name: file_overlap_cross_repo
+  table: events
+  column: at
+  where: "kind = 'park' AND message GLOB 'waits on plan *''s files' AND (SELECT COALESCE((SELECT t.repo FROM targets t WHERE t.id = me.target_id), substr(me.origin, 20, instr(me.origin, '/issues/') - 20), '') <> COALESCE((SELECT t.repo FROM targets t WHERE t.id = o.target_id), substr(o.origin, 20, instr(o.origin, '/issues/') - 20), '') FROM plans me, plans o WHERE me.id = events.plan AND o.id = CAST(substr(events.message, 15) AS INTEGER)) = 1"
+  gap: 7d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

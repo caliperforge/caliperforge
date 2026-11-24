@@ -149,17 +149,19 @@ const PYC = 'pkg/__pycache__/m.cpython-312.pyc'
 const CACHE = 'kotlin/.gradle/9.7.1/gc.properties'
 const JAR = 'kotlin/build/libs/a.jar'
 const APP = 'rust/target/debug/app'
+const PAD = 'node_modules/left-pad/index.js'
 
-/** A source beside the build output or lockfile it makes, for pyc, Gradle, cargo, uv and foundry. */
+/** A source beside the build output or lockfile it makes, for pyc, Gradle, cargo, uv, foundry and npm. */
 const ECOSYSTEMS: Record<string, string> = {
   'pkg/m.py': 'x = 1\n', [PYC]: 'compiled',
   'kotlin/Main.kt': 'fun main() {}\n', [CACHE]: 'gc', [JAR]: 'jar',
   'rust/src/main.rs': 'fn main() {}\n', [APP]: 'elf',
   'pyproject.toml': '[project]\nname = "widget"\n', 'uv.lock': 'version = 1\n',
   'foundry.toml': '[profile.default]\nsrc = "src"\n', 'foundry.lock': '{}\n',
+  'package.json': '{"name": "widget"}\n', [PAD]: 'module.exports = 1\n',
 }
-const SOURCES = ['pkg/m.py', 'kotlin/Main.kt', 'rust/src/main.rs', 'pyproject.toml', 'foundry.toml']
-const LEFT_OUT = ['.pyc', '.gradle', 'kotlin/build', 'rust/target', 'uv.lock', 'foundry.lock']
+const SOURCES = ['pkg/m.py', 'kotlin/Main.kt', 'rust/src/main.rs', 'pyproject.toml', 'foundry.toml', 'package.json']
+const LEFT_OUT = ['.pyc', '.gradle', 'kotlin/build', 'rust/target', 'uv.lock', 'foundry.lock', 'node_modules']
 
 const CHECKED = once(async () => {
   const w = await FRESH()
@@ -186,7 +188,7 @@ test('build output and untracked lockfiles are not in the diff', async () => {
 
 test('a reused checkout drops intent-to-add build output', async () => {
   const { dir, base, root } = await ecosystems()
-  const added = [PYC, CACHE, APP, 'uv.lock', 'foundry.lock']
+  const added = [PYC, CACHE, APP, 'uv.lock', 'foundry.lock', PAD]
   head(dir, ['add', '-f', '--intent-to-add', ...added])
   head(dir, ['add', 'pkg/m.py'])
   checkout(root, 1, 'acme/widget', 'widget-12-a1')
@@ -197,16 +199,18 @@ test('a reused checkout drops intent-to-add build output', async () => {
 
 test('build output HEAD tracks stays in the index and the diff', async () => {
   const { dir, root } = await ecosystems()
-  const tracked = [PYC, JAR, APP, 'uv.lock', 'foundry.lock']
+  const tracked = [PYC, JAR, APP, 'uv.lock', 'foundry.lock', PAD]
   head(dir, ['add', '-f', ...tracked])
   head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked output'])
   checkout(root, 1, 'acme/widget', 'widget-12-a1')
   for (const path of tracked) expect(head(dir, ['ls-files', '--', path])).toBe(path)
   writeFileSync(join(dir, 'uv.lock'), 'version = 2\n')
   writeFileSync(join(dir, 'foundry.lock'), '{"lib/forge-std": {}}\n')
+  writeFileSync(join(dir, PAD), 'module.exports = 2\n')
   const diff = gitDiff(dir, head(dir, ['rev-parse', 'HEAD']))
   expect(diff).toContain('+version = 2')
   expect(diff).toContain('+{"lib/forge-std": {}}')
+  expect(diff).toContain('+module.exports = 2')
 })
 
 test('a submodule is in the diff only when its commit moved', async () => {

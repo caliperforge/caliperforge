@@ -697,6 +697,16 @@ test('a measure part leaves the parent diff to the next part', () => {
   expect(maybe(w.root, b, PARENT)).toContain('+export const fuzz = 1')
 })
 
+test('a first part released later still takes the parent diff', () => {
+  const w = mine()
+  put(w.root, ID, PARENT, FUZZ)
+  addPart(w.db, { parent: ID, n: 0, url: 'https://github.com/caliperforge/caliperforge/issues/901', title: 't', body: '**What:** w\n**Measure:** count it' })
+  addPart(w.db, { parent: ID, n: 1, url: 'https://github.com/caliperforge/caliperforge/issues/902', title: 't', body: 'After: #901', after: 0 })
+  waiting902(w)
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(maybe(w.root, partPlan(w, 1) ?? 0, PARENT)).toBe(FUZZ)
+})
+
 test('a parent diff that does not apply refuses the checkout', () => {
   const w = mine()
   put(w.root, ID, PARENT, 'diff --git a/src/gone.ts b/src/gone.ts\n--- a/src/gone.ts\n+++ b/src/gone.ts\n@@ -1 +1 @@\n-a\n+b\n')

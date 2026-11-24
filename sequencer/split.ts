@@ -13,7 +13,7 @@ import type { Outcome } from './kind.ts'
 import { languageOfPath, TEST } from './route.ts'
 import { WIRE, type Wire } from './push.ts'
 import { doneIds, drop, get, maybe, put, srcDir } from './workspace.ts'
-import { bequeathed } from './bequeathed.ts'
+import { bequeathed, inheritedBy } from './bequeathed.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 import { words } from './signals.ts'
@@ -54,8 +54,8 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     const urls = new Map(kept.map((n) => [n, filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire)]))
     const on = (n: number): string => ref(urls.get(n) ?? '')
     const started = kept.filter((n) => waited(parts, n) === null)
-    for (const n of started) queue(db, root, plan, n)
     bequeathed(db, root, plan.id)
+    for (const n of started) queue(db, root, plan, n)
     const waits = kept.flatMap((n) => { const at = waited(parts, n); return at === null ? [] : [`${on(n)} waits on ${on(at)}`] })
     const gates = gated.map((p) => `COO gate: ${p.title}: ${p.measure}; ends: ${p.ends}`)
     const fresh = gates.filter((g) => !(ask ?? '').split('\n').includes(g))
@@ -232,7 +232,7 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
 }
 
 function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }, measured: boolean): number {
-  const id = queuePart(db, parent, n, row.url, parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat)
+  const id = inheritedBy(db, root, parent.id, n, queuePart(db, parent, n, row.url, parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat))
   if (measured) moved(db, root, id)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
   put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)

@@ -14,7 +14,7 @@ export function rehold(db: Db, root: string, now: Date): void {
   }
 }
 
-/** A ruled research job whose awaited plan is still open stays held on it; any other job is released. */
+
 export function rewait(db: Db, root: string, plan: number, now: Date, release: () => void): void {
   const on = waitsOpen(db).find((r) => r.id === plan)?.on_
   if (on === undefined) release()

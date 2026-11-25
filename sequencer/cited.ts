@@ -3,10 +3,12 @@ import { get, maybe } from './workspace.ts'
 
 const SKIP = /stays|must not|no builder touches|not this job's|do not/i
 
-/** The paths the newest ruling block of `rulings.md` names, leaving out its lines that say not to touch them. */
+/** The paths the newest ruling block of `rulings.md` names, in backticks or on a `files:` line, leaving out its lines that say not to touch them. */
 export function cited(rulings: string): string[] {
-  return [...newest(rulings).split('\n').filter((l) => !SKIP.test(l)).join('\n').matchAll(/`([^`\s]+)`/g)]
-    .map((m) => (m[1] ?? '').replace(/:\d+(?:-\d+)?$/, '')).filter((t) => (t.includes('/') || /\.\w+$/.test(t)) && !/[<>]/.test(t))
+  const kept = newest(rulings).split('\n').filter((l) => !SKIP.test(l))
+  const files = kept.flatMap((l) => /^files:(.*)$/.exec(l)?.[1]?.split(/[\s,`]+/) ?? [])
+  return [...[...kept.join('\n').matchAll(/`([^`\s]+)`/g)].map((m) => m[1] ?? ''), ...files]
+    .map((t) => t.replace(/:\d+(?:-\d+)?$/, '')).filter((t) => (t.includes('/') || /\.\w+$/.test(t)) && !/[<>]/.test(t))
 }
 
 /** The newest ruling block of `rulings.md`: from its last `**Ruling` or `## ` line, else the whole file. */

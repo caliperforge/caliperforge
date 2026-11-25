@@ -14,7 +14,7 @@ const BARRED: [RegExp, string][] = [
 const BRIEF = /\bissue\.md\b/
 
 /** A `Fork:` line naming one of our repos is ask.md's text, not a path. */
-const FORKED = new RegExp(`\\bFork:\\s*\`?${FORK}/[\\w.-]+`, 'g')
+const FORKED = new RegExp(`\\bFork:\\s*\`?${FORK}/[\\w.-]+(?: from [\\w.-]+/[\\w.-]+)?`, 'g')
 
 function reach(why: string, paths: string[], root: string, plan: number): string | null {
   const brief = BRIEF.test(why)

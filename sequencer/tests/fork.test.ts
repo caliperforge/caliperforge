@@ -34,6 +34,29 @@ test('D2 an existing fork makes no gh call', () => {
   expect(cloned(checkout(w.root, 1, 'acme/widget', BRANCH, 'main', exec).dir)).toBe(true)
 })
 
+test('a missing fork of ours is forked from its source once', () => {
+  const w = world()
+  const fork = join(w.root, 'remotes/caliperforge/widget')
+  rmSync(fork, { recursive: true, force: true })
+  const calls: string[][] = []
+  const exec = (args: string[]): string => {
+    calls.push(args)
+    cpSync(join(w.root, 'remotes/acme/widget'), fork, { recursive: true })
+    return ''
+  }
+
+  const out = checkout(w.root, 1, 'caliperforge/widget', BRANCH, 'main', exec, [], 'acme/widget')
+  expect(calls).toEqual([['repo', 'fork', 'acme/widget', '--org', 'caliperforge', '--clone=false']])
+  expect(execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: out.dir, encoding: 'utf8' }).trim()).toBe(fork)
+})
+
+test('an existing fork with a source makes no gh call', () => {
+  const w = world()
+  const exec = (): string => { throw new Error('forked') }
+
+  expect(cloned(checkout(w.root, 1, 'caliperforge/widget', BRANCH, 'main', exec, [], 'acme/widget').dir)).toBe(true)
+})
+
 test('D2 a master-only target is cut from its master', () => {
   const w = world()
   const upstream = join(w.root, 'remotes/acme/widget')

@@ -5,6 +5,7 @@ import { expect, test } from 'vitest'
 import { eventsOf } from '../../store/events.ts'
 import { dropPlan } from '../../store/plans.ts'
 import { lastCi } from '../../store/ready.ts'
+import { forkOf, upstreamOf } from '../home.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
@@ -149,6 +150,22 @@ test('D4 a kernel clone whose ask gains Fork: is cloned from pay', async () => {
 test('D5 a Fork: outside caliperforge leaves the tree on ours', async () => {
   const { w } = forked(['Fork: acme/widget'])
   await laps(w, 3, watched([], w.root, ID))
+  expect(origin(w)).toBe(join(w.root, 'remotes', SELF))
+})
+
+test('a Fork: ask with a from tail clones pay', async () => {
+  const { w, pay } = forked(['Fork: caliperforge/pay from acme/pay'])
+  await laps(w, 3, watched([], w.root, ID))
+  expect(origin(w)).toBe(pay)
+  expect(forkOf(w.root, plan(w.db, ID))).toBe(PAY)
+  expect(upstreamOf(w.root, plan(w.db, ID))).toBe('acme/pay')
+})
+
+test('a from tail on a fork not ours leaves the tree on ours', async () => {
+  const { w } = forked(['Fork: acme/widget from belumume/widget'])
+  await laps(w, 3, watched([], w.root, ID))
+  expect(forkOf(w.root, plan(w.db, ID))).toBeNull()
+  expect(upstreamOf(w.root, plan(w.db, ID))).toBeNull()
   expect(origin(w)).toBe(join(w.root, 'remotes', SELF))
 })
 

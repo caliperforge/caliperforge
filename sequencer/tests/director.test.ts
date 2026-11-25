@@ -940,7 +940,8 @@ async function inReach() {
       symlinkSync(home, alias)
       return `add the Fork line to ${alias}/.cf/work/7/ask.md`
     },
-    () => 'add the Fork line to `.cf/work/7/ask.md`', () => 'add `Fork: caliperforge/skills` to ask.md']) {
+    () => 'add the Fork line to `.cf/work/7/ask.md`', () => 'add `Fork: caliperforge/skills` to ask.md',
+    () => 'add `Fork: caliperforge/solana-fuzz from belumume/solana-fuzz` to ask.md']) {
     const { db, home } = seeded('1')
     fixLive(db)
     committed(home)

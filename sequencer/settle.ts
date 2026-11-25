@@ -33,7 +33,7 @@ import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
 import { branchOf, checkout, cloned, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
-import { assembling, forkOf, homeOf, onto } from './home.ts'
+import { assembling, forkOf, homeOf, onto, upstreamOf } from './home.ts'
 import { empty, rebranched, rehomed } from './rehomed.ts'
 import { seatless } from './seatless.ts'
 import { BUILDS, capped, fingerprintOf, looped, refusalText, restated, stopped, streak, STREAK } from './refusal.ts'
@@ -142,7 +142,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     if (bare) rebranched(root, plan.id)
     rehomed(root, plan.id, tree.repo)
     if (empty(root, plan.id, tree.repo)) return { language: null, failed: { outcome: 'needs_coo', spans: ['empty_repo'], note: `${tree.repo}: repo has no commits; held for the COO` } }
-    const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from, undefined, filesOf(db, plan.id).map((f) => f.path))
+    const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from, undefined, filesOf(db, plan.id).map((f) => f.path), tree.source)
     const from = tree.from ?? 'main'
     if (recut !== null) logged(db, { plan: plan.id, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: `cut again from ${from}: the clone was cut from ${recut}`, pointer: from, run: null })
     if (recut !== null && plan.step > BUILD) return { language: null, failed: { outcome: 'pass', spans: ['base:recut'], note: `cut again from ${from}; back to the build to re-apply its diff`, rewind: BUILD } }
@@ -161,10 +161,12 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
  * of ours, the target's repo and `p<plan>-<slug>` for a part of an outside plan. Every way the clone is
  * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part, or the branch an internal ask's `Base:` line names.
  */
-function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string; from?: string | undefined } | null {
+function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string; from?: string | undefined; source?: string | undefined } | null {
   if (internal(plan)) {
     const branch = internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`)
-    return { repo: targetOf(db, plan)?.repo ?? forkOf(root, plan) ?? homeOf(plan), branch, from: onto(db, root, plan) }
+    const fork = forkOf(root, plan)
+    const repo = targetOf(db, plan)?.repo ?? fork ?? homeOf(plan)
+    return { repo, branch, from: onto(db, root, plan), source: repo === fork ? upstreamOf(root, plan) ?? undefined : undefined }
   }
   const row = targetOf(db, plan)
   return row === null ? null : { repo: row.repo, branch: assembling(db, plan) ?? branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }

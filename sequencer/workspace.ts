@@ -227,7 +227,7 @@ export function liveTree(root: string, cwd: string): boolean {
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
  * The build-output exclude is written here too: a builder runs xcodebuild at step 2, before the rails do.
  */
-export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main', exec: Run = run, listed: string[] = []): Checkout {
+export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main', exec: Run = run, listed: string[] = [], source = repo): Checkout {
   const recut = rebased(root, plan, from)
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
@@ -235,7 +235,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   if (done !== null && cloned(dir)) { fetchMain(dir); standOn(dir, branch, done.trim()); excluded(dir, [], listed); unstage(dir); return { dir, branch, base: done.trim(), recut } }
   const base = gitBase(root)
   const fork = remote(base, `${FORK}/${repoName(repo)}`)
-  if (!found(planDir(root, plan), fork)) exec(['repo', 'fork', repo, '--org', FORK, '--clone=false'])
+  if (!found(planDir(root, plan), fork)) exec(['repo', 'fork', source, '--org', FORK, '--clone=false'])
   git(planDir(root, plan), ['clone', '--no-local', '--origin', 'origin',
     '-c', `remote.upstream.url=${remote(base, repo)}`,
     '-c', 'remote.upstream.fetch=+refs/heads/*:refs/remotes/upstream/*',

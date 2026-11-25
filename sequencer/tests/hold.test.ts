@@ -21,6 +21,7 @@ import { lapsed } from '../../store/until.ts'
 import { released } from '../fixer.ts'
 import { ended, hold, isHeld, later, pending, unhold } from '../hold.ts'
 import { tick } from '../index.ts'
+import { rehold } from '../rehold.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 import { approve, CARRIED, REFUSE, stub, watched, world } from './world.ts'
 
@@ -602,6 +603,20 @@ test('D2 D3 a hold on a done plan waits for its push', () => {
   pushed(db, 8)
   released(db, home, NOW, () => undefined)
   expect(row(db)).toEqual({ state: 'queued', step: 4, waits_on: null })
+})
+
+test('rehold skips a leased, an ended-wait and a pr_path plan', () => {
+  const { db, home } = seeded()
+  db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, waits_on) VALUES (8, 99, 'research', 'queued', '2026-09-24', 9),
+    (9, 99, 'research', 'queued', '2026-09-24', NULL), (10, 99, 'research', 'running', '2026-09-24', 11),
+    (11, 99, 'research', 'done', '2026-09-24', NULL), (12, 99, 'research', 'queued', '2026-09-24', 9);
+    UPDATE plans SET waits_on = 9, wait_reason = 'file_overlap' WHERE id = 7`)
+  take(db, 8, NOW)
+  rehold(db, home, NOW)
+  expect(planRows(db).map((p) => [p.id, p.state, p.waits_on])).toEqual([[7, 'running', 9], [8, 'queued', 9], [9, 'queued', null],
+    [10, 'running', 11], [11, 'done', null], [12, 'blocked_on_ceo', 9]])
+  expect(ofKind(db, 'park').map((e) => [e.plan, e.message])).toEqual([[12, 'waits on plan 9']])
+  expect([7, 8, 10, 12].map((id) => isHeld(home, id))).toEqual([false, false, false, true])
 })
 
 function waitsOnSplit() {

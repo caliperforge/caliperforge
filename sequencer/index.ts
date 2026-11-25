@@ -22,6 +22,7 @@ import { sunday } from '../cli/science.ts'
 import { lanes as opened, offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
 import { ended, hold, pending } from './hold.ts'
+import { rehold } from './rehold.ts'
 import { logged } from '../store/events.ts'
 import { ahead } from '../store/files.ts'
 import { slack } from '../cli/flow.ts'
@@ -51,7 +52,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   ripe(db, now)
   relane(db)
   misrouted(db, root, now)
-  longJobs(db, root, now)
+  longJobs(db, root, now); rehold(db, root, now)
   if (registry !== undefined) await watched(db, root, registry, now, read, labels)
   if (labels !== undefined) { (lines ?? []).push(...landless(db, root, labels), ...intake(db, root, labels), ...refill(db, root, labels, now)); await harvested(db, root, provider, now, labels) }
   if (labels !== undefined) (lines ?? []).push(...unrelayed(db, root, (wire ?? WIRE).runs))

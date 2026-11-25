@@ -7,9 +7,11 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { get, set } from '../../store/lanes.ts'
-import { dropPlan, putPlan } from '../../store/plans.ts'
+import { returnToLane } from '../../store/holds.ts'
+import { dropPlan, end, held, planRows, putPlan } from '../../store/plans.ts'
 import { fingerprint, refusalsOf, refused, WHY } from '../../store/refusals.ts'
 import { check, gather, question, record, sourced } from '../../templates/research.ts'
+import { hold } from '../hold.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
@@ -1040,6 +1042,25 @@ test('needs_build D2: a ticked needs_build blocks with no refusal', async () => 
   expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 1 })
   expect(eventsOf(w.db, 1, 'gather')).toMatchObject([{ outcome: 'escalate', message: UNBUILT }])
   expect(refusalsOf(w.db, 1)).toBe(0)
+  expect(ran(w).filter((seat) => seat === 'measurer')).toHaveLength(1)
+})
+
+test('a re-laned measure job spends nothing until its wait lands', async () => {
+  const w = researching(MEASURE)
+  putPlan(w.db, { id: 2, pipe_id: 1, target_id: 1, template: 'research', state: 'blocked_on_ceo', queued_at: plan(w.db, 1).queued_at, step: 0, retries: 0 })
+  held(w.db, 2, 'ceo', 'a person answers')
+  hold(w.db, w.root, 1, 'waits on plan 2', new Date(), 2)
+  returnToLane(w.db, 1)
+  const provider = measuring(NEEDS_BUILD, () => undefined)
+  for (let n = 0; n < 3; n += 1) await tick(w.db, w.root, provider)
+  expect(ran(w)).toEqual([])
+  expect(planRows(w.db)[0]).toMatchObject({ state: 'blocked_on_ceo', waits_on: 2 })
+  end(w.db, 2, 'done')
+  await tick(w.db, w.root, provider)
+  expect(planRows(w.db)[0]).toMatchObject({ state: 'queued', waits_on: null })
+  headed(w)
+  for (let n = 0; n < 4 && eventsOf(w.db, 1, 'gather').length === 0; n += 1) await tick(w.db, w.root, provider)
+  await tick(w.db, w.root, provider)
   expect(ran(w).filter((seat) => seat === 'measurer')).toHaveLength(1)
 })
 

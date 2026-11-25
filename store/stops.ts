@@ -36,6 +36,12 @@ export function waitsEnded(db: Db): { id: number; step: number; on_: number; the
     { id: number; step: number; on_: number; theirs: string; origin: string | null }[]
 }
 
+export function waitsOpen(db: Db): { id: number; state: string; on_: number }[] {
+  return db.prepare(`SELECT p.id, p.state, p.waits_on AS on_ FROM plans p JOIN plans w ON w.id = p.waits_on
+    WHERE p.template = 'research' AND p.state IN ('queued', 'running', 'blocked_on_ceo')
+    AND w.state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY p.id`).all() as { id: number; state: string; on_: number }[]
+}
+
 export function openJobs(db: Db, plan: number): { id: number; state: string; step: number; lane: string | null; origin: string | null }[] {
   return db.prepare(`SELECT id, state, step, lane, origin FROM plans
     WHERE state IN ('queued', 'running', 'blocked_on_ceo') AND id <> ? ORDER BY id`).all(plan) as

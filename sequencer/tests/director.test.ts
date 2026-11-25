@@ -576,6 +576,17 @@ async function questioned() {
   expect(maybe(left.home, 7, 'ask.md')).toBe('the ask\n')
 }
 
+async function waitHeld() {
+  const { db, home } = asked(`the ask\n\n${LINE}\n`)
+  db.exec(`UPDATE plans SET template = 'research' WHERE id = 7;
+    INSERT INTO plans (id, pipe_id, template, state, queued_at) VALUES (8, 99, 'research', 'queued', '2026-09-24')`)
+  hold(db, home, 7, 'waits on plan 8', now, 8)
+  await cooLite(db, home, row(db), reader, now, () => undefined, wire())
+  expect(maybe(home, 7, 'ask.md')).toContain(`## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${LINE}\n`)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 8 })
+  expect(maybe(home, 7, 'parked.md')).toContain('waits on plan 8')
+}
+
 describe('rule', () => {
   test('a rule goes in issue.md when built, in ask.md when not', landed)
   test('a rule carries its fields into issue.md', carries)
@@ -591,6 +602,7 @@ describe('rule', () => {
   test('an upstream-key stop gets the pinned read tool and its keys', pinned)
   test('a token count is ruled only after a cf look store', storeLooked)
   test('a question is ruled from ask.md, or left with the coo', questioned)
+  test('a rule on a research job waiting on an open plan holds it', waitHeld)
 })
 
 async function written() {

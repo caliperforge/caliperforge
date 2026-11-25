@@ -298,6 +298,34 @@ test('D4 a director rule widens the fence to its path', async () => {
   expect(fenceFor(db, 7, ['brief:files'])).toContain('src/x.ts')
 })
 
+test('D1 a director files line adds its paths to the fence', async () => {
+  const { db, home } = made()
+  writeFileSync(join(srcDir(home, 7), 'package.json'), '{}\n')
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: the builder bumps the package\nfiles: package.json, src/x.ts\n${CARRIES}\n---\n`
+  await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
+  expect(filesOf(db, 7)).toEqual([{ path: 'package.json', is_new: false }, { path: 'src/x.ts', is_new: false }])
+  expect(eventsOf(db, 7, 'files')).toContainEqual({ actor: 'ruling', outcome: 'pass', message: 'add package.json: named in issue.md' })
+  expect(fenceFor(db, 7, ['brief:files'])).toContain('package.json')
+})
+
+test('D2 files: none adds nothing, a missing path is refused', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'rulings.md', '**Ruling (COO, 2026-10-08):** add it.\nfiles: none\n')
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([])
+  put(home, 7, 'rulings.md', '**Ruling (COO, 2026-10-08):** add it.\nfiles: src/gone.ts\n')
+  expect(opened(db, home, 7)).toEqual(['src/gone.ts'])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: src/gone.ts' }])
+})
+
+test('D3 an older ruling\'s files line opens nothing', () => {
+  const { db, home } = made()
+  put(home, 7, 'rulings.md', '**Ruling (COO, 2026-10-07):** add it.\nfiles: src/x.ts\n**Ruling (COO, 2026-10-08):** done.\n')
+  put(home, 7, 'issue.md', ['# hello', '## Ruling (COO, 2026-10-07)\n\nfiles: src/x.ts', '## Ruling (COO, 2026-10-08)\n\ndone.\n'].join('\n\n'))
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([])
+})
+
 async function aliased(answer: (alias: string) => string, setup: (s: { db: Db; home: string }) => void = () => undefined) {
   const { db, home } = seeded(3)
   const alias = join(mkdtempSync(join(tmpdir(), 'cf-alias-')), 'root')

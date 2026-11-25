@@ -147,7 +147,6 @@ test('plans on one repo of ours wait on the older', () => {
   expect(sharing(pair('caliperforge'), 2)).toEqual({ plan: 1, path: 'pyproject.toml' })
 })
 
-// #712: a built plan parked on the CEO sign-off must not hold later plans on its files
 test('a plan waiting only on sign-off frees its files', () => {
   const { db } = world()
   const hash = '0'.repeat(64)

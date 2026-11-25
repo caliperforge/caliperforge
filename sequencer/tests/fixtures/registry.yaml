@@ -64,6 +64,12 @@
   where: "kind = 'cli_error' AND message LIKE '%rev-parse HEAD%'"
   gap: 1d
   expected: 0
+- name: research_after_empty_build
+  table: events
+  column: at
+  where: "kind = 'director' AND outcome = 'needs_coo' AND message LIKE 'research did not apply%'"
+  gap: 7d
+  expected: 0
 - name: split_measure_only
   table: plans
   column: queued_at

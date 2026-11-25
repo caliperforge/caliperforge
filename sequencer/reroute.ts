@@ -11,8 +11,8 @@ import { unasked, work } from '../templates/research.ts'
 import { estimate, files, TEST } from './brief.ts'
 import { unhold } from './hold.ts'
 import type { Outcome } from './kind.ts'
-import { rule } from './rule.ts'
-import { maybe, move } from './workspace.ts'
+import { stray } from './rule.ts'
+import { diffOf, maybe, move, put } from './workspace.ts'
 
 const OUTPUT = '**Output:**'
 export const MEASURE = '**Measure:**'
@@ -25,8 +25,9 @@ function asked(text: string): boolean {
   return unasked(text).length === 0 && (out === undefined ? measured(text) : work(out) !== null)
 }
 
-function researchable(db: Db, plan: PlanRow, text: string): boolean {
-  return plan.template === 'pr_path' && internal(plan) && plan.target_id === null && !builderRan(db, plan.id) && asked(text)
+function researchable(db: Db, root: string, plan: PlanRow, text: string): boolean {
+  return plan.template === 'pr_path' && internal(plan) && plan.target_id === null
+    && (!builderRan(db, plan.id) || diffOf(root, plan.id).trim() === '') && asked(text)
 }
 
 export function moved(db: Db, root: string, id: number): void {
@@ -69,8 +70,9 @@ export function misrouted(db: Db, root: string, now: Date): void {
 
 /** An unbuilt pr_path plan of ours goes to the research lane at step 0, its ask carrying the research lines. */
 export function rerouted(db: Db, root: string, plan: PlanRow, answer: string): boolean {
-  if (!researchable(db, plan, `${maybe(root, plan.id, 'ask.md') ?? ''}\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${answer.trim()}\n`)) return false
-  if (rule(db, root, { ...plan, template: 'research' }, 'director', answer) === null) return false
+  const text = `${maybe(root, plan.id, 'ask.md') ?? ''}\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${answer.trim()}\n`
+  if (!researchable(db, root, plan, text) || stray(root, plan, answer) !== null) return false
+  put(root, plan.id, 'ask.md', text)
   moved(db, root, plan.id)
   unhold(db, root, plan.id, 'director', 0)
   return true
@@ -78,7 +80,7 @@ export function rerouted(db: Db, root: string, plan: PlanRow, answer: string): b
 
 /** The same move for a plan whose own ask already carries the research lines. */
 function researched(db: Db, root: string, plan: PlanRow): boolean {
-  if (!researchable(db, plan, maybe(root, plan.id, 'ask.md') ?? '')) return false
+  if (!researchable(db, root, plan, maybe(root, plan.id, 'ask.md') ?? '')) return false
   moved(db, root, plan.id)
   return true
 }

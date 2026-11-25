@@ -1404,7 +1404,7 @@ async function measured() {
 }
 
 const UNRESEARCHED = [
-  { sql: 'UPDATE plans SET step = 1 WHERE id = 7', lines: LINES },
+  { sql: 'UPDATE plans SET step = 1 WHERE id = 7', lines: LINES, built: true },
   { sql: `${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`, lines: LINES },
   { sql: UNBUILT, lines: FETCHED.replace(/\n\*\*Output:\*\*.*$/, '') },
   ...['~/cf_work', '~/cf_work/../x', '/tmp/x'].map((out) => ({ sql: UNBUILT, lines: LINES.replace('~/cf_work/7/', out) })),
@@ -1415,10 +1415,11 @@ const UNRESEARCHED = [
 
 async function unresearched() {
   expect(read('---\nmove: research\nwhy: the ask only measures\n---\n')).toBeNull()
-  for (const { sql, lines, ask = 'the ask\n' } of UNRESEARCHED) {
+  for (const { sql, lines, ask = 'the ask\n', built = false } of UNRESEARCHED) {
     const { db, home } = seeded('1')
     db.exec(sql)
     put(home, 7, 'ask.md', ask)
+    if (built) writeFileSync(join(srcDir(home, 7), 'a.ts'), 'export const a = 1\n')
     const { template, lane, step } = row(db)
     await run(db, home, researched(lines))
     expect(plan7(db)).toMatchObject({ template, lane, step, state: 'blocked_on_ceo', held_by: 'coo' })

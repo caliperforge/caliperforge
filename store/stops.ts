@@ -48,8 +48,9 @@ export function openJobs(db: Db, plan: number): { id: number; state: string; ste
     { id: number; state: string; step: number; lane: string | null; origin: string | null }[]
 }
 
-export function waking(db: Db, wake: readonly string[]): PlanRow[] {
+export function waking(db: Db, wake: readonly string[], now: Date): PlanRow[] {
   return db.prepare(`SELECT * FROM plans WHERE ((wait_reason IN (${wake.map(() => '?').join(', ')})
-    AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo') AND held_by IS NOT 'ceo' ORDER BY id`)
-    .all(...wake).map((r) => PlanRow.parse(r))
+    AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo') AND held_by IS NOT 'ceo'
+    AND (held_until IS NULL OR held_until <= ?) ORDER BY id`)
+    .all(...wake, now.toISOString()).map((r) => PlanRow.parse(r))
 }

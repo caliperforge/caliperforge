@@ -1736,6 +1736,10 @@ const UNWOKEN = [
     db.exec("UPDATE plans SET held_by = 'ceo' WHERE id = 7")
   } },
   { leased: 0, set: (db: Db, home: string) => { blocked(db, home); put(home, 7, 'parked.md', '# Held\n') } },
+  { leased: 0, set: (db: Db, home: string) => {
+    blocked(db, home)
+    db.exec("UPDATE plans SET held_until = '2026-09-25T00:00:00.000Z' WHERE id = 7")
+  } },
   { leased: 1, set: (db: Db, home: string) => {
     blocked(db, home)
     take(db, 7, wokeAt, process.ppid)

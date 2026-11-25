@@ -17,7 +17,6 @@ import { busy, current, idle } from '../store/now.ts'
 import { builderRan, end, held, inWindow, needsCeo, originRef, pipeOf, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear, sentOnce } from '../store/refusals.ts'
 import { kin, runs, stopped, waitable, waking, type Stop } from '../store/stops.ts'
-import { heldAhead } from '../store/until.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { waive } from './design.ts'
@@ -389,10 +388,10 @@ type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
   released(db, root, now, post, wire.merged)
   const throttled = cap(db).cap === 0
-  for (const plan of waking(db, WAKE)) {
+  for (const plan of waking(db, WAKE, now)) {
     const head = headOf(root, plan)
     const again = plan.priority <= 1 && inWindow(pipeOf(db, plan.pipe_id), hhmm(db, now))
-      && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString()) && !heldAhead(db, plan.id, now)
+      && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString())
     const parked = isHeld(root, plan.id)
     if (parked && !(again && ownPark(db, root, plan.id))) continue
     if (circling(db, plan.id)) continue

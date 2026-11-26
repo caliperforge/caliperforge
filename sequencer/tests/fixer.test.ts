@@ -523,7 +523,7 @@ test('D1 research: the fixer adds the missing ask lines', async () => {
   expect(existsSync(join(home, '.cf/work/7/src'))).toBe(false)
 })
 
-const EDIT ='export const edited = true'
+const EDIT = 'export const edited = true'
 
 
 function branched() {

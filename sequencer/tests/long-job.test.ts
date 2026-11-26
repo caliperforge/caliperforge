@@ -5,10 +5,12 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf } from '../../store/events.ts'
 import { set } from '../../store/lanes.ts'
-import { dropPlan, putPlan } from '../../store/plans.ts'
+import { dropPlan, end, putPlan } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
+import { unhold } from '../hold.ts'
 import { tick } from '../index.ts'
 import { route } from '../next.ts'
+import { rule } from '../rule.ts'
 import { get, headSha, maybe, put, srcDir } from '../workspace.ts'
 import { plan, stub, world, type World } from './world.ts'
 
@@ -110,6 +112,48 @@ test('a cite of the job with a quote not in its log is refused', async () => {
   await tick(w.db, w.root, seats)
   await tick(w.db, w.root, seats)
   expect(refusalRows(w.db, 1)[0]).toMatchObject({ step: 2, span: 'research.run_missing' })
+})
+
+/** The job exits and its answer passes check, then a director ruling names `~/cf_work/ruled/` and the plan returns to gather. */
+const ruled = async (prompts: string[], replies: string[]): Promise<World> => {
+  const out = join(home(), 'cf_work/job')
+  const w = researching()
+  const seats = answering(replies, prompts)
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  replies.push(cited(headSha(srcDir(w.root, 1)), 'measured'))
+  await vi.waitFor(() => { expect(existsSync(join(out, 'job.exit'))).toBe(true) })
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  expect(eventsOf(w.db, 1, 'check')).toMatchObject([{ outcome: 'pass' }])
+  end(w.db, 1, 'halted', 'ruled')
+  rule(w.db, w.root, plan(w.db, 1), 'director', '**Output:** ~/cf_work/ruled/')
+  unhold(w.db, w.root, 1, 'director', 1)
+  return w
+}
+
+test('a ruling after the job exits starts a new job', async () => {
+  const prompts: string[] = []
+  const replies = [JOB]
+  const w = await ruled(prompts, replies)
+  replies.push(JOB)
+  await tick(w.db, w.root, answering(replies, prompts))
+  expect(prompts).toHaveLength(3)
+  expect(prompts[2]).not.toContain('\n\n# Long job\n\n')
+  expect(eventsOf(w.db, 1, 'long_job').map((e) => e.actor)).toEqual(['started', 'exited', 'started'])
+  expect(JSON.parse(get(w.root, 1, 'job.json'))).toMatchObject({ out: join(process.env.HOME ?? '', 'cf_work/ruled') })
+})
+
+test('a cite of the old job after a ruling is refused', async () => {
+  const prompts: string[] = []
+  const replies = [JOB]
+  const w = await ruled(prompts, replies)
+  replies.push(replies[1] ?? '')
+  const seats = answering(replies, prompts)
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  expect(JSON.parse(get(w.root, 1, 'runs.json'))).toEqual([])
+  expect(refusalRows(w.db, 1)[0]).toMatchObject({ span: 'research.run_missing' })
 })
 
 test('a job past research.long_job_seconds halts its plan', async () => {

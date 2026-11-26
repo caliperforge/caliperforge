@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { digestOf } from '../store/approvals.ts'
 import { eventsOf, logged, ofKind } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { count } from '../store/lanes.ts'
@@ -9,7 +10,7 @@ import { end, type PlanRow, terminal } from '../store/plans.ts'
 import { work } from '../templates/research.ts'
 import type { Ran } from '../templates/verified.ts'
 import type { Outcome } from './kind.ts'
-import { get, put, srcDir } from './workspace.ts'
+import { get, maybe, put, srcDir } from './workspace.ts'
 
 const KIND = 'long_job'
 
@@ -19,9 +20,20 @@ export const RUN = /^\*\*Run:\*\*(.*)$/m
 
 const OUTPUT = /^\*\*Output:\*\*(.*)$/m
 
-interface Job { command: string; out: string; pid: number; at: string }
+interface Job { command: string; out: string; pid: number; at: string; ask?: string }
 
 const jobOf = (root: string, plan: number): Job => JSON.parse(get(root, plan, 'job.json')) as Job
+
+const askDigest = (root: string, plan: number): string =>
+  digestOf(['ask.md', 'issue.md'].map((name) => maybe(root, plan, name) ?? '').join('\n'))
+
+/** The exited job and its exit code, while the ask is the one it was started under. */
+function current(db: Db, root: string, plan: number): (Job & { code: string }) | null {
+  const newest = eventsOf(db, plan, KIND).at(-1)
+  if (newest?.actor !== 'exited') return null
+  const job = jobOf(root, plan)
+  return job.ask === askDigest(root, plan) ? { ...job, code: newest.message.slice('exit '.length) } : null
+}
 
 /** The plan's job has exited, or its process group is alive and inside `research.long_job_seconds`. */
 export function awaited(db: Db, root: string, plan: number, now: Date): boolean {
@@ -49,7 +61,7 @@ function detach(db: Db, root: string, plan: PlanRow, command: string, out: strin
     { cwd: srcDir(root, plan.id), detached: true, stdio: ['ignore', fd, fd] })
   child.unref()
   closeSync(fd)
-  put(root, plan.id, 'job.json', JSON.stringify({ command, out, pid: child.pid, at: new Date().toISOString() }))
+  put(root, plan.id, 'job.json', JSON.stringify({ command, out, pid: child.pid, at: new Date().toISOString(), ask: askDigest(root, plan.id) }))
   logged(db, { plan: plan.id, kind: KIND, actor: 'started', outcome: 'pass', message: command, pointer: log, run: null })
 }
 
@@ -57,19 +69,17 @@ export const running = (db: Db, plan: PlanRow): boolean => eventsOf(db, plan.id,
 
 /** The `# Long job` section gather's input gains once the job has exited. */
 export function exited(db: Db, root: string, plan: PlanRow): string | null {
-  const newest = eventsOf(db, plan.id, KIND).at(-1)
-  if (newest?.actor !== 'exited') return null
-  const { command, out } = jobOf(root, plan.id)
-  const log = join(out, 'job.log')
+  const job = current(db, root, plan.id)
+  if (job === null) return null
+  const log = join(job.out, 'job.log')
   const tail = readFileSync(log, 'utf8').trimEnd().split('\n').slice(-TAIL).join('\n')
-  return `\n\n# Long job\n\n\`${command}\` exited ${newest.message.slice('exit '.length)}; its log, ${log}, ends:\n\n${tail}`
+  return `\n\n# Long job\n\n\`${job.command}\` exited ${job.code}; its log, ${log}, ends:\n\n${tail}`
 }
 
 /** The exited job as a run an answer may cite, its output the whole of `job.log`. */
 export function jobRun(db: Db, root: string, plan: PlanRow): Ran[] {
-  if (eventsOf(db, plan.id, KIND).at(-1)?.actor !== 'exited') return []
-  const { command, out } = jobOf(root, plan.id)
-  return [{ command, output: readFileSync(join(out, 'job.log'), 'utf8') }]
+  const job = current(db, root, plan.id)
+  return job === null ? [] : [{ command: job.command, output: readFileSync(join(job.out, 'job.log'), 'utf8') }]
 }
 
 export function longJobs(db: Db, root: string, now: Date): void {

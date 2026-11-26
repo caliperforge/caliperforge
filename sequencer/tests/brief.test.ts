@@ -1189,6 +1189,23 @@ test('a Files row naming several paths lists each once', () => {
   ])
 })
 
+test('a path quoted before its own (new) row is new', () => {
+  const brief = ['# t', '', '## Files', '', '- `package.json:11` (adds `test/solana-skill.test.ts` to the `test` script)',
+    '- `test/solana-skill.test.ts` (new)', '', '## Out of scope', ''].join('\n')
+  expect(files(brief)).toEqual([{ path: 'package.json', is_new: false }, { path: 'test/solana-skill.test.ts', is_new: true }])
+})
+
+test('a (new) marks the path before it, not the lead', () => {
+  expect(files(plus('- `package.json:11` adds `test/x.test.ts` (new) to the script')))
+    .toEqual([{ path: 'package.json', is_new: false }, { path: 'test/x.test.ts', is_new: true }])
+})
+
+test('a path listed twice is new if either row marks it', () => {
+  for (const rows of [['- `a/b.ts` (new)', '- `a/b.ts`'], ['- `a/b.ts`', '- `a/b.ts` (new)']]) {
+    expect(files(['# t', '', '## Files', '', ...rows, '', '## Out of scope', ''].join('\n'))).toEqual([{ path: 'a/b.ts', is_new: true }])
+  }
+})
+
 test('references: Must not break lines outside the changed files', () => {
   const brief = ['# t', '', '## Must not break', '', '- empty RPC URL is unset (`python/src/solana_pay_kit/config.py:12`)',
     '- booleans stay `true`/`false` (`ruby/lib/pay_kit/config.rb:40`)', '', '## Files', '', '- `ruby/lib/pay_kit/config.rb:259`', ''].join('\n')

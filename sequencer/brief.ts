@@ -389,14 +389,15 @@ const TICKED = /`(?!\.\.?\/)([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(
  * so a path the reader drops is a file the builder cannot write.
  */
 export function files(brief: string): PlanFile[] {
-  const seen = new Set<string>()
-  const first = (path: string): boolean => !seen.has(path) && Boolean(seen.add(path))
-  return section(brief, '## Files').split('\n').flatMap((line): PlanFile[] => {
-    const lead = PATH.exec(line)?.[1]
-    const ticked = /^\s*[-*]/.test(line) ? [...line.matchAll(TICKED)].map((m) => String(m[1])) : []
-    return [...(lead === undefined ? [] : [lead]), ...ticked].filter(first)
-      .map((path) => ({ path, is_new: line.includes('(new)') }))
-  })
+  const found = new Map<string, boolean>()
+  for (const line of section(brief, '## Files').split('\n')) {
+    const lead = PATH.exec(line)
+    const named = [...(lead === null ? [] : [lead]), ...(/^\s*[-*]/.test(line) ? line.matchAll(TICKED) : [])]
+      .map((m) => ({ path: String(m[1]), end: m.index + m[0].length })).sort((a, b) => a.end - b.end)
+    const marked = [...line.matchAll(/\(new\)/g)].map((n) => named.filter((p) => p.end <= n.index).at(-1)?.path)
+    for (const { path } of named) found.set(path, found.get(path) === true || marked.includes(path))
+  }
+  return [...found].map(([path, is_new]) => ({ path, is_new }))
 }
 
 /**

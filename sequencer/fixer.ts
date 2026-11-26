@@ -23,7 +23,7 @@ import { lapsed } from '../store/until.ts'
 import { files as fileList } from './brief.ts'
 import { closed } from './closed.ts'
 import { coder, repaired } from './coder.ts'
-import { hold, unhold } from './hold.ts'
+import { hold, restart, unhold } from './hold.ts'
 import { CUT, moved } from './moved.ts'
 import { output } from './output.ts'
 import { barred, filed, returned } from './park.ts'
@@ -230,7 +230,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
   const to = f.answer === undefined ? undefined : rule(db, root, plan, 'fixer', f.answer)
   if (to === null) return 'escalated'
   switch (to === 'issue.md' && f.then === 'return' ? 'retry' : f.then) {
-    case 'return': returned(root, plan.id); afresh(root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
+    case 'return': returned(root, plan.id); restart(db, root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
     case 'retry': {
       returned(root, plan.id)
       const step = db.transaction(() => { clear(db, plan.id); return retry(db, plan) })()

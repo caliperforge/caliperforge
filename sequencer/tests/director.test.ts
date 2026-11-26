@@ -766,7 +766,25 @@ async function returnedAgain() {
   expect(ofKind(db, 'return')).toHaveLength(2)
 }
 
+async function restarted() {
+  const { db, home } = seeded('1')
+  db.exec(`${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`)
+  writeFileSync(join(srcDir(home, 7), 'old.ts'), 'export {}\n')
+  put(home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
+  put(home, 7, 'base.merged', `${'b'.repeat(40)}\n`)
+  await run(db, home, RETURN)
+  expect(existsSync(join(planDir(home, 7), 'src'))).toBe(false)
+  expect([maybe(home, 7, 'base.sha'), maybe(home, 7, 'base.merged')]).toEqual([null, null])
+  expect(maybe(home, 7, 'refusal.prev.md')).toBe('step 3 rails refused\n')
+  expect(row(db)).toMatchObject({ state: 'queued', step: 1 })
+  const built = seeded('1')
+  put(built.home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
+  await run(built.db, built.home, RETURN)
+  expect(maybe(built.home, 7, 'base.sha')).toBe(`${'a'.repeat(40)}\n`)
+}
+
 describe('return', () => {
+  test('a return at step 1 drops a stale checkout', restarted)
   test('a return sends the job back to its lane, in shadow not', returned)
   test('a spent Greptile quota returns a step 6 stop to ready', quota)
   test('a second return on the same stop is fenced', refenced)

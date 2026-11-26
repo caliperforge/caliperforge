@@ -519,9 +519,11 @@ test('D1 research: the fixer adds the missing ask lines', async () => {
   expect(applied(db)).toEqual([{ applied: 'applied' }])
   expect(maybe(home, 7, 'refusal.prev.md')).toContain('**Measure:**')
   expect(maybe(home, 7, 'refusal.md')).toBeNull()
+  expect(maybe(home, 7, 'base.sha')).toBeNull()
+  expect(existsSync(join(home, '.cf/work/7/src'))).toBe(false)
 })
 
-const EDIT = 'export const edited = true'
+const EDIT ='export const edited = true'
 
 
 function branched() {

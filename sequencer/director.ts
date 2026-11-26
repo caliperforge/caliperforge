@@ -20,7 +20,7 @@ import { kin, runs, stopped, waitable, waking, type Stop } from '../store/stops.
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { waive } from './design.ts'
-import { hold, isHeld, unhold } from './hold.ts'
+import { hold, isHeld, restart, unhold } from './hold.ts'
 import { found } from './findings.ts'
 import { attempted, fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
@@ -348,7 +348,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
         /^(?:step )?(\d+)$/.exec(m['resume at'] ?? '')?.slice(1).map(Number)[0])
     case 'return': returned(root, plan.id)
       opened(db, root, plan.id)
-      afresh(root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))
+      restart(db, root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))
       return true
     case 'widen':
       return widen(db, root, plan, m.why)

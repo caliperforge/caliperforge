@@ -68,6 +68,10 @@ export function unhold(db: Db, root: string, plan: number, actor: string, to?: n
   clearWaitsOn(db, plan)
   for (const key of COUNTS) drop(root, plan, key)
   drop(root, plan, NOTE)
+  return restart(db, root, plan, step)
+}
+
+export function restart(db: Db, root: string, plan: number, step: number): number {
   if (step <= 1 && planById(db, plan).template !== 'bench') fresh(root, plan)
   afresh(root, plan, step)
   return step

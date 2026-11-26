@@ -6,7 +6,7 @@ import type { Read } from '../../cli/gh.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
-import { get, set } from '../../store/lanes.ts'
+import { get, LANE, set } from '../../store/lanes.ts'
 import { returnToLane } from '../../store/holds.ts'
 import { dropPlan, end, held, planRows, putPlan } from '../../store/plans.ts'
 import { fingerprint, refusalsOf, refused, WHY } from '../../store/refusals.ts'
@@ -32,11 +32,12 @@ const FOUND = source('    quote: The cap is 3.\n')
 
 const REFUSE = 'The answer goes past its quote.\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - answer.md:1\n---\n'
 
-const researching = (ask = ASK, target_id: number | null = 1): World => {
+const researching = (ask = ASK, target_id: number | null = 1, origin: string | null = null): World => {
   const w = world()
   const { queued_at } = plan(w.db, 1)
   dropPlan(w.db, 1)
-  putPlan(w.db, { id: 1, pipe_id: 1, target_id, template: 'research', state: 'queued', queued_at, step: 0, retries: 0 })
+  putPlan(w.db, { id: 1, pipe_id: 1, target_id, template: 'research', state: 'queued', queued_at, step: 0, retries: 0,
+    ...(origin === null ? {} : { origin, lane: 'research', seat: LANE.research.seat }) })
   put(w.root, 1, 'ask.md', ask)
   set(w.db, 'science.dir', mkdtempSync(join(tmpdir(), 'cf-science-')), 'ceo', '2026-10-05')
   return w
@@ -1011,42 +1012,46 @@ test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
   expect(ran(w)).toEqual(['measurer'])
 })
 
-const UNBUILT = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
+const UNBUILT = 'research → machine: the measurer needs a build'
 
-test('needs_build D1: a measurer needs_build asks a person', async () => {
-  const w = researching(MEASURE)
+test('needs_build D1: a measurer needs_build moves to build', async () => {
+  const w = researching(MEASURE, 1, ORIGIN)
   headed(w)
   question(w.root, plan(w.db, 1))
   expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_BUILD, () => undefined)))
-    .toEqual({ outcome: 'needs_ceo', spans: ['ask.md'], note: UNBUILT })
-  expect(maybe(w.root, 1, 'question.md')).toBe(UNBUILT)
+    .toEqual({ outcome: 'pass', spans: [], note: 'measurer: the measurer needs a build: sent to the machine lane', rewind: 0 })
+  expect(plan(w.db, 1)).toMatchObject({ template: 'pr_path', lane: 'machine', step: 0, state: 'queued' })
+  expect(eventsOf(w.db, 1, 'return')).toMatchObject([{ actor: 'tick', message: UNBUILT }])
+  expect(maybe(w.root, 1, 'question.md')).toBeNull()
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
   expect(maybe(w.root, 1, 'sources.json')).toBeNull()
   expect(maybe(w.root, 1, 'runs.json')).toBeNull()
 })
 
-test('needs_build D1: a handed measurer needs_build asks a person', async () => {
-  const w = researching()
+test('needs_build D1: a handed measurer needs_build moves to build', async () => {
+  const w = researching(ASK, 1, ORIGIN)
   headed(w)
   question(w.root, plan(w.db, 1))
   expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_BUILD, () => undefined, TRANSCRIPT, NEEDS_RUN)))
-    .toEqual({ outcome: 'needs_ceo', spans: ['ask.md'], note: UNBUILT })
-  expect(maybe(w.root, 1, 'question.md')).toBe(UNBUILT)
+    .toMatchObject({ outcome: 'pass', rewind: 0 })
+  expect(plan(w.db, 1)).toMatchObject({ template: 'pr_path', lane: 'machine', step: 0 })
+  expect(eventsOf(w.db, 1, 'return')).toMatchObject([{ message: UNBUILT }])
   expect(ran(w)).toEqual(['researcher', 'measurer'])
 })
 
-test('needs_build D2: a ticked needs_build blocks with no refusal', async () => {
-  const w = researching(MEASURE)
+test('needs_build D2: a ticked needs_build builds with no refusal', async () => {
+  const w = researching(MEASURE, 1, ORIGIN)
   headed(w)
   for (let n = 0; n < 4 && eventsOf(w.db, 1, 'gather').length === 0; n += 1) await tick(w.db, w.root, measuring(NEEDS_BUILD, () => undefined))
-  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 1 })
-  expect(eventsOf(w.db, 1, 'gather')).toMatchObject([{ outcome: 'escalate', message: UNBUILT }])
+  expect(plan(w.db, 1)).toMatchObject({ template: 'pr_path', step: 0 })
+  expect(plan(w.db, 1).state).not.toBe('blocked_on_ceo')
+  expect(maybe(w.root, 1, 'question.md')).toBeNull()
   expect(refusalsOf(w.db, 1)).toBe(0)
   expect(ran(w).filter((seat) => seat === 'measurer')).toHaveLength(1)
 })
 
 test('a re-laned measure job spends nothing until its wait lands', async () => {
-  const w = researching(MEASURE)
+  const w = researching(MEASURE, 1, ORIGIN)
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: 1, template: 'research', state: 'blocked_on_ceo', queued_at: plan(w.db, 1).queued_at, step: 0, retries: 0 })
   held(w.db, 2, 'ceo', 'a person answers')
   hold(w.db, w.root, 1, 'waits on plan 2', new Date(), 2)
@@ -1062,6 +1067,7 @@ test('a re-laned measure job spends nothing until its wait lands', async () => {
   for (let n = 0; n < 4 && eventsOf(w.db, 1, 'gather').length === 0; n += 1) await tick(w.db, w.root, provider)
   await tick(w.db, w.root, provider)
   expect(ran(w).filter((seat) => seat === 'measurer')).toHaveLength(1)
+  expect(planRows(w.db)[0]).toMatchObject({ template: 'pr_path', step: 0 })
 })
 
 test('needs_build D2: a researcher needs_build refuses its fence', async () => {

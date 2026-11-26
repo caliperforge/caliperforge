@@ -1,8 +1,9 @@
-import { logged } from '../store/events.ts'
+import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { lanePipe } from '../store/origins.ts'
+import { partOf } from '../store/parts.ts'
 import { builderRan, internal, pipeNamed, planById, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { researchParts, toBuild, toResearch } from '../store/reroute.ts'
@@ -16,6 +17,7 @@ import { diffOf, maybe, move, put } from './workspace.ts'
 
 const OUTPUT = '**Output:**'
 export const MEASURE = '**Measure:**'
+export const UNBUILT = 'the measurer needs a build'
 
 // A part's own lines end at its first blank line; the parent's ask and comments follow, and may carry their own `**Measure:**`.
 export const own = (body: string): boolean => (body.split('\n\n')[0] ?? '').includes(`\n${MEASURE}`)
@@ -28,6 +30,7 @@ function asked(text: string): boolean {
 function researchable(db: Db, root: string, plan: PlanRow, text: string): boolean {
   return plan.template === 'pr_path' && internal(plan) && plan.target_id === null
     && (!builderRan(db, plan.id) || diffOf(root, plan.id).trim() === '') && asked(text)
+    && !eventsOf(db, plan.id, 'return').some((e) => e.actor === 'tick' && e.message.endsWith(UNBUILT))
 }
 
 export function moved(db: Db, root: string, id: number): void {
@@ -53,19 +56,23 @@ function machine(db: Db, parent: PlanRow): PlanRow {
   return { ...parent, template: LANE.machine.template, pipe_id: pipe.id, lane: 'machine', seat: LANE.machine.seat }
 }
 
+export function built(db: Db, root: string, id: number, why: string): string {
+  const source = planById(db, partOf(db, id)?.parent ?? id)
+  const lane = db.transaction((): string => {
+    const to = source.template === 'research' ? machine(db, source) : source
+    const name = to.lane ?? 'machine'
+    toBuild(db, id, to, name, to.seat ?? LANE.machine.seat)
+    clear(db, id)
+    logged(db, { plan: id, kind: 'return', actor: 'tick', outcome: 'pass', message: `research → ${name}: ${why}`, pointer: null, run: null })
+    return name
+  })()
+  aside(root, id)
+  return lane
+}
+
 export function misrouted(db: Db, root: string, now: Date): void {
   const stray = researchParts(db).filter((r) => !own(r.body) && !measured(maybe(root, r.plan, 'ask.md') ?? '') && holder(db, r.plan, now) === null)
-  for (const row of stray) {
-    const parent = planById(db, row.parent)
-    db.transaction(() => {
-      const to = parent.template === 'research' ? machine(db, parent) : parent
-      const lane = to.lane ?? 'machine'
-      toBuild(db, row.plan, to, lane, to.seat ?? LANE.machine.seat)
-      clear(db, row.plan)
-      logged(db, { plan: row.plan, kind: 'return', actor: 'tick', outcome: 'pass', message: `research → ${lane}: its own lines carry no ${MEASURE}`, pointer: null, run: null })
-    })()
-    aside(root, row.plan)
-  }
+  for (const row of stray) built(db, root, row.plan, `its own lines carry no ${MEASURE}`)
 }
 
 /** An unbuilt pr_path plan of ours goes to the research lane at step 0, its ask carrying the research lines. */

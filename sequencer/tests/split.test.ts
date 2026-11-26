@@ -7,7 +7,7 @@ import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { inputs } from '../output.ts'
-import { misrouted, moved, rerouted } from '../reroute.ts'
+import { built, misrouted, moved, rerouted, UNBUILT } from '../reroute.ts'
 import { holdOf } from '../../store/holds.ts'
 import { upsertRule } from '../../store/index.ts'
 import { take } from '../../store/leases.ts'
@@ -758,6 +758,17 @@ test('a research part of a research parent goes to machine', () => {
     seat: LANE.machine.seat, state: 'queued', step: 0 })
   expect(ofKind(w.db, 'return').map((e) => [e.plan, e.message])).toEqual([[a, 'research → machine: its own lines carry no **Measure:**']])
   expect(plan(w.db, b)).toMatchObject({ template: 'research', lane: 'research' })
+})
+
+test('a part the measurer sent to build stays on build', () => {
+  const { w, a } = forced()
+  const parent = plan(w.db, ID)
+  const lane = parent.lane ?? 'machine'
+  expect(built(w.db, w.root, a, UNBUILT)).toBe(lane)
+  expect(plan(w.db, a)).toMatchObject({ template: parent.template, pipe_id: parent.pipe_id, lane, state: 'queued', step: 0 })
+  expect(ofKind(w.db, 'return').map((e) => [e.plan, e.message])).toEqual([[a, `research → ${lane}: the measurer needs a build`]])
+  expect(rerouted(w.db, w.root, plan(w.db, a), '**Measure:** runs a day, by cf measure')).toBe(false)
+  expect(plan(w.db, a)).toMatchObject({ template: parent.template, lane })
 })
 
 test.each([

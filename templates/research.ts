@@ -12,6 +12,7 @@ import type { Outcome } from '../sequencer/kind.ts'
 import { exited, jobRun, launched, RUN } from '../sequencer/long-job.ts'
 import { prose } from '../sequencer/prose.ts'
 import { WIRE, type Wire } from '../sequencer/push.ts'
+import { built, UNBUILT } from '../sequencer/reroute.ts'
 import { ran } from '../sequencer/seat.ts'
 import { get, headSha, maybe, planDir, put, srcDir, titleOf } from '../sequencer/workspace.ts'
 import { logged, runLogged } from '../store/events.ts'
@@ -220,9 +221,8 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const needs = NEEDS.exec(fired.text)?.[1]
   if ((runs === null && needs === 'needs_run') || (runs === 'measurer' && out !== undefined && needs === 'needs_build')) return gathering(db, root, plan, step, provider, read, true, runs !== null)
   if (runs !== null && needs === 'needs_build') {
-    const note = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
-    put(root, plan.id, 'question.md', note)
-    return { outcome: 'needs_ceo', spans: ['ask.md'], note }
+    const lane = built(db, root, plan.id, UNBUILT)
+    return { outcome: 'pass', spans: [], note: `${seat.runs}: ${UNBUILT}: sent to the ${lane} lane`, rewind: 0 }
   }
   const fromDraft = !FENCE.test(fired.text) && existsSync(draft)
   const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text

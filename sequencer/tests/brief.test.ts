@@ -7,7 +7,7 @@ import { MAP } from '../../cli/map.ts'
 import { row } from '../../precedents/lookup.ts'
 import { distilled, keep, type Precedent, type Source } from '../../precedents/store.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import { ofKind, runRows } from '../../store/events.ts'
+import { logged, ofKind, runRows } from '../../store/events.ts'
 import { recorded } from '../../store/files.ts'
 import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
@@ -19,6 +19,7 @@ import { counted } from '../verbatim.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
+import { UNBUILT } from '../reroute.ts'
 import { WHOLE } from '../handout.ts'
 import { afresh, drop, maybe, move, put, SELF, srcDir, titleOf } from '../workspace.ts'
 import { git, HANDOUT } from './bases.ts'
@@ -804,6 +805,17 @@ test('a standing 0-line brief on a research ask goes to research', async () => {
   expect(holdOf(w.db, ID)).toEqual({ held_by: null, held_why: null })
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
   expect(maybe(w.root, ID, 'issue.prev.md')).toBe(standing)
+})
+
+test('a standing 0-line brief the measurer sent to build stays', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  logged(w.db, { plan: ID, kind: 'return', actor: 'tick', outcome: 'pass', message: `research → machine: ${UNBUILT}`, pointer: null, run: null })
+  put(w.root, ID, 'ask.md', `${askOf(w)}\n${RESEARCH}`)
+  put(w.root, ID, 'issue.md', estimated(plain(w), 0))
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
+  expect(plan(w.db, ID)).toMatchObject({ template: 'pr_path', lane: 'machine' })
 })
 
 test('a Measure line only under Parent ticket stays on pr_path', async () => {

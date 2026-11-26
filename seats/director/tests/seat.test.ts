@@ -96,6 +96,7 @@ test('D5: research names Suite and Output goes to the fetcher', () => {
   expect(prompt).toContain('Add `**Suite:** <plan id>` when the measurer needs')
   expect(prompt).toContain('Add `**Measure:**` when the job measures and `**Output:** ~/cf_work/<id>/` when it fetches: '
     + 'with no Measure line, the Output line sends it to the fetcher.')
+  expect(prompt).toContain('and no builder run yet, or one whose run changed no file; never a job the measurer sent back for a build.')
 })
 
 test('a fold ruling with an open pr names the fork head', () => {

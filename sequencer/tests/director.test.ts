@@ -1422,28 +1422,56 @@ async function measured() {
   expect(runRows(db).at(-1)?.seat).toBe('measurer')
 }
 
+async function emptyBuild() {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 1 WHERE id = 7')
+  srcDir(home, 7)
+  await run(db, home, researched(LINES))
+  expect(plan7(db)).toMatchObject({ template: 'research', lane: 'research', step: 0, waits_on: null })
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'research: the ask only measures' }])
+}
+
+const SENT_BACK = (db: Db) => logged(db, { plan: 7, kind: 'return', actor: 'tick', outcome: 'pass',
+  message: 'research → machine: the measurer needs a build', pointer: null, run: null })
+
+const FENCED = [
+  { seed: (db: Db, home: string) => { db.exec('UPDATE plans SET step = 1 WHERE id = 7'); writeFileSync(join(srcDir(home, 7), 'a.ts'), 'export const a = 1\n') },
+    why: 'its builder already changed files' },
+  { seed: (db: Db) => db.exec(`${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`), why: 'it is not a pr_path job of ours' },
+  { seed: (db: Db) => db.exec(`${UNBUILT}; ${TARGETED}`), why: 'it is not a pr_path job of ours' },
+  { seed: (db: Db) => { db.exec(UNBUILT); SENT_BACK(db) }, why: 'the measurer sent it back for a build' },
+]
+
 const UNRESEARCHED = [
-  { sql: 'UPDATE plans SET step = 1 WHERE id = 7', lines: LINES, built: true },
-  { sql: `${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`, lines: LINES },
-  { sql: UNBUILT, lines: FETCHED.replace(/\n\*\*Output:\*\*.*$/, '') },
-  ...['~/cf_work', '~/cf_work/../x', '/tmp/x'].map((out) => ({ sql: UNBUILT, lines: LINES.replace('~/cf_work/7/', out) })),
-  { sql: UNBUILT, lines: FETCHED.replace('~/cf_work/7/', '/tmp/x'), ask: 'the ask\n**Output:** ~/cf_work/7/\n' },
-  { sql: UNBUILT, lines: LINES.replace(/^\*\*Done when:\*\*.*\n/m, '') },
-  { sql: `${UNBUILT}; ${TARGETED}`, lines: LINES },
+  { lines: FETCHED.replace(/\n\*\*Output:\*\*.*$/, '') },
+  ...['~/cf_work', '~/cf_work/../x', '/tmp/x'].map((out) => ({ lines: LINES.replace('~/cf_work/7/', out) })),
+  { lines: FETCHED.replace('~/cf_work/7/', '/tmp/x'), ask: 'the ask\n**Output:** ~/cf_work/7/\n' },
+  { lines: LINES.replace(/^\*\*Done when:\*\*.*\n/m, '') },
 ]
 
 async function unresearched() {
   expect(read('---\nmove: research\nwhy: the ask only measures\n---\n')).toBeNull()
-  for (const { sql, lines, ask = 'the ask\n', built = false } of UNRESEARCHED) {
+  for (const { seed, why } of FENCED) {
     const { db, home } = seeded('1')
-    db.exec(sql)
+    seed(db, home)
+    const { template, lane, step } = row(db)
+    const prompts: string[] = []
+    await cooLite(db, home, row(db), inTurn([researched(LINES), researched(LINES)], prompts), now, () => undefined, wire())
+    expect(prompts.slice(0, 2).map((p) => p.includes(`# Fence\n\nresearch is refused: ${why}. Choose another move.`))).toEqual([false, true])
+    expect(told(db).map((t) => t.message)).toEqual([`research: refused by the fence, ${why}`])
+    expect(plan7(db)).toMatchObject({ template, lane, step })
+    expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
+  }
+  for (const { lines, ask = 'the ask\n' } of UNRESEARCHED) {
+    const { db, home } = seeded('1')
+    db.exec(UNBUILT)
     put(home, 7, 'ask.md', ask)
-    if (built) writeFileSync(join(srcDir(home, 7), 'a.ts'), 'export const a = 1\n')
     const { template, lane, step } = row(db)
     await run(db, home, researched(lines))
     expect(plan7(db)).toMatchObject({ template, lane, step, state: 'blocked_on_ceo', held_by: 'coo' })
     expect(maybe(home, 7, 'ask.md')).toBe(ask)
-    expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^research did not apply, /)])
+    expect(told(db).map((t) => t.message)).toEqual([
+      'research did not apply, its answer lacks a research line, or names a path a ruling may not carry: the ask only measures'])
   }
 }
 
@@ -1456,6 +1484,7 @@ describe('research', () => {
   test('research moves plan 2339\'s answer over its parent ticket', () =>
     researching('https://github.com/caliperforge/neo-watch/issues/6', ANSWER_2339, ASK_2339))
   test('a research answer with no Output fires the measurer', measured)
+  test('research moves a plan whose builder changed no file', emptyBuild)
   test('research on a job it cannot take is held by the coo', LONG, unresearched)
 })
 

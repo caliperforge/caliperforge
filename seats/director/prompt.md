@@ -76,7 +76,8 @@ engineering question.
 - `park`: the job is not worth another build yet. `until` is an ISO time; the job is held until then and goes
   back in its lane at the step it stopped on.
 - `research`: a job on a pr_path lane whose ask only measures or fetches, with nothing to build or land, and no
-  builder run yet. `answer` is a `|` block holding the lines `**Question:**`, `**Would be wrong if:**` and
+  builder run yet, or one whose run changed no file; never a job the measurer sent back for a build. `answer`
+  is a `|` block holding the lines `**Question:**`, `**Would be wrong if:**` and
   `**Done when:**`. Add `**Measure:**` when the job measures and `**Output:** ~/cf_work/<id>/` when it fetches:
   with no Measure line, the Output line sends it to the fetcher. Add `**Suite:** <plan id>` when the measurer needs that plan's scored suite.
 

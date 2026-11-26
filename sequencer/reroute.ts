@@ -27,10 +27,14 @@ function asked(text: string): boolean {
   return unasked(text).length === 0 && (out === undefined ? measured(text) : work(out) !== null)
 }
 
+export function unresearchable(db: Db, root: string, plan: PlanRow): string | null {
+  if (plan.template !== 'pr_path' || !internal(plan) || plan.target_id !== null) return 'it is not a pr_path job of ours'
+  if (builderRan(db, plan.id) && diffOf(root, plan.id).trim() !== '') return 'its builder already changed files'
+  return eventsOf(db, plan.id, 'return').some((e) => e.actor === 'tick' && e.message.endsWith(UNBUILT)) ? 'the measurer sent it back for a build' : null
+}
+
 function researchable(db: Db, root: string, plan: PlanRow, text: string): boolean {
-  return plan.template === 'pr_path' && internal(plan) && plan.target_id === null
-    && (!builderRan(db, plan.id) || diffOf(root, plan.id).trim() === '') && asked(text)
-    && !eventsOf(db, plan.id, 'return').some((e) => e.actor === 'tick' && e.message.endsWith(UNBUILT))
+  return unresearchable(db, root, plan) === null && asked(text)
 }
 
 export function moved(db: Db, root: string, id: number): void {

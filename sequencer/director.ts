@@ -30,7 +30,7 @@ import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
 import { redundant } from './redundant.ts'
 import { rewait } from './rehold.ts'
-import { rerouted } from './reroute.ts'
+import { rerouted, unresearchable } from './reroute.ts'
 import { accepted, edits, excusing, fenced, opened, owned, rule, stray } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
@@ -83,10 +83,10 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   const n = failures(db, root, plan)
   const only = plan.state !== 'blocked_on_ceo' && plan.state !== 'halted' ? FULL : capStop(db, plan.id) ? CAPPED : null
   const bar = barred(db, root, plan.id)
-  const first = refused(m, said, n, root, plan.id, only, bar)
+  const first = refused(m, said, n, root, plan.id, only, bar, () => unresearchable(db, root, plan))
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
-    const again = refused(m, said, n, root, plan.id, only, bar)
+    const again = refused(m, said, n, root, plan.id, only, bar, () => unresearchable(db, root, plan))
     if (again !== null) return only !== FULL && m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && attempted(db, plan.id, apply, db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : only !== null ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
@@ -132,13 +132,15 @@ function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): stri
 }
 
 function refused(m: Move | null, said: string, n: number, root: string, plan: number, only: Only | null,
-  bar: string | null): { fence: string; message: string } | null {
+  bar: string | null, research: () => string | null): { fence: string; message: string } | null {
   if (only !== null && m !== null && !only.moves.includes(m.move)) {
     return { fence: `${m.move} is refused: ${only.why}${only.choose}`, message: `${m.move}: refused by the fence, ${only.why}` }
   }
   if (m?.move === 'return' && bar !== null) {
     return { fence: `return is refused: ${bar}. Choose file, park or split.`, message: `return: refused by the fence, ${bar}` }
   }
+  const why = m?.move === 'research' ? research() : null
+  if (why !== null) return { fence: `research is refused: ${why}. Choose another move.`, message: `research: refused by the fence, ${why}` }
   const lacks = m?.move !== 'rule' && m?.move !== 'waive' ? null
     : m.instruction === undefined ? 'instruction' : m['resume at'] === undefined ? 'resume at' : null
   if (m !== null && lacks !== null) {
@@ -293,7 +295,7 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   fix: 'the fixer did not make the fix',
   widen: 'the pipe is already 8 wide, or the job waits on lane_over_cap, which only lanes.dial or the band frees',
   park: 'the plan was not held',
-  research: 'the job is built, not a pr_path job of ours, or its answer lacks a research line',
+  research: 'its answer lacks a research line, or names a path a ruling may not carry',
 }
 
 function written(m: z.infer<typeof Said>): string {

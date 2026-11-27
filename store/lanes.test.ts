@@ -140,7 +140,7 @@ it('a lane:fuzzrig issue elsewhere names fuzz-rig', () => {
   expect(filed.why).toContain(`the fuzzrig lane builds in ${FORK}/fuzz-rig`)
 })
 
-it('1486 D1 rubin has six homes, machine two, others one', () => {
+it('1486 D1 rubin 6 homes, machine 2, fuzzrig 3, others 1', () => {
   expect(homes('rubin')).toEqual(RUBIN.map((r) => `${FORK}/${r}`))
   expect(homes('machine')).toEqual([LANE.machine.home, `${FORK}/ledger-rig`])
   expect(homes('fuzzrig')).toEqual([`${FORK}/fuzz-rig`, `${FORK}/solana-fuzz`, `${FORK}/tbb-staking`])

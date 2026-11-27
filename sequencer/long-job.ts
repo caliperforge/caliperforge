@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { credential } from '../providers/credential.ts'
 import { digestOf } from '../store/approvals.ts'
 import { eventsOf, logged, ofKind } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -58,7 +59,7 @@ function detach(db: Db, root: string, plan: PlanRow, command: string, out: strin
   rmSync(join(out, 'job.exit'), { force: true })
   const fd = openSync(log, 'w')
   const child = spawn('/bin/sh', ['-c', '(eval "$1"); echo $? > "$2.part"; mv "$2.part" "$2"', 'sh', command, join(out, 'job.exit')],
-    { cwd: srcDir(root, plan.id), detached: true, stdio: ['ignore', fd, fd] })
+    { cwd: srcDir(root, plan.id), detached: true, stdio: ['ignore', fd, fd], env: credential().env })
   child.unref()
   closeSync(fd)
   put(root, plan.id, 'job.json', JSON.stringify({ command, out, pid: child.pid, at: new Date().toISOString(), ask: askDigest(root, plan.id) }))

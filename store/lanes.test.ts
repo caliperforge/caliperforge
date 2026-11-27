@@ -124,6 +124,15 @@ it('intake lists fuzz-rig and its issue queues on fuzzrig', () => {
   expect(planById(db, Number(filed.plan)).pipe_id).toBe(pipeNamed(db, 'fuzzrig')?.id)
 })
 
+it('a lane:fuzzrig issue in a target fork queues on fuzzrig', () => {
+  for (const repo of ['solana-fuzz', 'tbb-staking']) {
+    const db = fresh(schema)
+    const filed = add(db, mkdtempSync(join(tmpdir(), 'cf-fuzzrig-')), `${FORK}/${repo}#1`, 'ceo', undefined, canned('fuzzrig', repo))
+    expect(filed).toMatchObject({ state: 'queued', lane: 'fuzzrig', seat: 'typescript_specialist' })
+    expect(planById(db, Number(filed.plan)).pipe_id).toBe(pipeNamed(db, 'fuzzrig')?.id)
+  }
+})
+
 it('a lane:fuzzrig issue elsewhere names fuzz-rig', () => {
   const filed = add(fresh(schema), mkdtempSync(join(tmpdir(), 'cf-fuzzrig-')), `${FORK}/fuzz-bench#1`, 'ceo', undefined,
     canned('fuzzrig', 'fuzz-bench'))
@@ -131,10 +140,11 @@ it('a lane:fuzzrig issue elsewhere names fuzz-rig', () => {
   expect(filed.why).toContain(`the fuzzrig lane builds in ${FORK}/fuzz-rig`)
 })
 
-it('1486 D1 rubin has six homes, machine two, others one', () => {
+it('1486 D1 rubin 6 homes, machine 2, fuzzrig 3, others 1', () => {
   expect(homes('rubin')).toEqual(RUBIN.map((r) => `${FORK}/${r}`))
   expect(homes('machine')).toEqual([LANE.machine.home, `${FORK}/ledger-rig`])
-  for (const l of LANES.filter((n) => n !== 'rubin' && n !== 'machine')) expect(homes(l)).toEqual([LANE[l].home])
+  expect(homes('fuzzrig')).toEqual([`${FORK}/fuzz-rig`, `${FORK}/solana-fuzz`, `${FORK}/tbb-staking`])
+  for (const l of LANES.filter((n) => !['rubin', 'machine', 'fuzzrig'].includes(n))) expect(homes(l)).toEqual([LANE[l].home])
 })
 
 it('1486 D2 a lane:rubin issue from either home queues on rubin', () => {

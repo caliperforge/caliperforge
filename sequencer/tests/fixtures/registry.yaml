@@ -127,6 +127,12 @@
   where: "kind = 'return' AND actor = 'fixer' AND EXISTS (SELECT 1 FROM events a JOIN plans w ON w.origin = a.pointer WHERE a.plan = events.plan AND a.kind = 'resume_at' AND w.state = 'done' AND a.id = (SELECT max(id) FROM events b WHERE b.plan = events.plan AND b.kind = 'resume_at' AND b.id < events.id) AND NOT EXISTS (SELECT 1 FROM events c WHERE c.plan = events.plan AND c.kind = 'return' AND c.id > a.id AND c.id < events.id) AND events.message NOT LIKE ('%→ ' || substr(a.message, 6)))"
   gap: 14d
   expected: 0
+- name: long_job_credential
+  table: events
+  column: at
+  where: "kind IN ('check', 'review', 'director') AND message LIKE '%OAuth session expired%'"
+  gap: 14d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

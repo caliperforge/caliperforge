@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
-import { eventsOf } from '../../store/events.ts'
+import { allEvents, eventsOf } from '../../store/events.ts'
 import { set } from '../../store/lanes.ts'
 import { dropPlan, end, putPlan } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
@@ -169,6 +169,35 @@ test('a job past research.long_job_seconds halts its plan', async () => {
   expect(prompts).toHaveLength(1)
   const { pid } = JSON.parse(get(w.root, 1, 'job.json')) as { pid: number }
   await vi.waitFor(() => { expect(() => process.kill(-pid, 0)).toThrow() })
+})
+
+/** A job that prints `set` when it sees an OAuth token, run with the token only in a 600 `CF_ENV_FILE` and `ANTHROPIC_BASE_URL` at `base`. */
+const credentialed = async (base: string): Promise<{ w: World; log: string }> => {
+  const out = join(home(), 'cf_work/job')
+  const file = join(mkdtempSync(join(tmpdir(), 'cf-env-')), 'env')
+  writeFileSync(file, 'CLAUDE_CODE_OAUTH_TOKEN=tok-long-job-test\n')
+  chmodSync(file, 0o600)
+  vi.stubEnv('CF_ENV_FILE', file)
+  vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '')
+  vi.stubEnv('ANTHROPIC_BASE_URL', base)
+  const w = researching()
+  const seats = answering(['**Run:** echo "${CLAUDE_CODE_OAUTH_TOKEN:+set}"\n**Output:** ~/cf_work/job/\n'], [])
+  await tick(w.db, w.root, seats)
+  await tick(w.db, w.root, seats)
+  await vi.waitFor(() => { expect(existsSync(join(out, 'job.exit'))).toBe(true) })
+  return { w, log: readFileSync(join(out, 'job.log'), 'utf8') }
+}
+
+test('a long job sees the host credential and never records it', async () => {
+  const { w, log } = await credentialed('')
+  expect(log).toBe('set\n')
+  expect(get(w.root, 1, 'job.json')).not.toContain('tok-long-job-test')
+  expect(JSON.stringify(allEvents(w.db))).not.toContain('tok-long-job-test')
+})
+
+test('a long job aimed at another endpoint gets no OAuth token', async () => {
+  const { log } = await credentialed('https://proxy.example')
+  expect(log).toBe('\n')
 })
 
 test.each([

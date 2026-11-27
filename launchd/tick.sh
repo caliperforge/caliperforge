@@ -15,6 +15,8 @@
   export PATH
   # foundryup installs forge, cast and anvil in ~/.foundry/bin, which launchd's PATH lacks: step 3's forge build is ENOENT without it
   PATH="$HOME/.foundry/bin:$PATH"
+  # The Solana installer's active_release/bin holds agave-install, solana and cargo-build-sbf, which launchd's PATH lacks: a measure job's agave-install init and anchor build fail without it (#2624)
+  PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
   cd "$(dirname "$0")/.." || exit 1
   # Never FETCH_HEAD: this worktree shares its repo with every job's git, and on 09-25 a whole-remote fetch
   # landed between these two lines, so FETCH_HEAD's first line was a 09-22 branch. The tick checked it out,

@@ -103,6 +103,24 @@ test('tickLogs', async () => {
   expect(lines().length).toBeLessThanOrEqual(5001)
 })
 
+test('tickPathHasSolanaRelease', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-tickpath-'))
+  const home = mkdtempSync(join(tmpdir(), 'cf-tickhome-'))
+  for (const sub of ['launchd', 'cli', '.cf']) mkdirSync(join(dir, sub))
+  cpSync(join(import.meta.dirname, '../../launchd/tick.sh'), join(dir, 'launchd/tick.sh'))
+  writeFileSync(join(dir, 'cli/cf.ts'), "process.stderr.write(process.env.PATH + '\\n')\n")
+  const log = join(dir, '.cf/tick.log')
+  writeFileSync(log, '')
+  execFileSync('/bin/sh', [join(dir, 'launchd/tick.sh')], { env: { ...process.env, HOME: home } })
+  const solana = join(home, '.local/share/solana/install/active_release/bin')
+  const path = (): string[] => (readFileSync(log, 'utf8').trimEnd().split('\n').at(-1) ?? '').split(':')
+  await expect.poll(path, { timeout: 5000 }).toContain(solana)
+  expect(path()).toEqual(expect.arrayContaining([join(home, '.cargo/bin'), join(home, '.foundry/bin')]))
+  const cf = path().findIndex((p) => p.endsWith('/.cf/bin'))
+  expect(cf).toBeGreaterThanOrEqual(0)
+  expect(cf).toBeLessThan(path().indexOf(solana))
+})
+
 /** Every repo file a module loads: its relative imports and re-exports, less those erased as `import type`. */
 function loads(file: string, seen = new Set<string>()): Set<string> {
   if (seen.has(file)) return seen

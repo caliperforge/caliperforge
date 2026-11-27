@@ -4,6 +4,7 @@ import { hold } from '../../sequencer/hold.ts'
 import { internalPlan, world } from '../../sequencer/tests/world.ts'
 import { get, SELF } from '../../sequencer/workspace.ts'
 import { logged, ofKind } from '../../store/events.ts'
+import { closed } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { end, planRows, waiting } from '../../store/plans.ts'
 import type { Read, Run } from '../gh.ts'
@@ -85,6 +86,29 @@ test('D3 refile holds a waiting plan on the new url', () => {
     { state: 'blocked_on_ceo', waits_on: null, held_by: 'coo', held_why: `waits on ${URL}` })
   expect(rows.find((r) => r.id === 4)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 3, held_why: 'after 3' })
   expect(rows.find((r) => r.id === 5)).toMatchObject({ held_by: null, held_why: null })
+})
+
+test('D3 a close then a refile moves the waiter to the new url', () => {
+  const w = world()
+  const now = new Date()
+  internalPlan(w.db, w.root, 2, 'misfiled', 7)
+  internalPlan(w.db, w.root, 3, 'waits on 2', 8)
+  hold(w.db, w.root, 3, 'after 2', now, 2)
+  closed(w.db, 2, 'refused', 'coo', 'wrong repo')
+  const post = vi.fn()
+  released(w.db, w.root, now, post, () => ({ state: 'OPEN', stateReason: null }))
+  expect(planRows(w.db).find((r) => r.id === 3)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 2 })
+  const closing: unknown[] = []
+  refile(w.db, w.root, `${SELF}#7`, TO, read, (args) => {
+    if (args[1] === 'close') closing.push(planRows(w.db).find((r) => r.id === 3)?.held_why)
+    return `${URL}\n`
+  })
+  expect(closing).toEqual([`waits on ${URL}`])
+  released(w.db, w.root, now, post, () => ({ state: 'CLOSED', stateReason: 'COMPLETED' }))
+  expect(planRows(w.db).find((r) => r.id === 3)).toMatchObject(
+    { state: 'blocked_on_ceo', waits_on: null, held_by: 'coo', held_why: `waits on ${URL}` })
+  expect(ofKind(w.db, 'waits_closed')).toEqual([])
+  expect(post).not.toHaveBeenCalled()
 })
 
 test.each([

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Read } from '../cli/gh.ts'
 import { record } from '../cli/inbox.ts'
+import { closedWithin } from '../store/closes.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { originRef } from '../store/plans.ts'
@@ -11,9 +12,11 @@ const Issue = z.object({ state: z.string(), stateReason: z.string().nullable() }
 
 interface Waiter { id: number; step: number; on_: number; theirs: string; origin: string | null }
 
-/** A job waiting on a refused or halted plan goes back to its lane when that plan's issue is closed as completed. */
+/** A job waiting on a refused or halted plan goes back to its lane when that plan's issue is closed as completed, and keeps waiting while the issue of a plan closed under 15 minutes ago is open. */
 export function closed(db: Db, root: string, r: Waiter, held: { ticket: string; at: string; note: string }, read: Read): boolean {
-  if (!completed(db, r, read)) {
+  const issue = completed(db, r, read)
+  if (issue === 'open' && closedWithin(db, r.on_, held.at)) return true
+  if (issue !== 'completed') {
     logged(db, { plan: r.id, kind: 'waits_closed', actor: 'fixer', outcome: 'needs_coo', message: held.note, pointer: r.origin, run: null })
     return false
   }
@@ -24,14 +27,15 @@ export function closed(db: Db, root: string, r: Waiter, held: { ticket: string; 
   return true
 }
 
-function completed(db: Db, r: Waiter, read: Read): boolean {
+function completed(db: Db, r: Waiter, read: Read): 'completed' | 'open' | null {
   const ref = originRef(r)
-  if (ref === null) return false
+  if (ref === null) return null
   try {
     const issue = Issue.parse(read(['issue', 'view', String(ref.no), '--repo', ref.repo, '--json', 'state,stateReason']))
-    return issue.state === 'CLOSED' && issue.stateReason === 'COMPLETED'
+    if (issue.state === 'OPEN') return 'open'
+    return issue.state === 'CLOSED' && issue.stateReason === 'COMPLETED' ? 'completed' : null
   } catch (error) {
     logged(db, { plan: r.id, kind: 'swallowed', actor: 'fixer', outcome: 'pass', message: firstLine(error), pointer: r.origin, run: null })
-    return false
+    return null
   }
 }

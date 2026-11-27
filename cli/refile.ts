@@ -41,12 +41,12 @@ export function refile(db: Db, root: string, from: string, to: string, read: Rea
     .parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'title,body,labels']))
   const moved = block === undefined ? body : `${body}\n\n## Why it moved\n\n${block.message}`
   const url = fileIssue(to, title, moved, carried(labels, to), exec)
-  exec(['issue', 'close', String(no), '--repo', repo, '--comment', `Moved to ${url}`])
-  logged(db, { plan: plan.id, kind: 'refiled', actor: 'refile', outcome: 'pass', message: url, pointer: null, run: null })
   for (const r of planRows(db).filter((p) => p.waits_on === plan.id && p.state === 'blocked_on_ceo')) {
     clearWaitsOn(db, Number(r.id))
     held(db, Number(r.id), 'coo', `waits on ${url}`)
   }
+  exec(['issue', 'close', String(no), '--repo', repo, '--comment', `Moved to ${url}`])
+  logged(db, { plan: plan.id, kind: 'refiled', actor: 'refile', outcome: 'pass', message: url, pointer: null, run: null })
   return url
 }
 

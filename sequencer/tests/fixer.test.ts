@@ -333,7 +333,7 @@ test('wait on a refused job pings', async () => {
 
 const ISSUE = 'https://github.com/caliperforge/caliperforge/issues/140'
 
-async function waitedOn(ended: PlanRow['state'], merged: Wire['merged']) {
+async function waitedOn(ended: PlanRow['state'], merged: Wire['merged'], closedAt: string | null = null) {
   const { db, home } = seeded('live')
   second(db)
   const posted: string[] = []
@@ -341,6 +341,7 @@ async function waitedOn(ended: PlanRow['state'], merged: Wire['merged']) {
   await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
   db.exec(`UPDATE plans SET state = '${ended}' WHERE id = 8`)
   if (ended === 'done') pushed(db, 8)
+  if (closedAt !== null) logged(db, { plan: 8, kind: 'close', actor: 'coo', outcome: 'refuse', message: 'wrong repo', pointer: null, run: null }, closedAt)
   await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), { ...wire([]), merged: (args) => { asked.push(args); return merged(args) } })
   const row = planRows(db).find((r) => r.id === 7)
   return { db, posted, asked, held: { ...state(db), ...waitsOn(db), held_by: row?.held_by, held_why: row?.held_why } }
@@ -367,6 +368,21 @@ test.each([
   expect(posted).toEqual(['CaliperForge · #139 needs you'])
   expect(ofKind(db, 'waits_closed')).toMatchObject([{ plan: 7, outcome: 'needs_coo', message: why }])
   expect(pointers(db, 'waits_closed')).toEqual([ISSUE])
+})
+
+test('D1 wait on a job closed 10 minutes ago, issue open, waits', async () => {
+  const { db, posted, held } = await waitedOn('refused', () => ({ state: 'OPEN', stateReason: null }), '2026-09-25 16:50:00')
+  expect(held).toMatchObject({ state: 'blocked_on_ceo', step: 4, waits_on: 8 })
+  expect(posted).toEqual([])
+  expect(ofKind(db, 'waits_closed')).toEqual([])
+})
+
+test('D2 wait on a job closed 16 minutes ago, issue open, to COO', async () => {
+  const { db, posted, held } = await waitedOn('refused', () => ({ state: 'OPEN', stateReason: null }), '2026-09-25 16:44:00')
+  const why = 'plan 8, which this job waits on, ended refused'
+  expect(held).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: null, held_by: 'coo', held_why: why })
+  expect(posted).toEqual(['CaliperForge · #139 needs you'])
+  expect(ofKind(db, 'waits_closed')).toMatchObject([{ plan: 7, outcome: 'needs_coo', message: why }])
 })
 
 test('D3 wait on a landed job reads no issue', async () => {

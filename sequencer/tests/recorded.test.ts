@@ -1,10 +1,12 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Fired } from '../../providers/kind.ts'
 import { planRow } from '../../runner/index.ts'
 import { load, seat } from '../../runner/rules.ts'
-import { newestRun } from '../../store/events.ts'
+import { eventsAfter, newestRun } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { runOf } from '../../store/runs.ts'
 import { recorded } from '../seat.ts'
@@ -49,4 +51,23 @@ test('D4 recorded() writes the staffed seat, or NULL without one', () => {
   expect(newest(db, 'staffed')).toBe('brief_writer')
   recorded(db, plan, 1, 'typescript_specialist', hash, 'claude-agent-sdk', manifest, fired({ input: 1, cache: 0, output: 0 }))
   expect(newest(db, 'staffed')).toBeNull()
+})
+
+test('a fetcher run that called WebSearch logs one event', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const dir = mkdtempSync(join(tmpdir(), 'cf-recorded-'))
+  const fire = (name: string, tool: string): void => {
+    const path = join(dir, `${name}-${tool}.transcript.jsonl`)
+    writeFileSync(path, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_1', name: tool, input: {} }] } }))
+    const { manifest, hash } = seat(root, name)
+    recorded(db, plan, 1, name, hash, 'claude-agent-sdk', manifest, { ...fired({ input: 1, cache: 0, output: 0 }), transcript_path: path })
+  }
+  fire('fetcher', 'WebSearch')
+  const run = newestRun(db)
+  fire('fetcher', 'WebFetch')
+  fire('researcher', 'WebSearch')
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'fetcher.websearch'))
+    .toEqual([{ plan, kind: 'fetcher.websearch', actor: 'fetcher', outcome: 'pass', message: 'WebSearch', pointer: null, run }])
 })

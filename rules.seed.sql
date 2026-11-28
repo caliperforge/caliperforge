@@ -26,6 +26,7 @@ VALUES
   ('rules/registry/105-filed_resume_step.yaml', 'card', 'rules/registry/105-filed_resume_step.yaml', 'aea67d24829db2c1938e728a80f8135804b3a28eab0589e5a5b63272e1f59fce', '2026-11-24'),
   ('rules/registry/106-long_job_credential.yaml', 'card', 'rules/registry/106-long_job_credential.yaml', '532cf44099cdb7cd5f953ebc1b4dec8f4cc97b70ac30f22696cb181362dd880c', '2026-11-27'),
   ('rules/registry/107-intake_swallow_once.yaml', 'card', 'rules/registry/107-intake_swallow_once.yaml', '9ae2112bba669381c15ad30319d5a220e43abcf0da0e51e0d6904cf809b89adc', '2026-11-28'),
+  ('rules/registry/108-fetcher_search.yaml', 'card', 'rules/registry/108-fetcher_search.yaml', '46f183b90fedee9c4a81fddcae73f19413e2c47002959ae336cc554c01464063', '2026-11-28'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/110-seed_no_overlap.yaml', 'card', 'rules/registry/110-seed_no_overlap.yaml', '408302013042c4ee87ae9597d975c7e7d6dd7988b08f8664f0dbeeca514cf6f2', '2026-11-28'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
@@ -145,7 +146,7 @@ VALUES
   ('claims_checker', 'card', 'rules/roster/claims_checker.yaml', 'b9abab1c779495ee547d4096962a7d8c36b628e08339c6fb2ebb7a41b21fbc88', '2026-10-20'),
   ('design_lead', 'card', 'rules/roster/design_lead.yaml', 'cd6c8c262f9a50f3bc0c15ebaa4fc33a0cab0809d13d51c9680cb79257ea3c46', '2026-10-11'),
   ('director', 'card', 'rules/roster/director.yaml', '117bba836ef0e3a6e7b3cf64cda7352f25e9bd70d7178432b104509041a2e6e8', '2026-10-04'),
-  ('fetcher', 'card', 'rules/roster/fetcher.yaml', '8beabe28be831eb2835151d375186acfeb16f57429fa2f2f4cf2fe2ffc22bc4e', '2026-10-21'),
+  ('fetcher', 'card', 'rules/roster/fetcher.yaml', 'f5198e6882362d03cf445fbea067c11bde9d4a4fbe23353952cc5d86c1fa45a6', '2026-10-21'),
   ('fixer', 'card', 'rules/roster/fixer.yaml', 'a197eaa024e294db48bb47c44da925a5aff8b7fdd622036ebef68dc3b0efcdca', '2026-09-25'),
   ('fizz_generator', 'card', 'rules/roster/fizz_generator.yaml', '9fb0e2082232a98d908381d55ab7e493b8fe708b6e1171961efcd9bd95d46d96', '2026-10-14'),
   ('fizz_lean_generator', 'card', 'rules/roster/fizz_lean_generator.yaml', 'abb7b6f04998984f6d7d07f6df19d3c101ce680134d5758548283ae46aedeee9', '2026-10-28'),
@@ -168,5 +169,5 @@ VALUES
   ('swift_specialist', 'card', 'rules/roster/swift_specialist.yaml', 'e82952d468c6fc4e19ae0a8d1e32a0f6d8867fa635c7d9c0b666dc029d1dc6a3', '2026-09-23'),
   ('text_review', 'card', 'rules/roster/text_review.yaml', '1fdabb7364e8a38ff71a59296d2d893746bc8b2cd3d79c969fc3e13dcb64c611', '2026-09-27'),
   ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '878e57bb80652afae055a82a2c13e2a9fa0c3edbce28aee9ea607e21d987ffd3', '2026-09-17'),
-  ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', '98043cc10380f84790c4c973b1724af9b929404759dfcded2dab893798359425', '2026-10-04'),
+  ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', '277869a5fbbd5f6d7acbdeef8c50615c54476b1f3ce8040cc21582b195dd1808', '2026-10-04'),
   ('writer', 'card', 'rules/roster/writer.yaml', '3296261439073faf44d291efe74b0f2964e936137b65edd64fda7126eb156008', '2026-09-27');

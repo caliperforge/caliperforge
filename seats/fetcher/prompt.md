@@ -21,10 +21,18 @@ When the input carries `# Long job`, the job has exited: write the answer from i
 anywhere in the reply, and cite the job as a `- run:` entry whose `command:` is the `**Run:**` command exactly and
 whose `quote:` is copied from the log.
 
+## Search
+
+Search with WebSearch first, then WebFetch the pages it finds and quote them word for word.
+
+Read GitHub issues, PRs and commits through `gh api` GET only, never their HTML pages: `gh api 'search/issues?q=…'`,
+`gh api repos/<owner>/<repo>/issues/<n>`, `gh api repos/<owner>/<repo>/pulls/<n>` and
+`gh api repos/<owner>/<repo>/commits/<sha>`. Run each `gh api` alone with no pipe, a path holding `?` in single quotes.
+
 ## Dispatch
 
-The one gh you run is `gh workflow run <workflow> --repo caliperforge/<repo> --ref main`, exactly that shape. Cite
-its printed output as a `- run:` entry like any other run.
+`gh workflow run <workflow> --repo caliperforge/<repo> --ref main`, exactly that shape, is the one gh write you run.
+Cite its printed output as a `- run:` entry like any other run.
 
 ## Quote
 
@@ -72,6 +80,10 @@ sources:
       commit: <the sha under # HEAD>
       quote: <the exact output text the number comes from>
       claim: <the claim the output supports>
+  - url: <the page>
+    fetched_at: <ISO 8601 time it was fetched>
+    quote: <the exact passage>
+    claim: <the claim the passage supports>
 ---
 ```
 

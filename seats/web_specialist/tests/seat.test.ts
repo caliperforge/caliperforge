@@ -18,7 +18,7 @@ const root = join(import.meta.dirname, '../../..')
 languageSeat({
   seat: 'web_specialist',
   language: 'web',
-  commands: ['Bash(node --check:*)'],
+  commands: ['Bash(node --check:*)', 'Bash(git submodule add:*)'],
   allowed: ['node --check public/app.js'],
   listed: 'public/app.js',
   beside: 'public/index.html',
@@ -36,14 +36,19 @@ test('D3 the six checks come before the answer fence', () => {
   ]) expect(rules).toContain(`\n${line}\n`)
 })
 
+test('the prompt names the submodule commands and their condition', () => {
+  const prompt = seat(root, 'web_specialist').prompt.replace(/\s+/g, ' ')
+  for (const phrase of ['only when the brief lists', '`git submodule add <url> <path>`', '`git -C <path> checkout <sha>`']) expect(prompt).toContain(phrase)
+})
+
 const SITE = ['index.html', 'src/nav.ts']
 const hunks = (paths: string[]) => paths.map((p) => `--- a/${p}\n+++ b/${p}\n@@ -1,1 +1,1 @@\n+x\n`).join('')
 
-function site() {
+function site(files = SITE) {
   const db = fresh(join(root, 'schema'))
   putPlan(db, { id: 1, pipe_id: 1, lane: 'site', seat: 'web_specialist', target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-14', step: 0, retries: 0,
     origin: 'https://github.com/caliperforge/site/issues/1' })
-  record(db, 1, SITE.map((path) => ({ path, is_new: false })))
+  record(db, 1, files.map((path) => ({ path, is_new: false })))
   return { db, src: mkdtempSync(join(tmpdir(), 'site-')), fence: fenceFor(db, 1, seat(root, 'web_specialist').manifest.write_paths) }
 }
 
@@ -66,6 +71,14 @@ test('1156c D3 a write outside the site files is refused', () => {
   for (const path of ['../caliperforge/cli/cf.ts', 'blog/index.html']) expect(refuse(src, fence, path)).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(authority(root, 'web_specialist', hunks(['blog/index.html']), false, fence)).toMatchObject({ outcome: 'refuse',
     spans: ['blog/index.html:1 authority.write_paths'] })
+})
+
+test('authority passes a listed gitlink, refuses an unlisted one', () => {
+  const gitlink = '--- /dev/null\n+++ b/site/sky-ui\n@@ -0,0 +1 @@\n+Subproject commit 2f257aae\n'
+  const diff = `${hunks(['.gitmodules'])}${gitlink}`
+  expect(authority(root, 'web_specialist', diff, false, site(['.gitmodules', 'site/sky-ui']).fence)).toMatchObject({ outcome: 'pass' })
+  expect(authority(root, 'web_specialist', diff, false, site(['.gitmodules']).fence)).toMatchObject({ outcome: 'refuse',
+    spans: ['site/sky-ui:1 authority.write_paths'] })
 })
 
 test('1156c D4 the prompt says caliperforge/site is public', () => {

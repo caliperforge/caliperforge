@@ -1,4 +1,0 @@
-- name: round_commit_message
-  table: events
-  column: at
-  where: kind = 'push.message_fallback'

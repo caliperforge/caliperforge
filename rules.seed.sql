@@ -20,7 +20,6 @@ VALUES
   ('rules/registry/101-github_read_bare_repo.yaml', 'card', 'rules/registry/101-github_read_bare_repo.yaml', '44ebdaf847364abfa2c7f507096997410a09b39cbbff7bc73c6db68f44fe83b2', '2026-11-17'),
   ('rules/registry/102-greptile_cycle.yaml', 'card', 'rules/registry/102-greptile_cycle.yaml', 'ffa97b53a228019570a2e5ddf23369adb189b742feed93dc5b87dc2473943cdd', '2026-11-21'),
   ('rules/registry/102-maintainer_gated.yaml', 'card', 'rules/registry/102-maintainer_gated.yaml', '4e0a4069ae7d0a4917ebba8ca0df98ab4d5f9555d80c9922aa7818591c87db3e', '2026-11-21'),
-  ('rules/registry/102-round_commit_message.yaml', 'card', 'rules/registry/102-round_commit_message.yaml', '0836dfb1762d6c8482620f297f75e986cc89a57e45adbb0ea0a859b59f76073a', '2026-11-21'),
   ('rules/registry/102-signoff_one_card.yaml', 'card', 'rules/registry/102-signoff_one_card.yaml', '70bfe35c4c4cc890af7d707e9837ecfb4c63e81d2b483979bf888758b9583e36', '2026-11-21'),
   ('rules/registry/103-paydesk_attest.yaml', 'card', 'rules/registry/103-paydesk_attest.yaml', '423283f43dc072ca1d83f73fb894f0f23f7663f287f89fce6732f709450341c5', '2026-11-22'),
   ('rules/registry/104-file_overlap_cross_repo.yaml', 'card', 'rules/registry/104-file_overlap_cross_repo.yaml', '5f96828d28e85370ffc3590d661c839a00aa8b265eda217ae43855691742b4fe', '2026-11-24'),

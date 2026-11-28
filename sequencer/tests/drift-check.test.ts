@@ -32,7 +32,7 @@ test('fresh', () => {
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['director', 'fixer', 'swift_review', 'kotlin_review',
-    'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'typescript_review', 'empty_repo_hold', 'research_after_empty_build', 'split_measure_only', 'after_split_parent_met', 'github_read_bare_repo', 'greptile_cycle', 'maintainer_gated', 'round_commit_message', 'signoff_one_card', 'paydesk_attest', 'file_overlap_cross_repo', 'filed_resume_step', 'long_job_credential', 'brief_writer', 'text_review',
+    'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'typescript_review', 'empty_repo_hold', 'research_after_empty_build', 'split_measure_only', 'after_split_parent_met', 'github_read_bare_repo', 'greptile_cycle', 'maintainer_gated', 'signoff_one_card', 'paydesk_attest', 'file_overlap_cross_repo', 'filed_resume_step', 'long_job_credential', 'brief_writer', 'text_review',
     'writer_catchup', 'writer_log', 'writer_ship', 'writer_weekly', 'growth_lead', 'growth_packet_empty', 'web_specialist', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
@@ -48,6 +48,8 @@ test('fresh', () => {
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('accepted_findings')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('filed_covered')
+  event(d, '2026-10-02 11:00:00', 'push')
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('round_commit_message')
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
   }

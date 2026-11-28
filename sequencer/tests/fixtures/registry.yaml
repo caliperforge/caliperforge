@@ -140,6 +140,12 @@
   column: at
   where: seat = 'brief_writer'
   gap: 1d
+- name: seed_no_overlap
+  table: events
+  column: at
+  where: "kind = 'park' AND message GLOB 'waits on plan *''s files' AND NOT EXISTS (SELECT 1 FROM plan_files mine JOIN plan_files f ON f.path = mine.path WHERE mine.plan = events.plan AND f.plan = CAST(substr(events.message, 15) AS INTEGER) AND mine.path <> 'rules.seed.sql' AND mine.path NOT LIKE '.cf/%')"
+  gap: 7d
+  expected: 0
 - name: text_review
   table: runs
   column: at

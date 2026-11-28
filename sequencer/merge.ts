@@ -1,4 +1,5 @@
 import { recount } from '../checks/ratchet.ts'
+import { fill, SEED } from '../cli/digests.ts'
 import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { passedDiff } from '../store/deliverables.ts'
@@ -14,10 +15,12 @@ import { firstLine } from './unpolled.ts'
 import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing,
   put, recut, restand, srcDir, theirs, unmerged } from './workspace.ts'
 
+const ratchet = (path: string): boolean => path === 'ratchet.json' || path.endsWith('/ratchet.json')
+
 /**
  * Step 3's base, one tick before the ready and batch gates: a merge returns no outcome,
  * so the rails judge the merged tree in this same tick, and it spends none of the `base.merged`
- * budget those two count their one miss against. A conflict outside the ratchet files is the builder's to settle, so the
+ * budget those two count their one miss against. A conflict outside the ratchet files and the seed is the builder's to settle, so the
  * refusal names the unmerged paths and rewinds onto the build. A tick that stopped inside a merge
  * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
  * tick merges again from the old base. The rewind alone would hand the builder that same old
@@ -55,13 +58,14 @@ function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string
   } catch (error) {
     const paths = unmerged(src)
     if (paths.length === 0) logged(db, { plan: plan.id, kind: 'swallowed', actor: 'takeMain', outcome: 'pass', message: firstLine(error), pointer: main, run: null })
-    if (paths.length === 0 || paths.some((path) => path !== 'ratchet.json' && !path.endsWith('/ratchet.json'))) {
+    if (paths.length === 0 || paths.some((path) => path !== SEED && !ratchet(path))) {
       abortMerge(src)
       recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: false })
       return paths
     }
     for (const path of paths) theirs(src, path)
-    commitMerge(src, recount(src, [...incoming, ...mine]))
+    const filled = paths.includes(SEED) ? [SEED, ...fill(src, new Date().toISOString().slice(0, 10))] : []
+    commitMerge(src, [...paths.some(ratchet) ? recount(src, [...incoming, ...mine]) : [], ...filled])
   }
   recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: true })
   put(root, plan.id, 'base.sha', `${main}\n`)

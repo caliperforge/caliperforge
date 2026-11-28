@@ -1,12 +1,13 @@
 import { expect, test } from 'vitest'
 import { tickNote } from '../../cli/brief.ts'
+import { SEED } from '../../cli/digests.ts'
 import { runRows } from '../../store/events.ts'
 import { record as recordFiles } from '../../store/files.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { dropPlan, overlapWaits } from '../../store/plans.ts'
 import { tick } from '../index.ts'
-import { picks } from '../next.ts'
-import { blocked } from '../steps.ts'
+import { picks, route } from '../next.ts'
+import { blocked, heldOn } from '../steps.ts'
 import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
 
 const ID = 2
@@ -57,6 +58,20 @@ test('D1 a shared path under .cf/ alone holds nothing up', async () => {
   await tick(w.db, w.root, stub(CARRIED))
   expect(builds(w, SECOND)).toBeGreaterThan(0)
   expect(plan(w.db, SECOND).wait_reason).toBeNull()
+})
+
+test('D1 D2 a shared seed alone holds nothing at the rails', async () => {
+  const w = pair()
+  await oneBuilding(w)
+  recordFiles(w.db, ID, [{ path: SEED, is_new: false }])
+  recordFiles(w.db, SECOND, [{ path: SEED, is_new: false }])
+  amend(w.db, SECOND, { step: 3, state: 'running' })
+  expect(heldOn(w.db, plan(w.db, SECOND))).toBeNull()
+  expect(route(w.db, plan(w.db, SECOND), new Date())).not.toMatchObject({ wait: 'file_overlap' })
+  const both = [SEED, 'seats/typescript_specialist/manifest.yaml'].map((path) => ({ path, is_new: false }))
+  recordFiles(w.db, ID, both)
+  recordFiles(w.db, SECOND, both)
+  expect(heldOn(w.db, plan(w.db, SECOND))).toBe(ID)
 })
 
 test('D3 the receipt names the plan it waits on and the file', async () => {

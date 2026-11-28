@@ -109,10 +109,10 @@ export function building(db: Db, plan: number, paths: string[]): { plan: number;
   return (db.prepare(`SELECT o.id AS plan, f.path FROM plans me
     JOIN plans o ON o.id < me.id
     JOIN plan_files f ON f.plan = o.id
-    WHERE me.id = ? AND f.path IN (SELECT value FROM json_each(?))
+    WHERE me.id = ? AND f.path IN (SELECT value FROM json_each(?)) AND f.path <> ?
       AND o.state IN ('queued', 'running') AND o.step >= 2
       AND COALESCE(o.wait_reason, '') <> 'ceo_batch'
       AND ${repo('o')} = ${repo('me')}
       AND EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT})
-    ORDER BY o.id LIMIT 1`).get(plan, JSON.stringify(paths)) ?? null) as { plan: number; path: string } | null
+    ORDER BY o.id LIMIT 1`).get(plan, JSON.stringify(paths), SEED) ?? null) as { plan: number; path: string } | null
 }

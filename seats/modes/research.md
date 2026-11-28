@@ -7,6 +7,10 @@ answer, and `sources.json`, the quotes it rests on. You write no file. Ask three
 2. Does it say what is still unknown?
 3. Does any claim go past what its `sources.json` quotes say?
 
+When `# Diff` ends with `# Output`, the job wrote its files in that folder. Open them, check each against the
+quotes in `sources.json`, and quote at least one line from a file you opened. A refuse may name an output
+file's `path:line` as a span. You read that folder and never write in it.
+
 `answer.md` always ends with `## Would be wrong if` and then `## Still unknown`, whatever `done_when` lists.
 The machine records the finding from these sections and refuses an answer that lacks them. The first answers
 `wrong_if` in `question.json`, and each of its sentences is cited; when no source bears on `wrong_if`, it holds

@@ -6,7 +6,7 @@ import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
-import { backfill, models, outputs, spawned, unfinished } from './transcript.ts'
+import { backfill, models, outputs, searched, spawned, unfinished } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
 const loaded = (): Db => {
@@ -105,6 +105,12 @@ test('D3 spawned is 0 for a missing or non-JSON transcript', () => {
   const broken = lines([spawn])
   writeFileSync(broken, `${readFileSync(broken, 'utf8')}\nnot json`)
   expect([spawned(fixture('absent')), spawned(broken)]).toEqual([0, 0])
+})
+
+test('searched is true only for a WebSearch call', () => {
+  const search = { type: 'tool_use', id: 'toolu_s', name: 'WebSearch', input: { query: 'q' } }
+  const fetch = { type: 'tool_use', id: 'toolu_f', name: 'WebFetch', input: { url: 'u', prompt: 'p' } }
+  expect([searched(lines([fetch], [spawn, search])), searched(lines([fetch, spawn])), searched(fixture('absent'))]).toEqual([true, false, false])
 })
 
 test('a directory path throws EISDIR rather than reading empty', () => {

@@ -5,9 +5,12 @@ tools:
   - Read
   - Grep
   - Glob
+  - WebSearch
+  - WebFetch
   - Write
   - Edit
   - Bash(node:*)
+  - Bash(gh api:*)
   - Bash(gh workflow run:*)
 write_paths:
   - ~/cf_work

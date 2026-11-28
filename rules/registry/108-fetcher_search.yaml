@@ -1,0 +1,5 @@
+- name: fetcher_search
+  table: events
+  column: at
+  where: "kind = 'fetcher.websearch'"
+  gap: 14d

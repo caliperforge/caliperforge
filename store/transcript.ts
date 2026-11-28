@@ -9,6 +9,8 @@ const Read = z.object({ type: z.literal('tool_use'), name: z.literal('Read'), in
 
 const Spawn = z.object({ type: z.literal('tool_use'), name: z.literal('Agent') })
 
+const Search = z.object({ type: z.literal('tool_use'), name: z.literal('WebSearch') })
+
 /** The content blocks of each assistant turn, in order; none when the transcript is missing or a line is not JSON. */
 function blocks(path: string): unknown[] {
   if (!existsSync(path)) return []
@@ -28,6 +30,11 @@ export function opened(path: string): string[] {
 /** How many sub-agents a transcript's turns spawned. */
 export function spawned(path: string): number {
   return blocks(path).filter((block) => Spawn.safeParse(block).success).length
+}
+
+/** Whether a transcript's turns called WebSearch. */
+export function searched(path: string): boolean {
+  return blocks(path).some((block) => Search.safeParse(block).success)
 }
 
 const Message = z.object({ type: z.enum(['assistant', 'user']), message: z.object({ content: z.array(z.unknown()) }), tool_use_result: z.unknown().optional() })

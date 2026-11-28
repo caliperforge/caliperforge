@@ -1,6 +1,9 @@
+import { mkdirSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { check } from '../../../cli/digests.ts'
+import { admitted } from '../../../providers/kind.ts'
 import { refuse } from '../../../runner/index.ts'
 import { rules, seat } from '../../../runner/rules.ts'
 
@@ -8,8 +11,24 @@ const root = join(import.meta.dirname, '../../..')
 
 test('D7: the manifest runs uv and writes only .cf/measure', () => {
   expect(seat(root, 'measurer').manifest).toEqual({
-    seat: 'measurer', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Write', 'Bash(uv run:*)', 'Bash(forge:*)', 'Bash(medusa:*)'], write_paths: ['.cf/measure'],
+    seat: 'measurer', model: 'claude-opus-5-5', effort: 'medium',
+    tools: ['Read', 'Grep', 'Glob', 'Write', 'Bash(uv run:*)', 'Bash(forge:*)', 'Bash(medusa:*)', 'Bash(node src/cli.ts:*)'], write_paths: ['.cf/measure'],
   })
+})
+
+test('runs fuzz-rig\'s CLI and no other node command', () => {
+  const tools = seat(root, 'measurer').manifest.tools
+  expect(admitted(tools, 'node src/cli.ts run --suite suite --workers 4')).toBe(true)
+  for (const command of ['node scripts/x.ts', 'node src/cli.ts; rm x', 'node']) expect(admitted(tools, command)).toBe(false)
+})
+
+test('a clone folder fence admits only writes inside it', () => {
+  const measure = mkdtempSync(join(tmpdir(), 'cf-measure-'))
+  const clone = join(measure, 'plan-1')
+  mkdirSync(clone)
+  mkdirSync(join(measure, 'plan-2'))
+  expect(refuse(clone, [clone], 'out/run.json')).toBeNull()
+  expect(refuse(clone, [clone], '../plan-2/run.json')).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
 test('D2: a write under .cf/measure is admitted', () => {
@@ -30,7 +49,7 @@ test('D7: the prompt opens with its name and closes on a run fence', () => {
 
 test('D2: the prompt runs forge and medusa', () => {
   const prompt = seat(root, 'measurer').prompt
-  for (const part of ['`uv run`', '`forge`', '`medusa`']) expect(prompt).toContain(part)
+  for (const part of ['`uv run`', '`forge`', '`medusa`', '`node src/cli.ts`', 'fuzz-rig', '`~/cf_work/measure/<plan>/`']) expect(prompt).toContain(part)
 })
 
 test('D3: the prompt answers needs_build for network or writes', () => {

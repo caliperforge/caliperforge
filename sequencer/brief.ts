@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
+import { measured } from '../templates/asked.ts'
 import { CONVENTIONAL } from './conventions.ts'
 import { WHOLE } from './handout.ts'
 import { LETTERS, named, ordered } from './ordered.ts'
@@ -199,7 +200,7 @@ export function shape(brief: string, ask: string, src: string, outside = false, 
   const title = titleOf(brief)
   if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, (b) => caps(b, ask, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask), (b) => copied(b, ask), (b) => settled(b, src),
+    [order, empty, carried, cases, (b) => caps(b, ask, ceiling), (b) => folders(b, ask), forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask), (b) => copied(b, ask), (b) => settled(b, src),
       ...(outside ? [(b: string) => reproduced(section(b, '## Reproduced'), files(b).map((f) => f.path))] : [])]
   for (const check of checks) {
     const refused = check(brief)
@@ -246,8 +247,10 @@ function cases(brief: string): Refused | null {
 }
 
 /** A row that names no file is a folder or a sentence; dropped silently, it leaves the builder fenced out of what it must write. */
-function folders(brief: string): Refused | null {
-  const bare = section(brief, '## Files').split('\n').find((l) => /^\s*[-*]/.test(l) && files(`## Files\n${l}`).length === 0)
+function folders(brief: string, ask: string): Refused | null {
+  const rows = section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))
+  if (measured(ask) && rows.length === 1 && rows.every((l) => /^\s*[-*]\s*none:/.test(l))) return null
+  const bare = rows.find((l) => files(`## Files\n${l}`).length === 0)
   return bare === undefined ? null : { span: bare.trim(), reason: 'this ## Files row names no file; list each file, not the folder' }
 }
 

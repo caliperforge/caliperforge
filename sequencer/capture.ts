@@ -16,6 +16,7 @@ import { kept, rehearsed, type Rehearsal } from './findings.ts'
 import { mended } from './mended.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
+import { ongoing, relisted, unlisted } from './unlisted.ts'
 import { cause, closed, firstLine, gone, polled } from './unpolled.ts'
 import { waits } from './wave.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
@@ -62,9 +63,10 @@ export function intake(db: Db, root: string, read: Read): string[] {
   for (const repo of new Set(LANES.filter((l) => on.has(LANE[l].pipe)).flatMap(homes))) {
     try {
       listed(db, root, repo, read, lines)
+      relisted(db, repo)
     } catch (error) {
-      const line = `${repo}: ${firstLine(error)}`
-      logged(db, { plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: line, pointer: null, run: null })
+      const line = unlisted(repo, error)
+      if (!ongoing(db, repo, line)) logged(db, { plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: line, pointer: repo, run: null })
       lines.push(line)
     }
   }

@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 import {
-  deserializeAttestationData, fetchSchema, findAttestationPda, findCredentialPda, findSchemaPda, getCloseAttestationInstruction,
+  deserializeAttestationData, fetchMaybeAttestation, fetchSchema, findAttestationPda, findCredentialPda, findSchemaPda, getCloseAttestationInstruction,
   getCreateAttestationInstructionAsync, getCreateCredentialInstructionAsync, getCreateSchemaInstructionAsync, SchemaDataType as T,
   serializeAttestationData, type Attestation, type Credential, type Schema,
 } from '@solana/attestation'
 import {
   getAddressDecoder, type Address, type ClientWithPayer, type ClientWithRpc, type ClientWithTransactionSending, type GetAccountInfoApi,
-  type TransactionSigner,
+  type Instruction, type TransactionSigner,
 } from '@solana/kit'
 
 export interface Fields {
@@ -47,6 +47,21 @@ export function verdict({ attestation, credential, schema, now }: { attestation:
 
 type Client = ClientWithPayer & ClientWithTransactionSending & ClientWithRpc<GetAccountInfoApi>
 
+const SEND_MS = 60_000
+
+export async function settled(send: () => Promise<unknown>, landed: () => Promise<boolean>, ms: number): Promise<void> {
+  const once = async (): Promise<void> => {
+    const { promise, reject } = Promise.withResolvers<never>()
+    const timer = setTimeout(() => { reject(new Error('timeout')) }, ms)
+    try {
+      await Promise.race([send(), promise])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  await once().catch(async () => { if (!(await landed())) await once() })
+}
+
 export function attestOps(client: Client, issuer: TransactionSigner, signer: TransactionSigner) {
   const { payer } = client
   const { version, ...shape } = SCHEMA
@@ -55,32 +70,33 @@ export function attestOps(client: Client, issuer: TransactionSigner, signer: Tra
     const data = serializeAttestationData((await fetchSchema(client.rpc, schema)).data, { ...fields })
     const expiry = fields.tested_at + 14n * DAY
     const create = await getCreateAttestationInstructionAsync({ authority: signer, credential, data, expiry, nonce, payer, schema })
-    return { create, at: (await findAttestationPda({ credential, schema, nonce }))[0] }
+    return { create, expiry, at: (await findAttestationPda({ credential, schema, nonce }))[0] }
   }
   const closing = (credential: Address, attestation: Address) =>
     getCloseAttestationInstruction({ attestation, authority: signer, credential, payer })
+  const exists = async (at: Address): Promise<boolean> => (await client.rpc.getAccountInfo(at, { encoding: 'base64' }).send()).value !== null
+  const sent = async (at: Address, instructions: Instruction[], landed = () => exists(at)): Promise<Address> => {
+    await settled(() => client.sendTransaction(instructions), landed, SEND_MS)
+    return at
+  }
   return {
-    credential: async (name: string): Promise<Address> => {
-      await client.sendTransaction([await getCreateCredentialInstructionAsync({ authority: issuer, name, payer, signers: [signer.address] })])
-      return (await findCredentialPda({ authority: issuer.address, name }))[0]
-    },
-    schema: async (credential: Address): Promise<Address> => {
-      await client.sendTransaction([await getCreateSchemaInstructionAsync({ authority: issuer, credential, payer, ...shape })])
-      return (await findSchemaPda({ credential, name: SCHEMA.name, version }))[0]
-    },
+    credential: async (name: string): Promise<Address> =>
+      sent((await findCredentialPda({ authority: issuer.address, name }))[0],
+        [await getCreateCredentialInstructionAsync({ authority: issuer, name, payer, signers: [signer.address] })]),
+    schema: async (credential: Address): Promise<Address> =>
+      sent((await findSchemaPda({ credential, name: SCHEMA.name, version }))[0], [await getCreateSchemaInstructionAsync({ authority: issuer, credential, payer, ...shape })]),
     attest: async (credential: Address, schema: Address, payTo: string, fields: Fields): Promise<Address> => {
       const { create, at } = await created(credential, schema, payTo, fields)
-      await client.sendTransaction([create])
-      return at
+      return sent(at, [create])
     },
     renew: async (credential: Address, schema: Address, payTo: string, fields: Fields, attestation: Address): Promise<Address> => {
-      const { create, at } = await created(credential, schema, payTo, fields)
-      await client.sendTransaction([closing(credential, attestation), create])
-      return at
+      const { create, expiry, at } = await created(credential, schema, payTo, fields)
+      return sent(at, [closing(credential, attestation), create], async () => {
+        const found = await fetchMaybeAttestation(client.rpc, at)
+        return found.exists && found.data.expiry === expiry
+      })
     },
-    close: async (credential: Address, attestation: Address): Promise<Address> => {
-      await client.sendTransaction([closing(credential, attestation)])
-      return attestation
-    },
+    close: async (credential: Address, attestation: Address): Promise<Address> =>
+      sent(attestation, [closing(credential, attestation)], async () => !(await exists(attestation))),
   }
 }

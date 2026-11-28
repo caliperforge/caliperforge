@@ -25,6 +25,7 @@ VALUES
   ('rules/registry/104-file_overlap_cross_repo.yaml', 'card', 'rules/registry/104-file_overlap_cross_repo.yaml', '5f96828d28e85370ffc3590d661c839a00aa8b265eda217ae43855691742b4fe', '2026-11-24'),
   ('rules/registry/105-filed_resume_step.yaml', 'card', 'rules/registry/105-filed_resume_step.yaml', 'aea67d24829db2c1938e728a80f8135804b3a28eab0589e5a5b63272e1f59fce', '2026-11-24'),
   ('rules/registry/106-long_job_credential.yaml', 'card', 'rules/registry/106-long_job_credential.yaml', '532cf44099cdb7cd5f953ebc1b4dec8f4cc97b70ac30f22696cb181362dd880c', '2026-11-27'),
+  ('rules/registry/107-intake_swallow_once.yaml', 'card', 'rules/registry/107-intake_swallow_once.yaml', '9ae2112bba669381c15ad30319d5a220e43abcf0da0e51e0d6904cf809b89adc', '2026-11-28'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
   ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', '0874da2c14e5efbe2e938ab57552695b724b46618e7e452c4f2ba637f3217929', '2026-10-11'),

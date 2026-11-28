@@ -129,6 +129,12 @@
   where: "kind IN ('check', 'review', 'director') AND message LIKE '%OAuth session expired%'"
   gap: 14d
   expected: 0
+- name: intake_swallow_once
+  table: events
+  column: at
+  where: "actor = 'intake' AND kind = 'swallowed' AND EXISTS (SELECT 1 FROM events s WHERE s.pointer = events.pointer AND s.actor = 'intake' AND s.kind = 'swallowed' AND s.message = events.message AND s.id < events.id AND julianday(s.at) > julianday(events.at, '-1 hour') AND NOT EXISTS (SELECT 1 FROM events b WHERE b.pointer = events.pointer AND b.actor = 'intake' AND b.kind = 'back' AND b.id > s.id AND b.id < events.id))"
+  gap: 7d
+  expected: 0
 - name: brief_writer
   table: runs
   column: at

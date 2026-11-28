@@ -475,13 +475,33 @@ test('D4: a senior_review refuse sends the plan back to gather', async () => {
 
 test('review D1/D2: the review packet names the closing sections', async () => {
   const w = researching()
-  const prompts: string[] = []
+  const packets: Packet[] = []
   const provider = seats(FOUND)
-  const seen: Provider = { ...provider, fire: (packet) => { prompts.push(packet.prompt); return provider.fire(packet) } }
+  const seen: Provider = { ...provider, fire: (packet) => { packets.push(packet); return provider.fire(packet) } }
   for (let n = 0; n < 6 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seen)
-  const review = (prompts.find((p) => p.includes('You judge a research answer')) ?? '').replace(/\s+/g, ' ')
+  const packet = packets.find((p) => p.prompt.includes('You judge a research answer'))
+  const review = (packet?.prompt ?? '').replace(/\s+/g, ' ')
   expect(review).toContain('`answer.md` always ends with `## Would be wrong if` and then `## Still unknown`, whatever `done_when` lists.')
   expect(review).toContain('Sentences under `### Not found`, `## Not found`, `## Method` and `## Still unknown` carry no `[source:n]`.')
+  expect(review).toContain('When `# Diff` ends with `# Output`, the job wrote its files in that folder. Open them, check each against the quotes in '
+    + '`sources.json`, and quote at least one line from a file you opened.')
+  expect(review).not.toContain('# Output ')
+  expect(packet?.reads).toBeUndefined()
+  expect(packet?.tools).toEqual(['Read'])
+})
+
+test('review: Output is the one read path, never written', async () => {
+  const out = join(home(), 'cf_work/x')
+  const w = researching(`${ASK}**Output:** ~/cf_work/x/\n`)
+  headed(w)
+  const seen: Packet[] = []
+  const review = (): Packet | undefined => seen.find((p) => p.prompt.includes('You judge a research answer'))
+  for (let n = 0; n < 6 && review() === undefined; n += 1) await tick(w.db, w.root, measuring(FOUND, (p) => seen.push(p)))
+  const packet = review()
+  expect(packet?.reads).toEqual([out])
+  expect(packet?.tools).toEqual(expect.arrayContaining(['Glob', 'Grep']))
+  expect(packet?.prompt).toContain(`# Output\n\n${out}`)
+  expect(packet?.refuse(join(out, 'a.md'))).not.toBeNull()
 })
 
 const ANSWER = `The cap is 3 [source:1].${SECTIONS}`

@@ -236,12 +236,17 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
 export async function answered(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   loadReviews(db, root)
   const answer = get(root, plan.id, 'answer.md')
+  const folder = output(askOf(root, plan))
+  if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
+  const { out } = folder
   const input = { repo: srcDir(root, plan.id), issue: get(root, plan.id, 'question.json'),
-    diff: `# answer.md\n\n${answer}\n\n# sources.json\n\n${get(root, plan.id, 'sources.json')}`, verdict: 'none: a research plan has no first reader' }
+    diff: `# answer.md\n\n${answer}\n\n# sources.json\n\n${get(root, plan.id, 'sources.json')}${out === undefined ? '' : `\n\n# Output\n\n${out}`}`,
+    verdict: 'none: a research plan has no first reader' }
   const lead = `${spec(root, step.runs)}\n${readFileSync(join(root, 'seats/modes/research.md'), 'utf8')}`
   const built = benchPacket(root, step.runs, input, pending(planDir(root, plan.id), `step-${String(step.step)}`), lead)
   if ('refusal' in built) return { outcome: 'refuse', spans: [built.refusal.path], note: `${step.runs} packet refused on ${built.refusal.path}` }
-  const fired = await provider.fire({ ...built.packet, wall: wall(db) })
+  const reads = out === undefined ? {} : { reads: [out], tools: [...built.packet.tools, 'Glob', 'Grep'] }
+  const fired = await provider.fire({ ...built.packet, ...reads, wall: wall(db) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: step.runs, rule_hash: specHash(root, step.runs), provider: provider.name,
     model: built.packet.model, effort: built.packet.effort, exit: fired.exit, fired })
   byRun(db, run, fired.transcript_path)

@@ -1225,6 +1225,24 @@ test('a folder row under ## Files is refused', () => {
     .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
 })
 
+const measuring = `${ask}\n**Measure:** count the refusals\n`
+
+const NONE = '- none: measure only; answer.md is posted on the issue, not committed'
+
+const FOLDER = { span: NONE, reason: 'this ## Files row names no file; list each file, not the folder' }
+
+test('a lone none: Files row passes on a measure-only ask', () => {
+  expect(shape(swap(brief, '## Files', [NONE]), measuring, repo)).toBeNull()
+})
+
+test('a lone none: Files row is refused without a Measure line', () => {
+  expect(on(swap(brief, '## Files', [NONE]))).toMatchObject(FOLDER)
+})
+
+test('a none: Files row beside a file is refused when measuring', () => {
+  expect(shape(swap(brief, '## Files', ['- sequencer/brief.ts', NONE]), measuring, repo)).toMatchObject(FOLDER)
+})
+
 test('D2: a root dotfile Files row is not refused as a folder', () => {
   expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- `.gitignore`: `build/`.']))?.reason ?? '')
     .not.toContain('names no file')

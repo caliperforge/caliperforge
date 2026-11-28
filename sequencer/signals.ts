@@ -3,7 +3,7 @@ import { all, notify, record as keep, type Event } from '../cli/inbox.ts'
 import { commsLane, fileComms } from '../store/comms.ts'
 import { weeklyIn } from '../store/desk.ts'
 import { type Diffed, pass } from '../paydesk/live.ts'
-import { renew, type Renewed } from '../paydesk/renew.ts'
+import { renew, summary, type Renewed } from '../paydesk/renew.ts'
 import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
@@ -155,9 +155,7 @@ export async function paydesk(db: Db, root: string, now: Date, attest: boolean,
 async function renewed(db: Db, root: string, day: string, renewal: (root: string, date: string) => Promise<Renewed>): Promise<void> {
   const event = { plan: null, kind: 'paydesk_attest', actor: 'paydesk', pointer: day, run: null }
   try {
-    const { attested, renewed: r, closed, skipped } = await renewal(root, day)
-    logged(db, { ...event, outcome: 'pass',
-      message: `${String(attested)} attested, ${String(r)} renewed, ${String(closed)} closed, ${String(skipped)} skipped` })
+    logged(db, { ...event, outcome: 'pass', message: summary(await renewal(root, day)) })
   } catch (error) {
     logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
   }

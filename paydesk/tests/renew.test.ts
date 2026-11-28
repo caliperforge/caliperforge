@@ -40,9 +40,12 @@ async function pdas(issuer: Address, host: string): Promise<{ cred: Address; at:
   return { cred, at: (await findAttestationPda({ credential: cred, schema: sch, nonce: verdictNonce(PAY_TO, host) }))[0] }
 }
 
-function recorder() {
+function recorder(fails = new Set<string>()) {
   const calls: { op: string; args: unknown[] }[] = []
-  const op = (name: string) => (...args: unknown[]) => { calls.push({ op: name, args }); return Promise.resolve(SENT) }
+  const op = (name: string) => (...args: unknown[]) => {
+    calls.push({ op: name, args })
+    return fails.has(name) ? Promise.reject(new Error('timeout')) : Promise.resolve(SENT)
+  }
   const stubbed: Chain = {
     ops: { credential: op('credential'), schema: op('schema'), attest: op('attest'), renew: op('renew'), close: op('close') },
     exists: () => Promise.resolve(true),
@@ -69,9 +72,18 @@ const closed = (root: string, fqn: string, host: string): string => join(root, '
 test('a listing still passing is renewed and its evidence stays', async () => {
   const root = world([listing('acme/one', [endpoint('/b')])], [['acme/one', 'b.acme.test']])
   const { calls, connect } = recorder()
-  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 1, closed: 0, skipped: 0 })
+  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 1, closed: 0, skipped: 0, failed: 0 })
   expect(calls.map((c) => c.op)).toStrictEqual(['renew'])
   expect(existsSync(evidence(root, 'acme/one', 'b.acme.test'))).toBe(true)
+})
+
+test('a failed renew or close is counted and keeps its evidence', async () => {
+  const root = world([listing('acme/api', [endpoint('/a')])], [['acme/api', 'a.acme.test'], ['acme/api', 'b.acme.test']])
+  const { calls, connect } = recorder(new Set(['renew', 'close']))
+  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 0, closed: 0, skipped: 0, failed: 2 })
+  expect(calls.map((c) => c.op)).toStrictEqual(['renew', 'close'])
+  expect([existsSync(evidence(root, 'acme/api', 'a.acme.test')), existsSync(evidence(root, 'acme/api', 'b.acme.test')),
+    existsSync(closed(root, 'acme/api', 'b.acme.test'))]).toStrictEqual([true, true, false])
 })
 
 test.each([
@@ -80,7 +92,7 @@ test.each([
 ])('a listing $why is closed and its evidence moved', async ({ rows }) => {
   const root = world(rows, [['acme/one', 'b.acme.test']])
   const { calls, connect } = recorder()
-  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 0, closed: 1, skipped: 0 })
+  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 0, closed: 1, skipped: 0, failed: 0 })
   const { cred, at } = await pdas(ISSUER, 'b.acme.test')
   expect(calls).toStrictEqual([{ op: 'close', args: [cred, at] }])
   expect([existsSync(evidence(root, 'acme/one', 'b.acme.test')), existsSync(closed(root, 'acme/one', 'b.acme.test'))]).toStrictEqual([false, true])
@@ -89,7 +101,7 @@ test.each([
 test('a host dropped from a passing listing is closed', async () => {
   const root = world([listing('acme/api', [endpoint('/a')])], [['acme/api', 'a.acme.test'], ['acme/api', 'b.acme.test']])
   const { calls, connect } = recorder()
-  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 1, closed: 1, skipped: 0 })
+  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 1, closed: 1, skipped: 0, failed: 0 })
   const { cred, at } = await pdas(ISSUER, 'b.acme.test')
   expect(calls.map((c) => [c.op, c.op === 'close' ? c.args : c.args[3]])).toStrictEqual([
     ['renew', expect.objectContaining({ host: 'a.acme.test' })], ['close', [cred, at]]])
@@ -118,8 +130,8 @@ test('surfpool closes an attestation whose listing fails', { timeout: 120_000 },
   await client.airdrop(issuer.address, lamports(1_000_000_000n))
   const connect = () => Promise.resolve({ issuer: issuer.address, chain: chain(client, issuer, signer) })
   const root = world([listing('acme/one', [endpoint('/b')])], [], '2026-11-16')
-  expect(await renew(root, '2026-11-16', connect, PROBES)).toStrictEqual({ attested: 1, renewed: 0, closed: 0, skipped: 0 })
+  expect(await renew(root, '2026-11-16', connect, PROBES)).toStrictEqual({ attested: 1, renewed: 0, closed: 0, skipped: 0, failed: 0 })
   writeFileSync(join(root, `.cf/paydesk/live-${DATE}.jsonl`), `${JSON.stringify(listing('acme/one', [endpoint('/b', 'fail')]))}\n`)
-  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 0, closed: 1, skipped: 0 })
+  expect(await renew(root, DATE, connect, PROBES)).toStrictEqual({ attested: 0, renewed: 0, closed: 1, skipped: 0, failed: 0 })
   expect((await fetchMaybeAttestation(client.rpc, (await pdas(issuer.address, 'b.acme.test')).at)).exists).toBe(false)
 })

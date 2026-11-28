@@ -52,10 +52,17 @@ export async function attested(rows: Row[], testedAt: Date, { issuer, credential
       const at = (await findAttestationPda({ credential: cred, schema: sch, nonce: verdictNonce(payee, host) }))[0]
       const renew = await chain.attested(at)
       const verb = renew ? 'renew' : 'attest'
-      lines.push(`${row.fqn} ${host} ${payee} ${dryRun ? `would ${verb} ${at}` : `${verb}ed ${await send(payee, fields, at, renew)}`}`)
+      lines.push(`${row.fqn} ${host} ${payee} ${dryRun ? `would ${verb} ${at}` : await send(payee, fields, at, renew).then((to) => `${verb}ed ${to}`, failed)}`)
     }
   }
   return lines
+}
+
+const failed = (error: unknown): string => `failed: ${error instanceof Error ? error.message : String(error)}`
+
+export const counts = (lines: string[]) => {
+  const count = (verb: string): number => lines.filter((l) => l.split(' ')[3] === verb).length
+  return { attested: count('attested'), renewed: count('renewed'), skipped: count('skipped'), failed: count('failed:') }
 }
 
 async function hosts(row: ListingScan, probe: Probe): Promise<Map<string, Reprobed[]>> {

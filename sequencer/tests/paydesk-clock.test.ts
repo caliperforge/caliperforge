@@ -28,7 +28,7 @@ function renewal(error?: Error): { dates: string[]; renew: (root: string, date: 
   const dates: string[] = []
   return { dates, renew: (root, date) => {
     dates.push(`${root} ${date}`)
-    return error === undefined ? Promise.resolve({ attested: 1, renewed: 2, closed: 3, skipped: 4 }) : Promise.reject(error)
+    return error === undefined ? Promise.resolve({ attested: 1, renewed: 2, closed: 3, skipped: 4, failed: 0 }) : Promise.reject(error)
   } }
 }
 
@@ -106,7 +106,7 @@ test('a passing live pass renews once per date with its counts', async () => {
   await paydesk(db, '/root', new Date('2026-10-12T11:30:00Z'), true, run, renew)
   expect(dates).toEqual(['/root 2026-10-12'])
   expect(ofKind(db, 'paydesk_attest')).toEqual([{ plan: null, kind: 'paydesk_attest', actor: 'paydesk', outcome: 'pass',
-    message: '1 attested, 2 renewed, 3 closed, 4 skipped' }])
+    message: '1 attested, 2 renewed, 3 closed, 4 skipped, 0 failed' }])
   expect(pointers(db, 'paydesk_attest')).toEqual(['2026-10-12'])
 })
 

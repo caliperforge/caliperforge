@@ -302,6 +302,7 @@ function written(m: z.infer<typeof Said>): string {
   const lines = FIELDS.flatMap((k) => m[k] === undefined ? [] : [`${k}: ${m[k]}`]).join('\n')
   return [m.answer ?? '', lines].filter((s) => s !== '').join('\n\n')
 }
+const resumeAt = (m: z.infer<typeof Said>): number | undefined => /^(?:step )?(\d+)$/.exec(m['resume at'] ?? '')?.slice(1).map(Number)[0]
 
 function waiving(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>): boolean {
   if (plan.state !== 'blocked_on_ceo' || rule(db, root, plan, 'director', written(m)) === null) return false
@@ -330,7 +331,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       const to = rule(db, root, plan, 'director', written(m))
       if (to === null) return false
       opened(db, root, plan.id)
-      rewait(db, root, plan.id, now, () => { if (to === 'ask.md') unhold(db, root, plan.id, 'director'); else afresh(root, plan.id, (owned(root, plan, m.answer ?? '') ? !edits(root, plan, m.answer ?? '') : accepted(root, plan, m.answer ?? '') || excusing(root, plan, m.answer ?? '')) ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })()) })
+      rewait(db, root, plan.id, now, () => { if (to === 'ask.md') unhold(db, root, plan.id, 'director'); else afresh(root, plan.id, (owned(root, plan, m.answer ?? '') ? !edits(root, plan, m.answer ?? '') : accepted(root, plan, m.answer ?? '') || excusing(root, plan, m.answer ?? '')) ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan, resumeAt(m)) })()) })
       const ref = originRef(plan)
       if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true
@@ -346,8 +347,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       end(db, plan.id, 'done')
       return true
     case 'file':
-      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now,
-        /^(?:step )?(\d+)$/.exec(m['resume at'] ?? '')?.slice(1).map(Number)[0])
+      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now, resumeAt(m))
     case 'return': returned(root, plan.id)
       opened(db, root, plan.id)
       restart(db, root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))

@@ -271,8 +271,8 @@ export function back(db: Db, plan: PlanRow, step: number, stop: boolean, why: st
 }
 
 /** A person sends a blocked plan round again: a refused build goes back to the builder, anything earlier re-runs its step. */
-export function retry(db: Db, plan: PlanRow): number {
-  const step = plan.template === 'comms' && plan.step === 3 ? 1 : Math.min(plan.step, 2)
+export function retry(db: Db, plan: PlanRow, to = plan.step): number {
+  const step = Math.min(to, plan.template === 'comms' && plan.step === 3 ? 1 : Math.min(plan.step, 2))
   db.prepare(`UPDATE plans SET step = ?, state = ${ENTER} WHERE id = ?`).run(step, plan.id)
   return step
 }

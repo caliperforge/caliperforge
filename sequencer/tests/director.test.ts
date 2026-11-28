@@ -587,6 +587,16 @@ async function waitHeld() {
   expect(maybe(home, 7, 'parked.md')).toContain('waits on plan 8')
 }
 
+async function rewound() {
+  for (const [at, step] of [['1', 1], ['step 0', 0], ['step 3', 2], ['soon', 2]] as const) {
+    const { db, home } = seeded('1')
+    db.exec("UPDATE plans SET template = 'research', step = 3 WHERE id = 7")
+    put(home, 7, 'refusal.md', 'step 3 review refused by senior_review\n')
+    await run(db, home, (REPLY.rule ?? '').replace('resume at: step 2', `resume at: ${at}`))
+    expect(row(db).step).toBe(step)
+  }
+}
+
 describe('rule', () => {
   test('a rule goes in issue.md when built, in ask.md when not', landed)
   test('a rule carries its fields into issue.md', carries)
@@ -603,6 +613,7 @@ describe('rule', () => {
   test('a token count is ruled only after a cf look store', storeLooked)
   test('a question is ruled from ask.md, or left with the coo', questioned)
   test('a rule on a research job waiting on an open plan holds it', waitHeld)
+  test('a research rule resumes at its resume at, never past retry', LONG, rewound)
 })
 
 async function written() {

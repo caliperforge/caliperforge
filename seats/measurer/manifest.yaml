@@ -9,5 +9,6 @@ tools:
   - Bash(uv run:*)
   - Bash(forge:*)
   - Bash(medusa:*)
+  - Bash(node src/cli.ts:*)
 write_paths:
   - .cf/measure

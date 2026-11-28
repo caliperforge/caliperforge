@@ -155,6 +155,37 @@ test('D4: a read that throws halts no plan and names the repo', () => {
   expect(ofKind(db, 'swallowed')).toEqual([{ plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: `${REPO}: gh is down` }])
 })
 
+const OFF = new Error(`the '${REPO}' repository has disabled issues`)
+
+const TLS = new Error('Post "https://api.github.com/graphql": net/http: TLS handshake timeout')
+
+const failing = (error: Error | null, log: string[] = []): Read => (args) => {
+  log.push(args.join(' '))
+  if (error !== null && args[3] === REPO) throw error
+  return canned([])(args)
+}
+
+const swallowed = (db: Db): string[] => ofKind(db, 'swallowed').map((e) => e.message)
+
+test('an issues-off home is logged once; other homes still list', () => {
+  const db = piped()
+  const log: string[] = []
+  for (let i = 0; i < 5; i++) expect(intake(db, root, failing(OFF, log))).toEqual([`${REPO}: issues are turned off`])
+  expect(swallowed(db)).toEqual([`${REPO}: issues are turned off`])
+  expect(log.filter((l) => l.startsWith('issue list --repo caliperforge/ledger-rig --state open'))).toHaveLength(5)
+  expect(intake(db, root, failing(TLS))).toEqual([`${REPO}: ${TLS.message}`])
+  expect(swallowed(db)).toEqual([`${REPO}: issues are turned off`, `${REPO}: ${TLS.message}`])
+})
+
+test('a failing home logs once a spell; a listing ends the spell', () => {
+  const db = piped()
+  for (let i = 0; i < 5; i++) intake(db, root, failing(TLS))
+  intake(db, root, failing(null))
+  intake(db, root, failing(TLS))
+  expect(swallowed(db)).toHaveLength(2)
+  expect(ofKind(db, 'back').map((e) => ({ actor: e.actor, message: e.message }))).toEqual([{ actor: 'intake', message: REPO }])
+})
+
 test('a throwing parent read skips and names that issue alone', () => {
   const db = piped()
   const read = canned(TWO)

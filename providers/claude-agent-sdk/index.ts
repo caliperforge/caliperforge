@@ -1,5 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
@@ -182,16 +182,14 @@ function openTranscript(packet: Packet): (message: unknown) => void {
 export function gate(packet: Packet, input: HookInput, fenced = 0): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
   if ((input.tool_input as { run_in_background?: unknown }).run_in_background === true) return deny('ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it')
-  if (input.tool_name === 'Bash') {
-    const refused = ranOutside(packet, input.tool_input)
-    return refused === null ? { continue: true } : deny(refused)
-  }
+  if (input.tool_name === 'Bash') return ran(packet, input.tool_input)
   const away = readOutside(packet.cwd, input.tool_name, input.tool_input, packet.reads)
   if (away !== null) return deny(away)
   const whole = wholeRead(packet, input.tool_name, input.tool_input)
   if (whole !== null) return deny(whole)
   const denied = wroteOutside(packet, input.tool_name, input.tool_input)
-  if (denied === null) return { continue: true }
+  const path = (input.tool_input as { file_path?: unknown }).file_path
+  if (denied === null) return WRITES.has(input.tool_name) && typeof path === 'string' && basename(path) === '.gitmodules' ? allow() : { continue: true }
   return fenced + 1 < FENCED ? deny(denied) : stop(denied)
 }
 
@@ -237,32 +235,31 @@ function wroteOutside(packet: Packet, tool: string, args: unknown): string | nul
   return refusal === null ? null : `${refusal.origin_kind}:${refusal.origin_ref} refuses a write to ${refusal.path}`
 }
 
-function ranOutside(packet: Packet, args: unknown): string | null {
+function ran(packet: Packet, args: unknown): SyncHookJSONOutput {
   const given = args as { command?: unknown }
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
   const rest = unmoved(packet.cwd, command)
-  if (packet.tools.includes('Bash(gh workflow run:*)') && DISPATCH.test(rest)) return null
-  if (ghWrite(rest)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
-  const refused = `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
+  if (packet.tools.includes('Bash(gh workflow run:*)') && DISPATCH.test(rest)) return { continue: true }
+  if (ghWrite(rest)) return deny(`ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`)
+  const refused = deny(`ruling:seat.tools refuses the command ${JSON.stringify(command)}`)
   if (packet.tools.includes('Bash(git submodule add:*)') && /^git(?:\s|$)/.test(rest)) {
     const dir = (SUBMODULE.exec(rest) ?? PINNED.exec(rest))?.[1]
-    return dir !== undefined && packet.refuse('.gitmodules') === null && packet.refuse(`lib/${dir}`) === null ? null : refused
+    return dir !== undefined && packet.refuse('.gitmodules') === null && packet.refuse(dir) === null ? allow() : refused
   }
   if (packet.tools.includes('Bash(git clone:*)') && /^git(?:\s|$)/.test(rest)) {
     const dir = (CLONE.exec(rest) ?? MEASURED.exec(rest))?.[1]
-    return dir !== undefined && packet.refuse(`.cf/measure/${dir}`) === null ? null : refused
+    return dir !== undefined && packet.refuse(`.cf/measure/${dir}`) === null ? { continue: true } : refused
   }
-  if (admitted(packet.tools, rest)) return null
-  return refused
+  return admitted(packet.tools, rest) ? { continue: true } : refused
 }
 
 /** `cd <cwd> && ` moves nowhere, so what follows it is judged alone; a folder bash would expand is never stripped. */
 const CD = /^cd\s+(?:"([\w./ -]+)"|([\w./-]+))\s+&&\s+/
 
-/** The only git a seat holding `Bash(git submodule add:*)` runs: a github https submodule under `lib/`, and its pin. */
-const SUBMODULE = /^git submodule add https:\/\/github\.com\/[\w-]+\/[\w.-]+ lib\/([\w-][\w.-]*)$/
-const PINNED = /^git -C lib\/([\w-][\w.-]*) checkout [0-9a-f]{7,40}$/
+/** The only git a seat holding `Bash(git submodule add:*)` runs: a github https submodule at a relative path, and its pin. */
+const SUBMODULE = /^git submodule add https:\/\/github\.com\/[\w-]+\/[\w.-]+ ([\w-][\w.-]*(?:\/[\w-][\w.-]*)*)$/
+const PINNED = /^git -C ([\w-][\w.-]*(?:\/[\w-][\w.-]*)*) checkout [0-9a-f]{7,40}$/
 
 /** The only git a seat holding `Bash(git clone:*)` runs: a github https clone under `.cf/measure/`, and its pin. */
 const CLONE = /^git clone https:\/\/github\.com\/[\w-]+\/[\w.-]+ \.cf\/measure\/([\w-][\w.-]*)$/
@@ -276,6 +273,11 @@ function unmoved(cwd: string, command: string): string {
   if (cd === null) return command
   const dir = cd[1] ?? cd[2] ?? ''
   return real(resolve(cwd, dir)) === real(resolve(cwd)) ? command.slice(cd[0].length) : command
+}
+
+/** The CLI's own checks hold no pattern for a pin and treat `.gitmodules` as sensitive, so what the gate admits of either is allowed outright. */
+function allow(): SyncHookJSONOutput {
+  return { continue: true, hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } }
 }
 
 function deny(reason: string): SyncHookJSONOutput {

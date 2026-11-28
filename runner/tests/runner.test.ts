@@ -161,11 +161,15 @@ const fenced = (paths: string[], tools = SUBMODULE): Packet => ({ ...held(tools)
 const refusal = (command: string) => ({ continue: true, hookSpecificOutput: { permissionDecision: 'deny',
   permissionDecisionReason: `ruling:seat.tools refuses the command ${JSON.stringify(command)}` } })
 const shapes = ['git submodule add https://github.com/foundry-rs/forge-std lib/forge-std', 'git -C lib/v4-core checkout 3f1c9a2']
+const allowed = { continue: true, hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } }
+const sky = ['git submodule add https://github.com/caliperforge/sky-ui.git site/sky-ui', 'git -C site/sky-ui checkout 2f257aae',
+  `git -C site/sky-ui checkout ${'a'.repeat(40)}`]
 
 test('1353a D1 D2 the gate admits a submodule add and its pin', () => {
   const p = fenced(['.gitmodules', 'lib'])
   for (const command of [...shapes, 'git submodule add https://github.com/foundry-rs/forge-std.git lib/forge-std',
-    `git -C lib/v4-core checkout ${'a'.repeat(40)}`]) expect(gate(p, bash(command))).toEqual({ continue: true })
+    `git -C lib/v4-core checkout ${'a'.repeat(40)}`]) expect(gate(p, bash(command))).toEqual(allowed)
+  for (const command of sky) expect(gate(fenced(['.gitmodules', 'site/sky-ui']), bash(command))).toEqual(allowed)
 })
 
 test('1353a D3 every other git is refused and the seat stays', () => {
@@ -180,6 +184,25 @@ test('1353a D3 every other git is refused and the seat stays', () => {
     'git submodule add --force https://github.com/foundry-rs/forge-std lib/forge-std', `${add} --depth 1`,
     'git checkout 3f1c9a2', 'git -C lib/v4-core checkout 3f1c9a', 'git -C lib/v4-core checkout main',
     `${add} && rm -rf .`, `${add}; git push`, 'git status', 'git push']) expect(gate(p, bash(command))).toMatchObject(refusal(command))
+  const site = fenced(['.gitmodules', 'site/sky-ui'])
+  const url = 'git submodule add https://github.com/caliperforge/sky-ui.git'
+  for (const command of [`${url} site/other`, `${url} site/../x`, `${url} /tmp/x`, `${url} site/sky-ui/`, `${url} .`,
+    'git -C site/other checkout 2f257aae', 'git -C site/../x checkout 2f257aae']) expect(gate(site, bash(command))).toMatchObject(refusal(command))
+  for (const command of sky) expect(gate(fenced(['site/sky-ui']), bash(command))).toMatchObject(refusal(command))
+})
+
+test('1353a D4 a fenced .gitmodules write is allowed outright', () => {
+  const pre = (tool: string, file: string): HookInput =>
+    ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { file_path: file }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
+  const p = fenced(['.gitmodules', 'src'])
+  for (const tool of ['Write', 'Edit']) {
+    expect(gate(p, pre(tool, '.gitmodules'))).toEqual(allowed)
+    expect(gate(p, pre(tool, `${cwd}/.gitmodules`))).toEqual(allowed)
+    expect(gate(p, pre(tool, 'src/a.ts'))).toEqual({ continue: true })
+    expect(gate(fenced(['src']), pre(tool, '.gitmodules'))).toMatchObject({ continue: true,
+      hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'ruling:seat.write_paths refuses a write to .gitmodules' } })
+  }
+  expect(gate(fenced(['src']), pre('Write', '.gitmodules'), FENCED - 1)).toMatchObject({ continue: false })
 })
 
 const CLONE = ['Read', 'Bash(git clone:*)']

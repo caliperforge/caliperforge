@@ -4,7 +4,7 @@ import { solanaLocalRpc } from '@solana/kit-plugin-rpc'
 import { payer } from '@solana/kit-plugin-signer'
 import { fetchSysvarClock } from '@solana/sysvars'
 import { expect, test } from 'vitest'
-import { attestOps, SCHEMA, verdict, verdictNonce, type Fields } from '../attest.ts'
+import { attestOps, SCHEMA, settled, verdict, verdictNonce, type Fields } from '../attest.ts'
 
 const URL = 'http://127.0.0.1:8899'
 const ISSUER = address('22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG')
@@ -40,6 +40,32 @@ test('verdict refuses each failed check with its reason', () => {
 
 test('verdict passes and decodes all eleven fields', () => {
   expect(verdict({ attestation, credential, schema, now: 1_000n })).toEqual({ verified: true, data: FIELDS })
+})
+
+const timers = (): number => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length
+const sender = (...answers: (() => Promise<unknown>)[]) => {
+  const sent = { count: 0 }
+  return { sent, send: () => (answers[sent.count++] ?? (() => Promise.reject(new Error('unexpected send'))))() }
+}
+const hang = (): Promise<never> => new Promise(() => undefined)
+
+test('settled times out twice and leaves no timer behind', async () => {
+  const before = timers()
+  const { sent, send } = sender(hang, hang)
+  await expect(settled(send, () => Promise.resolve(false), 10)).rejects.toThrow('timeout')
+  expect([sent.count, timers()]).toStrictEqual([2, before])
+})
+
+test('settled does not send again once the first send landed', async () => {
+  const { sent, send } = sender(hang, () => Promise.resolve())
+  await settled(send, () => Promise.resolve(true), 10)
+  expect(sent.count).toBe(1)
+})
+
+test('settled sends again after a rejection that did not land', async () => {
+  const { sent, send } = sender(() => Promise.reject(new Error('blockhash expired')), () => Promise.resolve())
+  await settled(send, () => Promise.resolve(false), 10)
+  expect(sent.count).toBe(2)
 })
 
 const healthy = (): Promise<boolean> => fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },

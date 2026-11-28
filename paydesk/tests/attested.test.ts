@@ -9,7 +9,7 @@ import { payer } from '@solana/kit-plugin-signer'
 import { expect, test } from 'vitest'
 import type { EndpointVerdict, Probe as Probed } from '../assess.ts'
 import { SCHEMA, verdictNonce, type Fields } from '../attest.ts'
-import { attested, chain, type Chain, type Probe } from '../attested.ts'
+import { attested, chain, counts, type Chain, type Probe } from '../attested.ts'
 import type { ListingScan } from '../card.ts'
 import type { Offer } from '../offers.ts'
 
@@ -44,10 +44,13 @@ async function pdas(issuer: Address, payee: string, host: string): Promise<{ cre
   return { cred, at: (await findAttestationPda({ credential: cred, schema: sch, nonce: verdictNonce(payee, host) }))[0] }
 }
 
-function recorder(exists: (at: Address) => boolean = () => false, on = false) {
+function recorder(exists: (at: Address) => boolean = () => false, on = false, fails: (args: unknown[]) => boolean = () => false) {
   const calls: { op: string; args: unknown[] }[] = []
   const asked: Address[] = []
-  const op = (name: string) => (...args: unknown[]) => { calls.push({ op: name, args }); return Promise.resolve(SENT) }
+  const op = (name: string) => (...args: unknown[]) => {
+    calls.push({ op: name, args })
+    return fails(args) ? Promise.reject(new Error('timeout')) : Promise.resolve(SENT)
+  }
   const stubbed: Chain = {
     ops: { credential: op('credential'), schema: op('schema'), attest: op('attest'), renew: op('renew'), close: op('close') },
     exists: (at) => Promise.resolve(exists(at)),
@@ -70,6 +73,19 @@ test('attests each resource host with its own checks', async () => {
   ])
   expect(asked).toStrictEqual([(await pdas(ISSUER, PAY_TO, 'a.acme.test')).at, (await pdas(ISSUER, PAY_TO, 'b.acme.test')).at])
   expect(lines).toStrictEqual([`acme/api a.acme.test ${PAY_TO} attested ${SENT}`, `acme/api b.acme.test ${PAY_TO} attested ${SENT}`])
+})
+
+test('a failed send fails its host and the next host is attested', async () => {
+  const { calls, chain: c } = recorder(() => true, false, (args) => (args[3] as Fields).host === 'a.acme.test')
+  const { lines } = await run([ACME], c)
+  expect(calls.map((r) => r.op)).toStrictEqual(['attest', 'attest'])
+  expect(lines).toStrictEqual([`acme/api a.acme.test ${PAY_TO} failed: timeout`, `acme/api b.acme.test ${PAY_TO} attested ${SENT}`])
+})
+
+test('counts reads attested, renewed, skipped and failed lines', () => {
+  expect(counts([`acme/a a.test ${PAY_TO} attested ${SENT}`, `acme/a b.test ${PAY_TO} renewed ${SENT}`, `acme/b c.test ${PAY_TO} renewed ${SENT}`,
+    'acme/c d.test - skipped no payee', `acme/d e.test ${PAY_TO} failed: timeout`, `acme/e f.test ${PAY_TO} would attest ${SENT}`]))
+    .toStrictEqual({ attested: 1, renewed: 2, skipped: 1, failed: 1 })
 })
 
 test('a listing short of pass gets no call and no line', async () => {

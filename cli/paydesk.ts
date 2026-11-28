@@ -7,12 +7,13 @@ import { lookup } from 'node:dns/promises'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { attested, chain, probe } from '../paydesk/attested.ts'
+import { attested, chain, counts, probe } from '../paydesk/attested.ts'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
 import { live, providers, recheck, tally, verdict } from '../paydesk/live.ts'
 import { note } from '../paydesk/note.ts'
 import { serve } from '../paydesk/mcp.ts'
 import { prs, type Row } from '../paydesk/prs.ts'
+import { summary } from '../paydesk/renew.ts'
 import { scan, type Net } from '../paydesk/scan.ts'
 import { line, reads, verified } from '../paydesk/verify.ts'
 import { paid } from '../store/paydesk-paid.ts'
@@ -67,7 +68,9 @@ function registerAttest(paydesk: Command, root: string, net: Net, out: Cli['out'
       const client = createClient().use(payer(issuer)).use(solanaRpc({ rpcUrl: options.rpc }))
       const lines = await attested(scanned(scanFile), statSync(scanFile).mtime,
         { issuer: issuer.address, credential: options.credential, out: options.out, dryRun: options.dryRun === true }, probe(net), chain(client, issuer, signer))
-      out(`${lines.join('\n')}\n`)
+      const counted = counts(lines)
+      out(`${lines.join('\n')}\n${summary({ ...counted, closed: 0 })}\n`)
+      process.exitCode = options.dryRun === true || counted.attested + counted.renewed > 0 ? 0 : 1
     })
   paydesk.command('verify').argument('<url>').requiredOption('--rpc <url>').requiredOption('--issuer <address>').requiredOption('--credential <name>')
     .option('--method <method>', 'HTTP method', 'GET')

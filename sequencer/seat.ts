@@ -21,7 +21,7 @@ import { observed, wall } from '../store/lanes.ts'
 import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { botBody, judgedTree } from '../store/ready.ts'
 import { lastTranscript } from '../store/runs.ts'
-import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
+import { byRun, opened, pending, searched, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { claimed, estimate, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
@@ -292,7 +292,8 @@ export function recorded(db: Db, plan: number, step: number, name: string, hash:
   manifest: Seat, fired: Fired, mode?: Run['mode'], staffed?: string): void {
   const id = runLogged(db, { plan, step, seat: name, rule_hash: hash, provider, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, mode, staffed })
-  byRun(db, id, fired.transcript_path)
+  const named = byRun(db, id, fired.transcript_path)
+  if (name === 'fetcher' && searched(named)) logged(db, { plan, kind: 'fetcher.websearch', actor: 'fetcher', outcome: 'pass', message: 'WebSearch', pointer: null, run: id })
 }
 
 function staffedOn(db: Db, root: string, plan: PlanRow, step: number): string | undefined {

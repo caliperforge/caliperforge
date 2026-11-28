@@ -8,5 +8,6 @@ tools:
   - Glob
   - Grep
   - Bash(node --check:*)
+  - Bash(git submodule add:*)
 write_paths:
   - brief:files
